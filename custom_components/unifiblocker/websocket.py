@@ -25,6 +25,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_localnet_assign)
     websocket_api.async_register_command(hass, ws_localnet_remove)
     websocket_api.async_register_command(hass, ws_localnet_ensure_rule)
+    websocket_api.async_register_command(hass, ws_get_recommendations)
     websocket_api.async_register_command(hass, ws_scan_device)
     websocket_api.async_register_command(hass, ws_scan_results)
     websocket_api.async_register_command(hass, ws_block_port)
@@ -182,6 +183,66 @@ async def ws_set_category(
     await entry["store"].set_manual_category(mac, cat, name=name)
     await entry["coordinator"].async_request_refresh()
     connection.send_result(msg["id"], {"ok": True, "mac": mac, "category": cat})
+
+
+# ── Recommendations ──────────────────────────────────────────────────
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "unifiblocker/recommendations"}
+)
+@websocket_api.async_response
+async def ws_get_recommendations(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Return security recommendations for all devices + network-wide."""
+    entry = _get_coordinator(hass)
+    if not entry or not entry["coordinator"].data:
+        connection.send_result(msg["id"], {"device_recs": {}, "network_recs": []})
+        return
+
+    from .recommendations import generate_recommendations, generate_network_recommendations
+
+    data = entry["coordinator"].data
+    scanner = entry.get("scanner")
+    local_net = entry.get("local_net")
+
+    # Per-device recommendations.
+    device_recs: dict[str, list] = {}
+    for client in data.clients:
+        enriched = data.enrich_client(client)
+        mac = enriched.get("mac", "").lower()
+        # Attach scan results if available.
+        if scanner:
+            scan = scanner.get_result(mac)
+            if scan:
+                enriched["scan_result"] = scan
+        recs = generate_recommendations(enriched)
+        if recs:
+            device_recs[mac] = recs
+
+    # Network-wide recommendations.
+    fw_exists = False
+    if local_net:
+        fw_status = await local_net.get_firewall_status(entry["api"])
+        fw_exists = fw_status.get("exists", False)
+
+    all_enriched = data.all_clients_enriched()
+    if scanner:
+        for d in all_enriched:
+            scan = scanner.get_result(d.get("mac", "").lower())
+            if scan:
+                d["scan_result"] = scan
+
+    network_recs = generate_network_recommendations(all_enriched, firewall_exists=fw_exists)
+
+    connection.send_result(msg["id"], {
+        "device_recs": device_recs,
+        "network_recs": network_recs,
+        "total_device_recs": sum(len(r) for r in device_recs.values()),
+        "critical_count": sum(1 for recs in device_recs.values() for r in recs if r["priority"] == "critical"),
+        "high_count": sum(1 for recs in device_recs.values() for r in recs if r["priority"] == "high"),
+    })
 
 
 # ── Port scanner commands ─────────────────────────────────────────────

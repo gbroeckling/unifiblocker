@@ -26,6 +26,7 @@ class UniFiBlockerPanel extends HTMLElement {
     this._filter = "";
     this._localnet = {};
     this._scanCache = {};
+    this._recs = {};
     this._initialized = false;
   }
 
@@ -41,16 +42,18 @@ class UniFiBlockerPanel extends HTMLElement {
   async _ws(type, extra = {}) { if (!this._hass) return null; try { return await this._hass.callWS({ type, ...extra }); } catch (e) { console.warn("[UB]", type, e); return null; } }
 
   async _fetchAll() {
-    const [ov, cl, cats, ln] = await Promise.all([
+    const [ov, cl, cats, ln, recs] = await Promise.all([
       this._ws("unifiblocker/overview"),
       this._ws("unifiblocker/clients"),
       this._ws("unifiblocker/categories"),
       this._ws("unifiblocker/localnet_status"),
+      this._ws("unifiblocker/recommendations"),
     ]);
     if (ov) this._overview = ov;
     if (cl) this._data = cl;
     if (cats) this._categories = cats.categories || {};
     if (ln) this._localnet = ln;
+    if (recs) this._recs = recs;
     this._render();
   }
 
@@ -98,6 +101,7 @@ class UniFiBlockerPanel extends HTMLElement {
             ${this._nav("new", "New Devices", "🆕")}
             ${this._nav("suspicious", "Suspicious", "⚠")}
             ${this._nav("clients", "All Clients", "📋")}
+            ${this._nav("recommendations", "Security", "🛡")}
             ${this._nav("identify", "Identify", "🔍")}
             ${this._nav("localnet", "Local Only", "🔒")}
             ${catNav ? '<div class="nav-divider">Categories</div>' + catNav : ""}
@@ -153,6 +157,7 @@ class UniFiBlockerPanel extends HTMLElement {
       case "new": mc.innerHTML = this._vDeviceList(this._overview.new_devices || [], "New / Unidentified Devices", "Devices that haven't been classified yet."); break;
       case "suspicious": mc.innerHTML = this._vDeviceList((this._overview.suspicious_devices || []).sort((a,b) => (b.suspicion_score||0)-(a.suspicion_score||0)), "Suspicious Traffic", "Devices scored 3+ on behavioral heuristics."); break;
       case "clients": mc.innerHTML = this._vClients(); break;
+      case "recommendations": mc.innerHTML = this._vRecommendations(); break;
       case "identify": mc.innerHTML = this._vIdentify(); break;
       case "localnet": mc.innerHTML = this._vLocalNet(); break;
       case "category": mc.innerHTML = this._vCategory(); break;
@@ -253,6 +258,90 @@ class UniFiBlockerPanel extends HTMLElement {
   }
 
   // ── Detail views (stat card click-through) ────────────────────────
+
+  _vRecommendations() {
+    const r = this._recs || {};
+    const netRecs = r.network_recs || [];
+    const devRecs = r.device_recs || {};
+    const totalDev = r.total_device_recs || 0;
+    const critical = r.critical_count || 0;
+    const high = r.high_count || 0;
+
+    // Get top device recommendations (flatten, sort by priority, take top 20).
+    const allDevRecs = [];
+    for (const [mac, recs] of Object.entries(devRecs)) {
+      for (const rec of recs) {
+        allDevRecs.push({ ...rec, mac });
+      }
+    }
+    const priOrder = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+    allDevRecs.sort((a, b) => (priOrder[a.priority] || 5) - (priOrder[b.priority] || 5));
+
+    // Find the device name for each MAC.
+    const clients = this._data.clients || [];
+    const nameMap = {};
+    clients.forEach(c => { nameMap[c.mac.toLowerCase()] = c.name || c.hostname || c.vendor || c.mac; });
+
+    return `
+      <h1>🛡 Security Recommendations</h1>
+      <p class="subtitle">Prioritized security advice based on device analysis, port scans, vendor CVE history, and community best practices.</p>
+
+      <div class="stat-grid">
+        ${this._stat("Total Issues", totalDev, "📋", totalDev > 0 ? "warn" : "")}
+        ${this._stat("Critical", critical, "🔴", critical > 0 ? "danger" : "")}
+        ${this._stat("High", high, "🟠", high > 0 ? "warn" : "")}
+        ${this._stat("Devices Affected", Object.keys(devRecs).length, "📱")}
+      </div>
+
+      ${netRecs.length ? `
+        <div class="card"><h2>Network-Wide Recommendations</h2>
+          ${netRecs.map(r => this._recCard(r)).join("")}
+        </div>
+      ` : ""}
+
+      <div class="card"><h2>Per-Device Recommendations (top 30)</h2>
+        ${allDevRecs.length === 0 ? '<div class="empty">No device-specific recommendations. Run port scans to get detailed advice.</div>' : ""}
+        ${allDevRecs.slice(0, 30).map(r => `
+          <div class="rec-item rec-${r.priority}">
+            <div class="rec-header">
+              <span class="rec-priority">${r.priority_label}</span>
+              <span class="rec-device mono">${r.mac}</span>
+              <span class="rec-name">${nameMap[r.mac] || ""}</span>
+            </div>
+            <div class="rec-title">${r.title}</div>
+            <div class="rec-detail">${(r.detail || "").replace(/\n/g, "<br>")}</div>
+            ${r.action !== "info" && this._actionMode ? `
+              <div class="rec-actions">
+                ${r.action === "quarantine" ? `<button class="btn btn-quarantine" data-action="quarantine" data-mac="${r.mac}">🚫 Quarantine</button>` : ""}
+                ${r.action === "local_only" ? `<button class="btn btn-trust" data-localassign="${r.action_data?.category || "iot"}" data-mac="${r.mac}">🔒 Move to Local-Only</button>` : ""}
+                ${r.action === "block_port" && r.action_data?.ports ? r.action_data.ports.map(p => `<button class="btn-port-block" data-blockport="${p}" data-blockmac="${r.mac}">Block port ${p}</button>`).join(" ") : ""}
+                ${r.action === "review" ? `<button class="btn btn-scan" data-scanmac="${r.mac}">🔍 Scan Ports</button>` : ""}
+              </div>
+            ` : ""}
+          </div>
+        `).join("")}
+      </div>
+
+      <div class="card"><h2>About These Recommendations</h2>
+        <p>Recommendations are generated from:</p>
+        <ul style="font-size:12px;padding-left:20px;line-height:2">
+          <li><strong>Vendor CVE databases</strong> — known vulnerabilities in Hikvision, Dahua, XMEye, Reolink, EZVIZ, Imou, Foscam</li>
+          <li><strong>Port scan results</strong> — open ports mapped to security risks (Telnet, backdoors, exposed databases)</li>
+          <li><strong>Traffic analysis</strong> — suspicious behavior flags from the heuristic scoring engine</li>
+          <li><strong>Network placement</strong> — cameras on the main network that should be isolated</li>
+          <li><strong>Community best practices</strong> — consensus from r/homelab, r/unifi, r/homeassistant on IoT isolation</li>
+        </ul>
+        <p style="margin-top:8px">Run <strong>port scans</strong> on unknown devices to get the most detailed recommendations.</p>
+      </div>`;
+  }
+
+  _recCard(r) {
+    return `<div class="rec-item rec-${r.priority}">
+      <span class="rec-priority">${r.priority_label}</span>
+      <div class="rec-title">${r.title}</div>
+      <div class="rec-detail">${(r.detail || "").replace(/\n/g, "<br>")}</div>
+    </div>`;
+  }
 
   _vDetailConnected() {
     const clients = this._data.clients || [];
@@ -865,6 +954,13 @@ h2{font-size:15px;font-weight:600;margin-bottom:10px}.subtitle{color:var(--secon
 .badge.streaming{background:#7e57c233;color:#7e57c2}.badge.gaming{background:#26a69a33;color:#26a69a}.badge.networking{background:#78909c33;color:#78909c}
 .badge.crypto{background:#ff702033;color:#ff7020}.badge.iot{background:#8d6e6333;color:#8d6e63}.badge.nas{background:#5c6bc033;color:#5c6bc0}
 .badge.printer{background:#a1887f33;color:#a1887f}.badge.tablet{background:#ce93d833;color:#ce93d8}.badge.unknown{background:#ffffff1a;color:#999}
+.rec-item{padding:10px;margin-bottom:8px;border-radius:6px;border-left:4px solid var(--divider-color,#2a2a4a);background:rgba(255,255,255,.02)}
+.rec-critical{border-left-color:#e94560;background:rgba(233,69,96,.05)}.rec-high{border-left-color:#ff9800;background:rgba(255,152,0,.05)}
+.rec-medium{border-left-color:#f0a500;background:rgba(240,165,0,.03)}.rec-low{border-left-color:#4caf50}.rec-info{border-left-color:#42a5f5}
+.rec-header{display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap}
+.rec-priority{font-size:11px;font-weight:700}.rec-device{font-size:11px;color:var(--secondary-text-color,#888)}
+.rec-name{font-size:11px;color:var(--secondary-text-color,#aaa)}.rec-title{font-size:13px;font-weight:600;margin-bottom:4px}
+.rec-detail{font-size:11px;line-height:1.6;color:var(--secondary-text-color,#ccc)}.rec-actions{margin-top:6px;display:flex;gap:4px;flex-wrap:wrap}
 .scan-section{grid-column:1/-1;margin-top:4px}
 .scan-result{background:rgba(255,255,255,.03);border-radius:6px;padding:10px;border:1px solid var(--divider-color,#2a2a4a)}
 .scan-header{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px}
