@@ -122,7 +122,7 @@ class UniFiBlockerData:
         try:
             return self._do_enrich(client)
         except Exception as err:
-            _LOGGER.debug("Enrich failed for %s: %s", client.get("mac", "?"), err)
+            _LOGGER.error("Enrich failed for %s: %s", client.get("mac", "?"), err, exc_info=True)
             return {
                 "mac": client.get("mac", ""),
                 "name": client.get("name") or client.get("hostname") or "",
@@ -173,7 +173,7 @@ class UniFiBlockerData:
             "suspicion_score": susp.get("score", 0),
             "suspicion_flags": susp.get("flags", []),
             "is_camera": camera,
-            "dpi": self.dpi.get(mac_lower, {}),
+            "dpi": self._slim_dpi(mac_lower),
             "category": cat_data.get("category", "unknown"),
             "category_label": cat_data.get("category_label", "Unknown"),
             "category_icon": cat_data.get("category_icon", "❓"),
@@ -186,15 +186,43 @@ class UniFiBlockerData:
             "onvif": self._get_onvif_for_ip(client.get("ip", "")),
         }
 
+    def _slim_dpi(self, mac_lower: str) -> dict[str, Any]:
+        """Return DPI data with only the essential fields."""
+        dpi = self.dpi.get(mac_lower)
+        if not dpi:
+            return {}
+        return {
+            "total_rx_mb": dpi.get("total_rx_mb", 0),
+            "total_tx_mb": dpi.get("total_tx_mb", 0),
+            "top_categories": (dpi.get("top_categories") or [])[:5],
+            "flags": dpi.get("flags", []),
+        }
+
     def _get_onvif_for_ip(self, ip: str) -> dict[str, Any] | None:
-        """Look up ONVIF probe result for an IP."""
+        """Look up ONVIF probe result for an IP. Returns only key fields."""
         if not self.onvif or not ip:
             return None
-        return self.onvif.get_result(ip)
+        result = self.onvif.get_result(ip)
+        if not result:
+            return None
+        # Only return essential fields — not the raw SOAP data.
+        return {
+            "onvif": result.get("onvif", False),
+            "manufacturer": result.get("manufacturer", ""),
+            "model": result.get("model", ""),
+            "firmware_version": result.get("firmware_version", ""),
+            "serial_number": result.get("serial_number", ""),
+        }
 
     def all_clients_enriched(self) -> list[dict[str, Any]]:
         """Return enriched dicts for every connected client."""
-        return [self.enrich_client(c) for c in self.clients]
+        result = [self.enrich_client(c) for c in self.clients]
+        _LOGGER.info(
+            "Enriched %d clients, categories: %s",
+            len(result),
+            {c.get("category", "?"): 0 for c in result[:3]},  # sample
+        )
+        return result
 
 
 class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
