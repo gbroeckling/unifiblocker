@@ -25,6 +25,8 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_localnet_assign)
     websocket_api.async_register_command(hass, ws_localnet_remove)
     websocket_api.async_register_command(hass, ws_localnet_ensure_rule)
+    websocket_api.async_register_command(hass, ws_scan_device)
+    websocket_api.async_register_command(hass, ws_scan_results)
     websocket_api.async_register_command(hass, ws_trust_device)
     websocket_api.async_register_command(hass, ws_ignore_device)
     websocket_api.async_register_command(hass, ws_quarantine_device)
@@ -178,6 +180,66 @@ async def ws_set_category(
     await entry["store"].set_manual_category(mac, cat, name=name)
     await entry["coordinator"].async_request_refresh()
     connection.send_result(msg["id"], {"ok": True, "mac": mac, "category": cat})
+
+
+# ── Port scanner commands ─────────────────────────────────────────────
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "unifiblocker/scan_device",
+        vol.Required("mac"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_scan_device(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Trigger a port scan on a specific device."""
+    entry = _get_coordinator(hass)
+    if not entry:
+        connection.send_error(msg["id"], "not_ready", "Not loaded")
+        return
+
+    scanner = entry.get("scanner")
+    if not scanner:
+        connection.send_error(msg["id"], "no_scanner", "Port scanner not available")
+        return
+
+    # Find the device's IP.
+    data = entry["coordinator"].data
+    if not data:
+        connection.send_error(msg["id"], "no_data", "No client data")
+        return
+
+    client = data.client_by_mac(msg["mac"])
+    if not client:
+        connection.send_error(msg["id"], "not_found", f"Device {msg['mac']} not found")
+        return
+
+    ip = client.get("ip", "")
+    if not ip:
+        connection.send_error(msg["id"], "no_ip", "Device has no IP address")
+        return
+
+    result = await scanner.scan_device(ip, msg["mac"])
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "unifiblocker/scan_results"}
+)
+@websocket_api.async_response
+async def ws_scan_results(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Return all cached scan results."""
+    entry = _get_coordinator(hass)
+    if not entry or not entry.get("scanner"):
+        connection.send_result(msg["id"], {"results": {}})
+        return
+
+    connection.send_result(msg["id"], {"results": entry["scanner"].cache})
 
 
 # ── Local network commands ────────────────────────────────────────────

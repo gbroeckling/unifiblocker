@@ -79,8 +79,17 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
         _LOGGER.warning("Local network manager failed to load", exc_info=True)
         local_net = None
 
+    # Port scanner
+    try:
+        from .port_scanner import PortScanner
+        scanner = PortScanner()
+    except Exception:
+        _LOGGER.warning("Port scanner failed to load", exc_info=True)
+        scanner = None
+
     hass.data[DOMAIN][entry.entry_id] = {
-        "api": api, "store": store, "coordinator": coordinator, "local_net": local_net,
+        "api": api, "store": store, "coordinator": coordinator,
+        "local_net": local_net, "scanner": scanner,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

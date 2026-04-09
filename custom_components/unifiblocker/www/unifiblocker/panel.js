@@ -25,6 +25,7 @@ class UniFiBlockerPanel extends HTMLElement {
     this._sortAsc = true;
     this._filter = "";
     this._localnet = {};
+    this._scanCache = {};
     this._initialized = false;
   }
 
@@ -58,6 +59,13 @@ class UniFiBlockerPanel extends HTMLElement {
 
   async _action(type, mac) { if (!this._actionMode) return; const r = await this._ws(type, { mac }); if (r && r.ok) setTimeout(() => this._fetchAll(), 800); }
   async _setCategory(mac, category, name) { const r = await this._ws("unifiblocker/set_category", { mac, category, name: name || undefined }); if (r && r.ok) setTimeout(() => this._fetchAll(), 800); }
+  async _scanDevice(mac) {
+    const el = this.shadowRoot.getElementById(`scan-${mac.replace(/:/g,"")}`);
+    if (el) el.innerHTML = '<div class="scan-loading">Scanning ~90 ports... this takes a few seconds</div>';
+    const r = await this._ws("unifiblocker/scan_device", { mac });
+    if (r) { this._scanCache[mac.toLowerCase()] = r; this._updateMain(); }
+  }
+
   async _assignLocal(mac, category, name) { if (!this._actionMode) { alert("Enable Action Mode first."); return; } const r = await this._ws("unifiblocker/localnet_assign", { mac, category, name: name||undefined }); if (r) { alert(r.ok ? `Assigned ${r.ip} to ${mac}` : `Error: ${r.error}`); setTimeout(() => this._fetchAll(), 800); } }
   async _removeLocal(mac) { if (!this._actionMode) { alert("Enable Action Mode first."); return; } const r = await this._ws("unifiblocker/localnet_remove", { mac }); if (r) setTimeout(() => this._fetchAll(), 800); }
   async _ensureRule() { if (!this._actionMode) { alert("Enable Action Mode first."); return; } const r = await this._ws("unifiblocker/localnet_ensure_rule"); if (r) alert(r.ok ? `Firewall rule ${r.status}: ${r.rule_id||"done"}` : `Error: ${r.error}`); setTimeout(() => this._fetchAll(), 800); }
@@ -163,6 +171,9 @@ class UniFiBlockerPanel extends HTMLElement {
         if (!this._actionMode) { alert("Enable Action Mode first."); return; }
         if (confirm(`${btn.dataset.action} device ${btn.dataset.mac}?`)) this._action(`unifiblocker/${btn.dataset.action}`, btn.dataset.mac);
       });
+    });
+    mc.querySelectorAll("[data-scanmac]").forEach(btn => {
+      btn.addEventListener("click", () => this._scanDevice(btn.dataset.scanmac));
     });
     mc.querySelectorAll("[data-localassign]").forEach(btn => {
       btn.addEventListener("click", () => {
@@ -705,6 +716,38 @@ class UniFiBlockerPanel extends HTMLElement {
 
   _deviceCard(d, num) {
     const flags = d.suspicion_flags||[]; const dpi = d.dpi||{}; const cats = dpi.top_categories||[];
+    const scan = this._scanCache[d.mac.toLowerCase()] || null;
+    const mid = d.mac.replace(/:/g,"");
+
+    let scanHtml = "";
+    if (scan && scan.status === "complete") {
+      const op = scan.open_ports || [];
+      const pd = scan.port_details || [];
+      const w = scan.warnings || [];
+      const rec = scan.recommendations || [];
+      scanHtml = `
+        <div class="scan-result">
+          <div class="scan-header">
+            <span class="scan-title">🔍 Port Scan Results</span>
+            <span class="badge ${scan.guess_risk==="critical"?"danger":scan.guess_risk==="high"?"danger":scan.guess_risk==="medium"?"medium":"ok"}">${scan.guess_risk} risk</span>
+            <span class="badge ${scan.guess_category}">${scan.guess_category}</span>
+            <span class="conf">${scan.guess_confidence} confidence</span>
+          </div>
+          <div class="scan-guess">${scan.guess_description}</div>
+          <div class="scan-ports">
+            <div class="scan-subtitle">${op.length} open port${op.length!==1?"s":""}</div>
+            ${pd.length?`<table class="dpi-table">
+              <tr><th>Port</th><th>Service</th><th>Type</th></tr>
+              ${pd.map(p => `<tr class="${p.group.includes("insecure")||p.group.includes("backdoor")||p.group.includes("xmeye")?"row-danger":p.group.includes("cloud")?"row-warn":""}">
+                <td>${p.port}</td><td>${p.name}</td><td>${p.group}</td>
+              </tr>`).join("")}
+            </table>`:"<div>No ports responded.</div>"}
+          </div>
+          ${w.length?`<div class="scan-warnings"><div class="flags-title">⚠ Warnings:</div>${w.map(x=>`<div class="flag-item" style="color:#e94560">🔴 ${x}</div>`).join("")}</div>`:""}
+          ${rec.length?`<div class="scan-recs"><div class="scan-subtitle">Recommendations:</div>${rec.map(x=>`<div class="flag-item">💡 ${x}</div>`).join("")}</div>`:""}
+        </div>`;
+    }
+
     return `<div class="device-card ${d.suspicious?"device-suspicious":""} ${d.is_camera?"device-camera":""}">
       <div class="device-header">
         <span class="device-num">#${num}</span>
@@ -725,6 +768,9 @@ class UniFiBlockerPanel extends HTMLElement {
         </div>
         ${flags.length?`<div class="flags"><div class="flags-title">Flags:</div>${flags.map(f=>`<div class="flag-item">⚠ ${f}</div>`).join("")}</div>`:""}
         ${cats.length?`<div class="dpi"><div class="dpi-title">Traffic (DPI):</div><table class="dpi-table"><tr><th>Category</th><th>↓</th><th>↑</th></tr>${cats.map(c=>`<tr><td>${c.category}</td><td>${c.rx_mb}MB</td><td>${c.tx_mb}MB</td></tr>`).join("")}</table></div>`:""}
+        <div id="scan-${mid}" class="scan-section">
+          ${scanHtml || `<button class="btn btn-scan" data-scanmac="${d.mac}">🔍 Scan Ports</button>`}
+        </div>
       </div>
       ${this._actionMode?`<div class="device-actions">${this._actBtns(d.mac)}</div>`:""}
     </div>`;
@@ -806,6 +852,17 @@ h2{font-size:15px;font-weight:600;margin-bottom:10px}.subtitle{color:var(--secon
 .badge.streaming{background:#7e57c233;color:#7e57c2}.badge.gaming{background:#26a69a33;color:#26a69a}.badge.networking{background:#78909c33;color:#78909c}
 .badge.crypto{background:#ff702033;color:#ff7020}.badge.iot{background:#8d6e6333;color:#8d6e63}.badge.nas{background:#5c6bc033;color:#5c6bc0}
 .badge.printer{background:#a1887f33;color:#a1887f}.badge.tablet{background:#ce93d833;color:#ce93d8}.badge.unknown{background:#ffffff1a;color:#999}
+.scan-section{grid-column:1/-1;margin-top:4px}
+.scan-result{background:rgba(255,255,255,.03);border-radius:6px;padding:10px;border:1px solid var(--divider-color,#2a2a4a)}
+.scan-header{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.scan-title{font-size:12px;font-weight:700;color:var(--primary-color,#0f9b8e)}
+.scan-guess{font-size:12px;margin-bottom:8px;padding:6px 8px;background:rgba(15,155,142,.08);border-radius:4px;line-height:1.5}
+.scan-ports{margin-bottom:6px}.scan-subtitle{font-size:11px;font-weight:600;margin-bottom:4px}
+.scan-warnings{margin-top:6px}.scan-recs{margin-top:6px}
+.scan-loading{font-size:11px;color:var(--primary-color,#0f9b8e);padding:8px;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.btn-scan{background:rgba(15,155,142,.15);color:var(--primary-color,#0f9b8e);border:1px solid var(--primary-color,#0f9b8e);padding:5px 12px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;transition:background .15s}
+.btn-scan:hover{background:rgba(15,155,142,.3)}
 .mono{font-family:"Consolas","Monaco",monospace;font-size:11px}
 @media(max-width:768px){.shell{flex-direction:column}.sidebar{width:100%;min-width:100%;flex-direction:row;border-right:none;border-bottom:1px solid var(--divider-color,#2a2a4a)}.brand{display:none}.nav-items{display:flex;overflow-x:auto;padding:0}.nav-item{padding:8px 12px;border-left:none;border-bottom:3px solid transparent;white-space:nowrap}.nav-item.active{border-bottom-color:var(--primary-color,#0f9b8e)}.nav-item.sub{padding-left:12px}.nav-divider{display:none}.action-toggle{padding:6px 10px;display:flex;align-items:center;gap:6px}.toggle-hint{display:none}.device-body{grid-template-columns:1fr}.stat-grid{grid-template-columns:repeat(3,1fr)}}
 `;
