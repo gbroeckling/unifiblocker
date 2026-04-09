@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.11";
+const VERSION = "0.3.12";
 const SIDEBAR_THRESHOLD = 5;
 
 class UniFiBlockerPanel extends HTMLElement {
@@ -171,6 +171,10 @@ class UniFiBlockerPanel extends HTMLElement {
     mc.querySelectorAll("[data-statview]").forEach(el => {
       el.addEventListener("click", () => { this._view = el.dataset.statview; this._viewArg = null; this._render(); });
     });
+    // Category grid items (in overview and detail views).
+    mc.querySelectorAll("[data-view='category']").forEach(el => {
+      el.addEventListener("click", () => { this._view = "category"; this._viewArg = el.dataset.arg; this._render(); });
+    });
     mc.querySelectorAll("[data-action]").forEach(btn => {
       btn.addEventListener("click", () => {
         if (!this._actionMode) { alert("Enable Action Mode first."); return; }
@@ -230,7 +234,7 @@ class UniFiBlockerPanel extends HTMLElement {
     const sorted = Object.entries(this._categories).sort((a,b) => b[1].count - a[1].count);
     if (sorted.length) {
       catSummary = `<div class="card"><h2>Device Categories</h2><div class="cat-grid">
-        ${sorted.map(([cat, info]) => `<div class="cat-item"><span class="cat-icon">${info.icon}</span><span class="cat-count">${info.count}</span><span class="cat-label">${info.label}</span></div>`).join("")}
+        ${sorted.map(([cat, info]) => `<div class="cat-item clickable" data-view="category" data-arg="${cat}"><span class="cat-icon">${info.icon}</span><span class="cat-count">${info.count}</span><span class="cat-label">${info.label}</span></div>`).join("")}
       </div></div>`;
     }
     return `
@@ -922,7 +926,8 @@ h2{font-size:15px;font-weight:600;margin-bottom:10px}.subtitle{color:var(--secon
 .card{background:var(--card-background-color,#16213e);border-radius:8px;padding:16px;margin-bottom:14px;border:1px solid var(--divider-color,#2a2a4a)}
 .card p{font-size:12px;line-height:1.5;color:var(--secondary-text-color,#ccc)}.danger-card{border-color:#e94560}.warn-card{border-color:#f0a500}
 .cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px}
-.cat-item{display:flex;flex-direction:column;align-items:center;padding:10px;background:rgba(255,255,255,.03);border-radius:6px}
+.cat-item{display:flex;flex-direction:column;align-items:center;padding:10px;background:rgba(255,255,255,.03);border-radius:6px;transition:transform .15s,border-color .15s;border:1px solid transparent}
+.cat-item.clickable{cursor:pointer}.cat-item.clickable:hover{transform:translateY(-2px);border-color:var(--primary-color,#0f9b8e)}
 .cat-icon{font-size:22px}.cat-count{font-size:18px;font-weight:700;margin:2px 0}.cat-label{font-size:10px;color:var(--secondary-text-color,#888);text-transform:uppercase}
 .table-wrap{overflow-x:auto}
 .data-table{width:100%;border-collapse:collapse;font-size:11px}

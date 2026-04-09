@@ -119,15 +119,40 @@ class UniFiBlockerData:
 
     def enrich_client(self, client: dict[str, Any]) -> dict[str, Any]:
         """Return a display-friendly dict for a single client."""
+        try:
+            return self._do_enrich(client)
+        except Exception as err:
+            _LOGGER.debug("Enrich failed for %s: %s", client.get("mac", "?"), err)
+            return {
+                "mac": client.get("mac", ""),
+                "name": client.get("name") or client.get("hostname") or "",
+                "ip": client.get("ip", ""),
+                "vendor": client.get("oui", "Unknown"),
+                "category": "unknown", "category_label": "Unknown",
+                "category_icon": "❓", "state": "new",
+                "suspicious": False, "threat_level": "none",
+                "is_camera": False, "confidence": "low",
+            }
+
+    def _do_enrich(self, client: dict[str, Any]) -> dict[str, Any]:
         mac = client.get("mac", "")
         mac_lower = mac.lower()
         susp = self.suspicion.get(mac_lower, {})
+        cat_data = self.categories.get(mac_lower, {})
+        vendor = client.get("oui") or lookup_vendor_safe(mac)
+        hostname = client.get("hostname") or client.get("name") or ""
+
+        try:
+            camera = is_camera_like(mac, hostname, vendor)
+        except Exception:
+            camera = False
+
         return {
             "mac": mac,
-            "name": client.get("name") or client.get("hostname") or "",
+            "name": hostname,
             "hostname": client.get("hostname", ""),
             "ip": client.get("ip", ""),
-            "vendor": client.get("oui") or lookup_vendor_safe(mac),
+            "vendor": vendor,
             "network": client.get("network", ""),
             "blocked": client.get("blocked", False),
             "wired": client.get("is_wired", False),
@@ -143,30 +168,21 @@ class UniFiBlockerData:
             "state": self.store.get_state(mac),
             "first_seen": client.get("first_seen"),
             "last_seen": client.get("last_seen"),
-            # ── suspicious traffic fields ────────────────────────────
             "suspicious": susp.get("suspicious", False),
             "threat_level": susp.get("threat_level", "none"),
             "suspicion_score": susp.get("score", 0),
             "suspicion_flags": susp.get("flags", []),
-            # ── camera detection ─────────────────────────────────────
-            "is_camera": is_camera_like(
-                mac,
-                client.get("hostname") or client.get("name") or "",
-                client.get("oui") or lookup_vendor_safe(mac),
-            ),
-            # ── DPI / traffic analysis ───────────────────────────────
+            "is_camera": camera,
             "dpi": self.dpi.get(mac_lower, {}),
-            # ── device category ───────────────────────────────────────
-            "category": self.categories.get(mac_lower, {}).get("category", "unknown"),
-            "category_label": self.categories.get(mac_lower, {}).get("category_label", "Unknown"),
-            "category_icon": self.categories.get(mac_lower, {}).get("category_icon", "❓"),
-            "confidence": self.categories.get(mac_lower, {}).get("confidence", "low"),
-            "source": self.categories.get(mac_lower, {}).get("source", "none"),
-            "onvif_manufacturer": self.categories.get(mac_lower, {}).get("onvif_manufacturer", ""),
-            "onvif_model": self.categories.get(mac_lower, {}).get("onvif_model", ""),
-            "onvif_firmware": self.categories.get(mac_lower, {}).get("onvif_firmware", ""),
-            "onvif_serial": self.categories.get(mac_lower, {}).get("onvif_serial", ""),
-            # ── ONVIF device info (if probed) ────────────────────────
+            "category": cat_data.get("category", "unknown"),
+            "category_label": cat_data.get("category_label", "Unknown"),
+            "category_icon": cat_data.get("category_icon", "❓"),
+            "confidence": cat_data.get("confidence", "low"),
+            "source": cat_data.get("source", "none"),
+            "onvif_manufacturer": cat_data.get("onvif_manufacturer", ""),
+            "onvif_model": cat_data.get("onvif_model", ""),
+            "onvif_firmware": cat_data.get("onvif_firmware", ""),
+            "onvif_serial": cat_data.get("onvif_serial", ""),
             "onvif": self._get_onvif_for_ip(client.get("ip", "")),
         }
 
@@ -250,8 +266,14 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             _LOGGER.debug("Could not fetch events", exc_info=True)
         try:
             health = await self.api.check_health()
-        except UniFiApiError:
+        except Exception:
             _LOGGER.debug("Could not fetch health", exc_info=True)
+        # If we got clients successfully, the connection IS working
+        # even if the health endpoint failed.
+        if clients and not health.get("connection_ok"):
+            health["connection_ok"] = True
+            health["hostname"] = health.get("hostname", "")
+            health["version"] = health.get("version", "")
         try:
             raw_dpi = await self.api.get_dpi_stats()
             for entry in raw_dpi:

@@ -67,7 +67,17 @@ async def ws_get_clients(
         return
 
     data = entry["coordinator"].data
-    clients = data.all_clients_enriched()
+    try:
+        clients = data.all_clients_enriched()
+    except Exception as err:
+        _LOGGER.error("Failed to enrich clients: %s", err, exc_info=True)
+        # Fallback: return basic client data without enrichment.
+        clients = [
+            {"mac": c.get("mac",""), "name": c.get("name") or c.get("hostname",""),
+             "ip": c.get("ip",""), "vendor": c.get("oui",""), "category": "unknown",
+             "category_label": "Unknown", "category_icon": "❓"}
+            for c in data.clients
+        ]
     connection.send_result(msg["id"], {"clients": clients})
 
 
