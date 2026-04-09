@@ -7,7 +7,6 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
     CONF_HOST,
@@ -21,7 +20,6 @@ from .const import (
     DEFAULT_VERIFY_SSL,
     DOMAIN,
 )
-from .unifi_api import UniFiApi, UniFiAuthError, UniFiConnectionError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,7 +42,7 @@ class UniFiBlockerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> config_entries.ConfigFlowResult:
         """Handle the initial setup step."""
         errors: dict[str, str] = {}
 
@@ -52,7 +50,9 @@ class UniFiBlockerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await self.async_set_unique_id(DOMAIN)
             self._abort_if_unique_id_configured()
 
-            # Test the connection before accepting.
+            # Import the API client only when we need it.
+            from .unifi_api import UniFiApi, UniFiAuthError, UniFiConnectionError
+
             api = UniFiApi(
                 host=user_input[CONF_HOST],
                 username=user_input[CONF_USERNAME],
@@ -101,7 +101,7 @@ class UniFiBlockerOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> config_entries.ConfigFlowResult:
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
