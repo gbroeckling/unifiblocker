@@ -562,10 +562,8 @@ _OUI_TABLE: dict[str, str] = {
     "EC:71:DB": "Reolink",
     "9C:8E:CD": "Reolink",
     # ── Amcrest / Foscam ─────────────────────────────────────────────
-    "9C:8E:CD": "Amcrest",
     "00:62:6E": "Amcrest",
     "C0:3C:04": "Foscam",
-    "00:62:6E": "Foscam",
     # ── XMEye / Xiongmai (XM) ────────────────────────────────────────
     "00:12:12": "XMEye/Xiongmai",
     "00:12:13": "XMEye/Xiongmai",
