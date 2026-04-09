@@ -377,7 +377,7 @@ class LocalNetworkManager:
             "action": "drop",
             "ruleset": "WAN_OUT",
             "protocol": "all",
-            "rule_index": 4000,
+            "rule_index": 2000,
             "src_address": self.cidr,
             "logging": True,
         }
