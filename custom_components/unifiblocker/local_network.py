@@ -315,30 +315,58 @@ class LocalNetworkManager:
         except Exception as err:
             return {"ok": False, "error": f"Could not check rules: {err}"}
 
-        # Create the rule.
+        # First, fetch existing rules to learn the correct schema for
+        # this controller. UCG Max / UDM use different field formats.
+        try:
+            existing_rules = await api.get_firewall_rules()
+        except Exception:
+            existing_rules = []
+
+        # Build a minimal, safe rule. Only blocks 192.168.2.0/24 → WAN.
+        # Uses the simplest possible format that works on UCG Max.
         rule_payload = {
             "name": FIREWALL_RULE_NAME,
             "enabled": True,
             "action": "drop",
-            "ruleset": "WAN_OUT",
-            "rule_index": 20000,
             "protocol": "all",
-            "src_firewallgroup_ids": [],
+            "rule_index": 4000,
             "src_address": self.cidr,
-            "src_mac_address": "",
-            "src_networkconf_id": "",
-            "src_networkconf_type": "ADDRv4",
-            "dst_firewallgroup_ids": [],
-            "dst_address": "",
-            "dst_networkconf_id": "",
-            "dst_networkconf_type": "",
-            "dst_port": "",
             "logging": True,
-            "state_established": False,
-            "state_invalid": False,
-            "state_new": True,
-            "state_related": False,
         }
+
+        # Determine the correct ruleset from existing rules.
+        # UCG Max uses "WAN_OUT" or "Internet Out" depending on firmware.
+        rulesets = set()
+        for r in existing_rules:
+            rs = r.get("ruleset", "")
+            if rs and "WAN" in rs.upper():
+                rulesets.add(rs)
+
+        if "WAN_OUT" in rulesets:
+            rule_payload["ruleset"] = "WAN_OUT"
+        elif "WAN_IN" in rulesets:
+            # WAN_OUT not found — try WAN_LOCAL or fall back.
+            rule_payload["ruleset"] = "WAN_OUT"
+        else:
+            # Default for UCG Max / UDM.
+            rule_payload["ruleset"] = "WAN_OUT"
+
+        # Log the payload and existing rule schemas for debugging.
+        _LOGGER.info(
+            "Creating firewall rule: %s → drop %s (ruleset: %s). "
+            "Found %d existing rules with rulesets: %s",
+            FIREWALL_RULE_NAME, self.cidr, rule_payload["ruleset"],
+            len(existing_rules), rulesets,
+        )
+
+        # If we found existing rules, copy their common fields as a
+        # template so we match what this controller expects.
+        if existing_rules:
+            template = existing_rules[0]
+            # Copy required fields that vary by controller model.
+            for field in ["site_id"]:
+                if field in template and field not in rule_payload:
+                    rule_payload[field] = template[field]
 
         try:
             result = await api.create_firewall_rule(rule_payload)

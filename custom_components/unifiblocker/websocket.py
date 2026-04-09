@@ -33,6 +33,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_scan_results)
     websocket_api.async_register_command(hass, ws_block_port)
     websocket_api.async_register_command(hass, ws_block_ports)
+    websocket_api.async_register_command(hass, ws_firewall_rules_debug)
     websocket_api.async_register_command(hass, ws_trust_device)
     websocket_api.async_register_command(hass, ws_ignore_device)
     websocket_api.async_register_command(hass, ws_quarantine_device)
@@ -586,6 +587,46 @@ async def ws_localnet_ensure_rule(
 
     result = await entry["local_net"].ensure_firewall_rule(entry["api"])
     connection.send_result(msg["id"], result)
+
+
+# ── Firewall debug ───────────────────────────────────────────────────
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "unifiblocker/firewall_rules_debug"}
+)
+@websocket_api.async_response
+async def ws_firewall_rules_debug(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Return existing firewall rules for diagnostic purposes (read-only)."""
+    entry = _get_coordinator(hass)
+    if not entry:
+        connection.send_result(msg["id"], {"rules": []})
+        return
+    try:
+        rules = await entry["api"].get_firewall_rules()
+        # Only return safe fields — no credentials or sensitive data.
+        safe_rules = [
+            {
+                "_id": r.get("_id", ""),
+                "name": r.get("name", ""),
+                "enabled": r.get("enabled"),
+                "action": r.get("action", ""),
+                "ruleset": r.get("ruleset", ""),
+                "protocol": r.get("protocol", ""),
+                "src_address": r.get("src_address", ""),
+                "dst_address": r.get("dst_address", ""),
+                "dst_port": r.get("dst_port", ""),
+                "src_mac_address": r.get("src_mac_address", ""),
+                "rule_index": r.get("rule_index"),
+                "site_id": r.get("site_id", ""),
+            }
+            for r in rules
+        ]
+        connection.send_result(msg["id"], {"rules": safe_rules, "count": len(rules)})
+    except Exception as err:
+        connection.send_result(msg["id"], {"rules": [], "error": str(err)})
 
 
 # ── Write commands (require action mode) ─────────────────────────────
