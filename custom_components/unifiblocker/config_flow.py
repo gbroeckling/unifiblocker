@@ -67,6 +67,10 @@ class UniFiBlockerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         """Handle the initial setup step."""
+        # Abort immediately if already configured — no form, no 500.
+        if self._async_current_entries():
+            return self.async_abort(reason="already_configured")
+
         errors: dict[str, str] = {}
         saved = _get_saved_config(self.hass)
 
