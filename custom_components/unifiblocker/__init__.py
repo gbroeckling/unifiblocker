@@ -74,7 +74,7 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
     # Port scanner
     try:
         from .port_scanner import PortScanner
-        scanner = PortScanner()
+        scanner = PortScanner(hass)
     except Exception:
         _LOGGER.warning("Port scanner failed to load", exc_info=True)
         scanner = None
@@ -111,7 +111,7 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
     # Port scanner
     try:
         from .port_scanner import PortScanner
-        scanner = PortScanner()
+        scanner = PortScanner(hass)
     except Exception:
         _LOGGER.warning("Port scanner failed to load", exc_info=True)
         scanner = None

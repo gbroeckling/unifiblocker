@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.19";
+const VERSION = "0.3.20";
 const SIDEBAR_THRESHOLD = 5;
 
 class UniFiBlockerPanel extends HTMLElement {
@@ -1071,11 +1071,14 @@ class UniFiBlockerPanel extends HTMLElement {
           ${scanHtml || `<button class="btn btn-scan" data-scanmac="${d.mac}">🔍 Scan Ports</button>`}
         </div>
       </div>
-      ${this._actionMode?`<div class="device-actions">${this._actBtns(d.mac)}</div>`:""}
+      ${this._actionMode?`<div class="device-actions">${this._actBtns(d.mac, d.category)}</div>`:""}
     </div>`;
   }
 
-  _actBtns(mac) { return `<button class="btn btn-trust" data-action="trust" data-mac="${mac}">✅Trust</button><button class="btn btn-ignore" data-action="ignore" data-mac="${mac}">👁Ignore</button><button class="btn btn-quarantine" data-action="quarantine" data-mac="${mac}">🚫Block</button>`; }
+  _actBtns(mac, cat) {
+    const localBtn = `<button class="btn btn-local" data-localassign="${cat||'iot'}" data-mac="${mac}">🔒Local Only</button>`;
+    return `<button class="btn btn-trust" data-action="trust" data-mac="${mac}">✅Trust</button><button class="btn btn-ignore" data-action="ignore" data-mac="${mac}">👁Ignore</button>${localBtn}<button class="btn btn-quarantine" data-action="quarantine" data-mac="${mac}">🚫Block</button>`;
+  }
   _fmtB(b) { if(!b)return"0"; if(b>1e9)return(b/1e9).toFixed(1)+"GB"; if(b>1e6)return(b/1e6).toFixed(1)+"MB"; if(b>1e3)return(b/1e3).toFixed(1)+"KB"; return b+"B"; }
 }
 
@@ -1139,7 +1142,7 @@ h2{font-size:15px;font-weight:600;margin-bottom:10px}.subtitle{color:var(--secon
 .id-name{width:100%;padding:6px 8px;margin-bottom:8px;border-radius:4px;border:1px solid var(--divider-color,#2a2a4a);background:var(--primary-background-color,#1a1a2e);color:var(--primary-text-color,#e0e0e0);font-size:12px}
 .id-buttons{display:flex;flex-wrap:wrap;gap:4px}
 .btn{padding:5px 10px;border-radius:5px;border:none;cursor:pointer;font-size:11px;font-weight:600;transition:opacity .15s}.btn:hover{opacity:.85}
-.btn-trust{background:#4caf50;color:#fff}.btn-ignore{background:#607d8b;color:#fff}.btn-quarantine{background:#e94560;color:#fff}
+.btn-trust{background:#4caf50;color:#fff}.btn-ignore{background:#607d8b;color:#fff}.btn-local{background:#0f9b8e;color:#fff}.btn-quarantine{background:#e94560;color:#fff}
 .btn-cat{background:rgba(255,255,255,.1);color:var(--primary-text-color,#e0e0e0);font-size:10px;padding:4px 8px}
 .btn-cat:hover{background:rgba(15,155,142,.3)}
 .conf{font-size:10px;color:var(--secondary-text-color,#888);font-style:italic}

@@ -340,13 +340,50 @@ NO_PORTS_RESULT = {
 }
 
 
-class PortScanner:
-    """Async TCP port scanner with fingerprinting."""
+SCAN_CACHE_FILE = "unifiblocker_scan_cache.json"
 
-    def __init__(self) -> None:
-        # mac → {scan result}
+
+class PortScanner:
+    """Async TCP port scanner with fingerprinting. Cache persists to disk."""
+
+    def __init__(self, hass=None) -> None:
         self._cache: dict[str, dict[str, Any]] = {}
         self._scanning: set[str] = set()
+        self._hass = hass
+        self._cache_path = None
+        if hass:
+            import os
+            self._cache_path = os.path.join(hass.config.config_dir, SCAN_CACHE_FILE)
+            self._load_cache()
+
+    def _load_cache(self) -> None:
+        """Load cached scan results from disk."""
+        if not self._cache_path:
+            return
+        try:
+            import json, os
+            if os.path.exists(self._cache_path):
+                with open(self._cache_path, "r") as f:
+                    self._cache = json.load(f)
+                _LOGGER.info("Loaded %d cached scan results", len(self._cache))
+        except Exception:
+            _LOGGER.debug("No scan cache found", exc_info=True)
+
+    def _save_cache(self) -> None:
+        """Persist scan cache to disk (run in executor)."""
+        if not self._cache_path:
+            return
+        try:
+            import json
+            with open(self._cache_path, "w") as f:
+                json.dump(self._cache, f)
+        except Exception:
+            _LOGGER.debug("Could not save scan cache", exc_info=True)
+
+    async def _async_save_cache(self) -> None:
+        """Save cache to disk without blocking the event loop."""
+        if self._hass and self._cache_path:
+            await self._hass.async_add_executor_job(self._save_cache)
 
     @property
     def cache(self) -> dict[str, dict[str, Any]]:
@@ -378,6 +415,11 @@ class PortScanner:
             result["scan_time"] = time.time()
             result["status"] = "complete"
             self._cache[mac] = result
+            # Persist to disk so results survive restarts.
+            try:
+                await self._async_save_cache()
+            except Exception:
+                pass
             _LOGGER.info(
                 "Scan complete for %s: %d open ports, guess=%s (%s confidence)",
                 ip, len(open_ports), result.get("guess_category", "?"),
