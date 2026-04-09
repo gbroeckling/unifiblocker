@@ -359,6 +359,76 @@ class UniFiApi:
         path = API_FIREWALL_RULE.replace("{rule_id}", rule_id)
         await self._request("DELETE", path)
 
+    async def block_port_for_mac(
+        self, mac: str, port: int, *, protocol: str = "tcp", name: str = ""
+    ) -> dict[str, Any]:
+        """Create a firewall rule blocking a specific port for one MAC.
+
+        This is a surgical block — the device stays on the network but
+        cannot use that port outbound.
+        """
+        rule_name = name or f"UB: Block {mac} port {port}/{protocol}"
+        _LOGGER.info("Creating port block: %s → %d/%s", mac, port, protocol)
+        rule = {
+            "name": rule_name,
+            "enabled": True,
+            "action": "drop",
+            "ruleset": "LAN_OUT",
+            "rule_index": 20100,
+            "protocol": protocol,
+            "src_firewallgroup_ids": [],
+            "src_address": "",
+            "src_mac_address": mac.lower(),
+            "src_networkconf_id": "",
+            "src_networkconf_type": "",
+            "dst_firewallgroup_ids": [],
+            "dst_address": "",
+            "dst_networkconf_id": "",
+            "dst_networkconf_type": "",
+            "dst_port": str(port),
+            "logging": True,
+            "state_established": False,
+            "state_invalid": False,
+            "state_new": True,
+            "state_related": False,
+        }
+        return await self.create_firewall_rule(rule)
+
+    async def block_ports_for_mac(
+        self, mac: str, ports: list[int], *, protocol: str = "tcp", name: str = ""
+    ) -> dict[str, Any]:
+        """Block multiple ports for one MAC in a single rule.
+
+        UniFi accepts comma-separated port lists in dst_port.
+        """
+        port_str = ",".join(str(p) for p in ports)
+        rule_name = name or f"UB: Block {mac} ports {port_str}/{protocol}"
+        _LOGGER.info("Creating multi-port block: %s → %s/%s", mac, port_str, protocol)
+        rule = {
+            "name": rule_name,
+            "enabled": True,
+            "action": "drop",
+            "ruleset": "LAN_OUT",
+            "rule_index": 20100,
+            "protocol": protocol,
+            "src_firewallgroup_ids": [],
+            "src_address": "",
+            "src_mac_address": mac.lower(),
+            "src_networkconf_id": "",
+            "src_networkconf_type": "",
+            "dst_firewallgroup_ids": [],
+            "dst_address": "",
+            "dst_networkconf_id": "",
+            "dst_networkconf_type": "",
+            "dst_port": port_str,
+            "logging": True,
+            "state_established": False,
+            "state_invalid": False,
+            "state_new": True,
+            "state_related": False,
+        }
+        return await self.create_firewall_rule(rule)
+
     async def get_networks(self) -> list[dict[str, Any]]:
         """Return all network configurations."""
         return await self._request("GET", API_NETWORKS)

@@ -27,6 +27,8 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_localnet_ensure_rule)
     websocket_api.async_register_command(hass, ws_scan_device)
     websocket_api.async_register_command(hass, ws_scan_results)
+    websocket_api.async_register_command(hass, ws_block_port)
+    websocket_api.async_register_command(hass, ws_block_ports)
     websocket_api.async_register_command(hass, ws_trust_device)
     websocket_api.async_register_command(hass, ws_ignore_device)
     websocket_api.async_register_command(hass, ws_quarantine_device)
@@ -240,6 +242,61 @@ async def ws_scan_results(
         return
 
     connection.send_result(msg["id"], {"results": entry["scanner"].cache})
+
+
+# ── Per-MAC port blocking ─────────────────────────────────────────────
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "unifiblocker/block_port",
+        vol.Required("mac"): str,
+        vol.Required("port"): int,
+        vol.Optional("protocol", default="tcp"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_block_port(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Block a single port for a specific device."""
+    entry = _get_coordinator(hass)
+    if not entry:
+        connection.send_error(msg["id"], "not_ready", "Not loaded")
+        return
+    try:
+        result = await entry["api"].block_port_for_mac(
+            msg["mac"], msg["port"], protocol=msg.get("protocol", "tcp")
+        )
+        connection.send_result(msg["id"], {"ok": True, "mac": msg["mac"], "port": msg["port"]})
+    except Exception as err:
+        connection.send_error(msg["id"], "failed", str(err))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "unifiblocker/block_ports",
+        vol.Required("mac"): str,
+        vol.Required("ports"): [int],
+        vol.Optional("protocol", default="tcp"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_block_ports(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Block multiple ports for a specific device in one rule."""
+    entry = _get_coordinator(hass)
+    if not entry:
+        connection.send_error(msg["id"], "not_ready", "Not loaded")
+        return
+    try:
+        result = await entry["api"].block_ports_for_mac(
+            msg["mac"], msg["ports"], protocol=msg.get("protocol", "tcp")
+        )
+        connection.send_result(msg["id"], {"ok": True, "mac": msg["mac"], "ports": msg["ports"]})
+    except Exception as err:
+        connection.send_error(msg["id"], "failed", str(err))
 
 
 # ── Local network commands ────────────────────────────────────────────

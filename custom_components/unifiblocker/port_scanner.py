@@ -229,6 +229,38 @@ FINGERPRINT_RULES: list[tuple[set, set, str, str, str, str]] = [
      "low", "low"),
 ]
 
+# ── Per-port vulnerability recommendations ───────────────────────────
+# Shown when specific ports are found open.
+
+_PORT_VULN_RECS: dict[int, str] = {
+    21: "FTP (21): Credentials sent in PLAIN TEXT. Anyone on the network can sniff them. Block this port and use SFTP (port 22) instead.",
+    23: "Telnet (23): CVE-rich, zero encryption. Mirai botnet scans for this port globally. Block it and use SSH. If the device only supports Telnet, quarantine it.",
+    2323: "Telnet-alt (2323): Same risks as port 23. Commonly used by IoT malware to avoid basic port filters.",
+    25: "SMTP (25): If this isn't a mail server, the device may be a spam relay or exfiltrating data. Block outbound port 25.",
+    53: "DNS (53): If this isn't your router/Pi-hole, this device is running its own DNS — it could be redirecting lookups to malicious servers.",
+    67: "DHCP Server (67): ROGUE DHCP — this device is handing out IP addresses. It can redirect all traffic through itself (MITM). Quarantine unless this is your router.",
+    80: "HTTP (80): Unencrypted web UI. Login credentials are visible on the network. Access the HTTPS version (443) instead if available.",
+    139: "NetBIOS (139): Legacy Windows protocol with known vulnerabilities (EternalBlue, WannaCry). Block unless you specifically need LAN file sharing with old devices.",
+    161: "SNMP (161): If using default community strings (public/private), anyone can read device config. Change community strings or disable SNMPv1/v2.",
+    445: "SMB (445): Windows file sharing — target of EternalBlue (MS17-010), WannaCry, NotPetya. Ensure SMBv1 is disabled. Block if the device doesn't need file sharing.",
+    554: "RTSP (554): Video stream is unencrypted by default. Anyone on the network can view the camera feed. OK for local-only use, dangerous if internet-exposed.",
+    1883: "MQTT (1883): Unencrypted IoT messaging. If no auth is configured, anyone can read/write messages. Use MQTT-TLS (8883) with authentication instead.",
+    1900: "UPnP (1900): Can auto-open firewall ports without your knowledge. Disable UPnP on your router and on this device.",
+    3306: "MySQL (3306): Database exposed to the network. Should NEVER be accessible from other devices. Bind to 127.0.0.1 and use SSH tunnels for remote access.",
+    3389: "RDP (3389): Remote Desktop. Major attack surface (BlueKeep CVE-2019-0708). Ensure NLA is enabled, use a VPN instead of exposing RDP directly.",
+    5432: "PostgreSQL (5432): Database exposed. Bind to localhost, use pg_hba.conf to restrict connections, and never use default passwords.",
+    5900: "VNC (5900): Remote desktop with weak or no encryption. Many VNC servers have no authentication by default. Use SSH tunneling or a VPN.",
+    6379: "Redis (6379): Key-value database. Default config has NO PASSWORD and binds to all interfaces. Attackers use this for cryptocurrency mining. Secure immediately.",
+    8080: "HTTP-alt (8080): Common for camera/router web UIs. Check if default credentials are still set (admin/admin is common).",
+    8443: "HTTPS-alt (8443): Often used for management consoles. Verify SSL certificate is valid and default credentials are changed.",
+    9100: "RAW Print (9100): Printers on this port can be hijacked to print anything. Also potential lateral movement vector. Isolate printers on their own VLAN.",
+    9530: "Dahua Debug (9530): KNOWN BACKDOOR in Dahua cameras (CVE-2017-7921, CVE-2021-36260). Allows unauthenticated remote access. Block this port IMMEDIATELY and update firmware.",
+    27017: "MongoDB (27017): Default install has NO authentication. Thousands of MongoDB databases have been ransomed. Enable auth and bind to localhost.",
+    34567: "XMEye (34567): Xiongmai/XMEye DVR cloud protocol. CVE-2018-10088 allows unauthenticated access. These devices are known to phone home to Chinese servers. Block or quarantine.",
+    34568: "XMEye Media (34568): XMEye video streaming port. Combined with 34567, confirms an actively communicating Chinese DVR.",
+    37777: "Dahua TCP (37777): Dahua camera/NVR management. Check firmware is up to date — multiple critical CVEs (CVE-2021-36260 remote code execution).",
+}
+
 # ── No ports open at all
 NO_PORTS_RESULT = {
     "category": "unknown",
@@ -404,6 +436,12 @@ class PortScanner:
             recommendations.append(f"This appears to be a {guess_cat} device. Review and mark as Trusted if you recognize it.")
         if guess_cat == "unknown" and open_ports:
             recommendations.append("Ports are open but device type is unclear. Check the manufacturer's documentation or try accessing the web UI if ports 80/443 are open.")
+
+        # Per-port vulnerability recommendations.
+        for port in open_ports:
+            rec = _PORT_VULN_RECS.get(port)
+            if rec:
+                recommendations.append(rec)
 
         return {
             "open_ports": open_ports,

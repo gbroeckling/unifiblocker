@@ -175,6 +175,18 @@ class UniFiBlockerPanel extends HTMLElement {
     mc.querySelectorAll("[data-scanmac]").forEach(btn => {
       btn.addEventListener("click", () => this._scanDevice(btn.dataset.scanmac));
     });
+    mc.querySelectorAll("[data-blockport]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        if (!this._actionMode) { alert("Enable Action Mode first."); return; }
+        const port = parseInt(btn.dataset.blockport);
+        const mac = btn.dataset.blockmac;
+        if (confirm(`Block port ${port} for ${mac}? This creates a firewall rule on the UCG Max.`)) {
+          const r = await this._ws("unifiblocker/block_port", { mac, port });
+          if (r && r.ok) { alert(`Port ${port} blocked for ${mac}`); btn.textContent = "Blocked"; btn.disabled = true; }
+          else alert(`Failed: ${r?.error || "unknown error"}`);
+        }
+      });
+    });
     mc.querySelectorAll("[data-localassign]").forEach(btn => {
       btn.addEventListener("click", () => {
         const mac = btn.dataset.mac; const cat = btn.dataset.localassign;
@@ -737,9 +749,10 @@ class UniFiBlockerPanel extends HTMLElement {
           <div class="scan-ports">
             <div class="scan-subtitle">${op.length} open port${op.length!==1?"s":""}</div>
             ${pd.length?`<table class="dpi-table">
-              <tr><th>Port</th><th>Service</th><th>Type</th></tr>
+              <tr><th>Port</th><th>Service</th><th>Type</th>${this._actionMode?"<th></th>":""}</tr>
               ${pd.map(p => `<tr class="${p.group.includes("insecure")||p.group.includes("backdoor")||p.group.includes("xmeye")?"row-danger":p.group.includes("cloud")?"row-warn":""}">
                 <td>${p.port}</td><td>${p.name}</td><td>${p.group}</td>
+                ${this._actionMode?`<td><button class="btn-port-block" data-blockport="${p.port}" data-blockmac="${d.mac}">Block</button></td>`:""}
               </tr>`).join("")}
             </table>`:"<div>No ports responded.</div>"}
           </div>
@@ -863,6 +876,8 @@ h2{font-size:15px;font-weight:600;margin-bottom:10px}.subtitle{color:var(--secon
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 .btn-scan{background:rgba(15,155,142,.15);color:var(--primary-color,#0f9b8e);border:1px solid var(--primary-color,#0f9b8e);padding:5px 12px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;transition:background .15s}
 .btn-scan:hover{background:rgba(15,155,142,.3)}
+.btn-port-block{background:rgba(233,69,96,.15);color:#e94560;border:1px solid #e9456066;padding:2px 8px;border-radius:3px;cursor:pointer;font-size:10px;transition:background .15s}
+.btn-port-block:hover{background:rgba(233,69,96,.3)}.btn-port-block:disabled{opacity:.5;cursor:default}
 .mono{font-family:"Consolas","Monaco",monospace;font-size:11px}
 @media(max-width:768px){.shell{flex-direction:column}.sidebar{width:100%;min-width:100%;flex-direction:row;border-right:none;border-bottom:1px solid var(--divider-color,#2a2a4a)}.brand{display:none}.nav-items{display:flex;overflow-x:auto;padding:0}.nav-item{padding:8px 12px;border-left:none;border-bottom:3px solid transparent;white-space:nowrap}.nav-item.active{border-bottom-color:var(--primary-color,#0f9b8e)}.nav-item.sub{padding-left:12px}.nav-divider{display:none}.action-toggle{padding:6px 10px;display:flex;align-items:center;gap:6px}.toggle-hint{display:none}.device-body{grid-template-columns:1fr}.stat-grid{grid-template-columns:repeat(3,1fr)}}
 `;
