@@ -263,22 +263,36 @@ def categorize_device(
     dpi_cats: list[dict] | None = None,
     manual_category: str | None = None,
     scan_result: dict[str, Any] | None = None,
+    onvif_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Classify a device using ALL available signals.
 
     Priority order:
       1. Manual override (user explicitly set it)
-      2. Port scan results (strongest automated signal — proves what it IS)
-      3. Known camera vendor OUI (high confidence)
-      4. Camera chip vendor + any camera signal (medium-high confidence)
-      5. Hostname patterns
-      6. General vendor OUI mapping
-      7. DPI traffic patterns
-      8. Unknown
+      2. ONVIF probe (DEFINITIVE — device told us what it is)
+      3. Port scan results (proves what it IS by open ports)
+      4. Known camera vendor OUI (high confidence)
+      5. Camera chip vendor + any camera signal
+      6. Hostname patterns
+      7. General vendor OUI mapping
+      8. DPI traffic patterns
+      9. Unknown
     """
     # 1. Manual override always wins.
     if manual_category and manual_category in CATEGORY_LABELS:
         return _result(manual_category, "high", "manual")
+
+    # 2. ONVIF probe — DEFINITIVE identification.
+    #    If the device responded to ONVIF, it IS a camera/NVR/encoder.
+    if onvif_result and onvif_result.get("onvif"):
+        mfr = onvif_result.get("manufacturer", "")
+        model = onvif_result.get("model", "")
+        r = _result("camera", "high", "onvif")
+        r["onvif_manufacturer"] = mfr
+        r["onvif_model"] = model
+        r["onvif_firmware"] = onvif_result.get("firmware_version", "")
+        r["onvif_serial"] = onvif_result.get("serial_number", "")
+        return r
 
     if not vendor:
         vendor = oui or lookup_vendor_safe(mac)
@@ -424,19 +438,29 @@ def categorize_all_clients(
     dpi_data: dict[str, dict[str, Any]] | None = None,
     manual_overrides: dict[str, str] | None = None,
     scan_data: dict[str, dict[str, Any]] | None = None,
+    onvif_data: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Categorize every client. Returns mac → category result."""
     results: dict[str, dict[str, Any]] = {}
+
+    # Build IP→ONVIF lookup (ONVIF results are keyed by IP).
+    ip_to_onvif: dict[str, dict[str, Any]] = {}
+    if onvif_data:
+        for ip, info in onvif_data.items():
+            ip_to_onvif[ip] = info
+
     for client in clients:
         mac = client.get("mac", "").lower()
         if not mac:
             continue
         hostname = client.get("hostname") or client.get("name") or ""
         vendor = client.get("oui") or lookup_vendor_safe(mac)
+        ip = client.get("ip", "")
         dpi_entry = (dpi_data or {}).get(mac, {})
         dpi_cats = dpi_entry.get("top_categories") or dpi_entry.get("by_cat")
         manual = (manual_overrides or {}).get(mac)
         scan = (scan_data or {}).get(mac)
+        onvif = ip_to_onvif.get(ip) if ip else None
 
         results[mac] = categorize_device(
             mac=mac,
@@ -445,6 +469,7 @@ def categorize_all_clients(
             dpi_cats=dpi_cats,
             manual_category=manual,
             scan_result=scan,
+            onvif_result=onvif,
         )
     return results
 

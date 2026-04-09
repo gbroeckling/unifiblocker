@@ -25,6 +25,9 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_localnet_assign)
     websocket_api.async_register_command(hass, ws_localnet_remove)
     websocket_api.async_register_command(hass, ws_localnet_ensure_rule)
+    websocket_api.async_register_command(hass, ws_onvif_discover)
+    websocket_api.async_register_command(hass, ws_onvif_probe)
+    websocket_api.async_register_command(hass, ws_onvif_results)
     websocket_api.async_register_command(hass, ws_get_recommendations)
     websocket_api.async_register_command(hass, ws_scan_device)
     websocket_api.async_register_command(hass, ws_scan_results)
@@ -183,6 +186,66 @@ async def ws_set_category(
     await entry["store"].set_manual_category(mac, cat, name=name)
     await entry["coordinator"].async_request_refresh()
     connection.send_result(msg["id"], {"ok": True, "mac": mac, "category": cat})
+
+
+# ── ONVIF discovery & probe ───────────────────────────────────────────
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "unifiblocker/onvif_discover"}
+)
+@websocket_api.async_response
+async def ws_onvif_discover(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Run ONVIF WS-Discovery and probe all found cameras."""
+    entry = _get_coordinator(hass)
+    if not entry or not entry.get("onvif"):
+        connection.send_error(msg["id"], "not_ready", "ONVIF probe not available")
+        return
+    results = await entry["onvif"].discover_and_probe_all()
+    connection.send_result(msg["id"], {
+        "count": len(results),
+        "devices": results,
+    })
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "unifiblocker/onvif_probe",
+        vol.Required("ip"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_onvif_probe(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Probe a single IP for ONVIF device information."""
+    entry = _get_coordinator(hass)
+    if not entry or not entry.get("onvif"):
+        connection.send_error(msg["id"], "not_ready", "ONVIF probe not available")
+        return
+    result = await entry["onvif"].probe_ip(msg["ip"])
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "unifiblocker/onvif_results"}
+)
+@websocket_api.async_response
+async def ws_onvif_results(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Return all cached ONVIF probe results."""
+    entry = _get_coordinator(hass)
+    if not entry or not entry.get("onvif"):
+        connection.send_result(msg["id"], {"results": {}, "discovered": []})
+        return
+    onvif = entry["onvif"]
+    connection.send_result(msg["id"], {
+        "results": onvif.cache,
+        "discovered": onvif.discovered_devices,
+    })
 
 
 # ── Recommendations ──────────────────────────────────────────────────

@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.6";
+const VERSION = "0.3.7";
 const SIDEBAR_THRESHOLD = 5;
 
 class UniFiBlockerPanel extends HTMLElement {
@@ -867,7 +867,12 @@ class UniFiBlockerPanel extends HTMLElement {
           <div class="info-row"><span class="info-label">SSID</span><span>${d.essid||"—"}</span></div>
           <div class="info-row"><span class="info-label">Signal</span><span>${d.rssi!=null?d.rssi+" dBm":"—"}</span></div>
           <div class="info-row"><span class="info-label">TX/RX</span><span>${this._fmtB(d.tx_bytes)} / ${this._fmtB(d.rx_bytes)}</span></div>
+          ${d.onvif_manufacturer?`<div class="info-row"><span class="info-label">Make</span><span><strong>${d.onvif_manufacturer}</strong></span></div>`:""}
+          ${d.onvif_model?`<div class="info-row"><span class="info-label">Model</span><span><strong>${d.onvif_model}</strong></span></div>`:""}
+          ${d.onvif_firmware?`<div class="info-row"><span class="info-label">Firmware</span><span>${d.onvif_firmware}</span></div>`:""}
+          ${d.onvif_serial?`<div class="info-row"><span class="info-label">Serial</span><span class="mono">${d.onvif_serial}</span></div>`:""}
         </div>
+        ${d.onvif && d.onvif.onvif ? `<div class="onvif-badge"><span class="badge ok">ONVIF Confirmed</span> ${d.onvif.manufacturer||""} ${d.onvif.model||""}</div>` : ""}
         ${flags.length?`<div class="flags"><div class="flags-title">Flags:</div>${flags.map(f=>`<div class="flag-item">⚠ ${f}</div>`).join("")}</div>`:""}
         ${cats.length?`<div class="dpi"><div class="dpi-title">Traffic (DPI):</div><table class="dpi-table"><tr><th>Category</th><th>↓</th><th>↑</th></tr>${cats.map(c=>`<tr><td>${c.category}</td><td>${c.rx_mb}MB</td><td>${c.tx_mb}MB</td></tr>`).join("")}</table></div>`:""}
         <div id="scan-${mid}" class="scan-section">
@@ -961,6 +966,7 @@ h2{font-size:15px;font-weight:600;margin-bottom:10px}.subtitle{color:var(--secon
 .rec-priority{font-size:11px;font-weight:700}.rec-device{font-size:11px;color:var(--secondary-text-color,#888)}
 .rec-name{font-size:11px;color:var(--secondary-text-color,#aaa)}.rec-title{font-size:13px;font-weight:600;margin-bottom:4px}
 .rec-detail{font-size:11px;line-height:1.6;color:var(--secondary-text-color,#ccc)}.rec-actions{margin-top:6px;display:flex;gap:4px;flex-wrap:wrap}
+.onvif-badge{grid-column:1/-1;font-size:11px;margin-top:4px}
 .scan-section{grid-column:1/-1;margin-top:4px}
 .scan-result{background:rgba(255,255,255,.03);border-radius:6px;padding:10px;border:1px solid var(--divider-color,#2a2a4a)}
 .scan-header{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px}

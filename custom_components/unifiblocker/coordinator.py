@@ -158,7 +158,15 @@ class UniFiBlockerData:
             "dpi": self.dpi.get(mac_lower, {}),
             # ── device category ───────────────────────────────────────
             **(self.categories.get(mac_lower, {})),
+            # ── ONVIF device info (if probed) ────────────────────────
+            "onvif": self._get_onvif_for_ip(client.get("ip", "")),
         }
+
+    def _get_onvif_for_ip(self, ip: str) -> dict[str, Any] | None:
+        """Look up ONVIF probe result for an IP."""
+        if not self.onvif or not ip:
+            return None
+        return self.onvif.get_result(ip)
 
     def all_clients_enriched(self) -> list[dict[str, Any]]:
         """Return enriched dicts for every connected client."""
@@ -175,6 +183,7 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         store: DeviceStore,
         update_interval: int,
         scanner: Any = None,
+        onvif: Any = None,
     ) -> None:
         super().__init__(
             hass,
@@ -185,6 +194,7 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         self.api = api
         self.store = store
         self.scanner = scanner
+        self.onvif = onvif
         self._auto_scanned: set[str] = set()  # MACs already auto-scanned
 
     async def _async_update_data(self) -> UniFiBlockerData:
@@ -268,12 +278,13 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
                 except Exception:
                     _LOGGER.debug("Auto-scan error", exc_info=True)
 
-        # Categorize every client (now including scan data for better accuracy).
+        # Categorize every client using ALL available signals.
         categories = categorize_devices(
             clients,
             dpi_data=dpi,
             manual_overrides=self.store.get_all_manual_categories(),
             scan_data=self.scanner.cache if self.scanner else None,
+            onvif_data=self.onvif.cache if self.onvif else None,
         )
 
         return UniFiBlockerData(

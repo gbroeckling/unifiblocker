@@ -76,8 +76,19 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
         hass, api, store,
         update_interval=data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
         scanner=scanner,
+        onvif=onvif,
     )
     await coordinator.async_config_entry_first_refresh()
+
+    # ONVIF probe engine
+    try:
+        from .onvif_probe import OnvifProbe
+        onvif = OnvifProbe()
+        # Run initial discovery in background (don't block startup).
+        hass.async_create_task(onvif.discover_and_probe_all())
+    except Exception:
+        _LOGGER.warning("ONVIF probe failed to load", exc_info=True)
+        onvif = None
 
     # Local network manager
     try:
@@ -98,7 +109,7 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
     hass.data[DOMAIN][entry.entry_id] = {
         "api": api, "store": store, "coordinator": coordinator,
-        "local_net": local_net, "scanner": scanner,
+        "local_net": local_net, "scanner": scanner, "onvif": onvif,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
