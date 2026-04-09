@@ -27,6 +27,10 @@ API_EVENTS = "/proxy/network/api/s/{site}/stat/event"
 API_ROGUE_AP = "/proxy/network/api/s/{site}/stat/rogueap"
 API_HEALTH = "/proxy/network/api/s/{site}/stat/health"
 API_DPI = "/proxy/network/api/s/{site}/stat/stadpi"
+API_USER = "/proxy/network/api/s/{site}/rest/user/{user_id}"
+API_FIREWALL_RULES = "/proxy/network/api/s/{site}/rest/firewallrule"
+API_FIREWALL_RULE = "/proxy/network/api/s/{site}/rest/firewallrule/{rule_id}"
+API_NETWORKS = "/proxy/network/api/s/{site}/rest/networkconf"
 
 # ── Device states ────────────────────────────────────────────────────
 STATE_NEW = "new"

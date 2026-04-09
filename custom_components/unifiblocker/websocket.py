@@ -21,6 +21,10 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_get_categories)
     websocket_api.async_register_command(hass, ws_get_category_clients)
     websocket_api.async_register_command(hass, ws_set_category)
+    websocket_api.async_register_command(hass, ws_localnet_status)
+    websocket_api.async_register_command(hass, ws_localnet_assign)
+    websocket_api.async_register_command(hass, ws_localnet_remove)
+    websocket_api.async_register_command(hass, ws_localnet_ensure_rule)
     websocket_api.async_register_command(hass, ws_trust_device)
     websocket_api.async_register_command(hass, ws_ignore_device)
     websocket_api.async_register_command(hass, ws_quarantine_device)
@@ -174,6 +178,102 @@ async def ws_set_category(
     await entry["store"].set_manual_category(mac, cat, name=name)
     await entry["coordinator"].async_request_refresh()
     connection.send_result(msg["id"], {"ok": True, "mac": mac, "category": cat})
+
+
+# ── Local network commands ────────────────────────────────────────────
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "unifiblocker/localnet_status"}
+)
+@websocket_api.async_response
+async def ws_localnet_status(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Return local-network assignments, IP ranges, and firewall status."""
+    entry = _get_coordinator(hass)
+    if not entry:
+        connection.send_result(msg["id"], {})
+        return
+
+    local_net = entry.get("local_net")
+    if not local_net:
+        connection.send_result(msg["id"], {"error": "Local network manager not loaded"})
+        return
+
+    fw_status = await local_net.get_firewall_status(entry["api"])
+
+    connection.send_result(msg["id"], {
+        "assignments": local_net.assignments,
+        "ranges": local_net.get_range_info(),
+        "firewall": fw_status,
+        "subnet": "192.168.2.0/24",
+    })
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "unifiblocker/localnet_assign",
+        vol.Required("mac"): str,
+        vol.Required("category"): str,
+        vol.Optional("name"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_localnet_assign(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Assign a device to the local-only subnet."""
+    entry = _get_coordinator(hass)
+    if not entry or not entry.get("local_net"):
+        connection.send_error(msg["id"], "not_ready", "Not loaded")
+        return
+
+    result = await entry["local_net"].assign_local_ip(
+        entry["api"], msg["mac"], msg["category"], msg.get("name", "")
+    )
+    if result.get("ok"):
+        await entry["coordinator"].async_request_refresh()
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "unifiblocker/localnet_remove",
+        vol.Required("mac"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_localnet_remove(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Remove a device from the local-only subnet."""
+    entry = _get_coordinator(hass)
+    if not entry or not entry.get("local_net"):
+        connection.send_error(msg["id"], "not_ready", "Not loaded")
+        return
+
+    result = await entry["local_net"].remove_assignment(entry["api"], msg["mac"])
+    if result.get("ok"):
+        await entry["coordinator"].async_request_refresh()
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "unifiblocker/localnet_ensure_rule"}
+)
+@websocket_api.async_response
+async def ws_localnet_ensure_rule(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Create or verify the WAN-block firewall rule."""
+    entry = _get_coordinator(hass)
+    if not entry or not entry.get("local_net"):
+        connection.send_error(msg["id"], "not_ready", "Not loaded")
+        return
+
+    result = await entry["local_net"].ensure_firewall_rule(entry["api"])
+    connection.send_result(msg["id"], result)
 
 
 # ── Write commands (require action mode) ─────────────────────────────

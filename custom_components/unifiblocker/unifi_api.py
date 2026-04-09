@@ -15,9 +15,13 @@ from .const import (
     API_DEVICES,
     API_EVENTS,
     API_DPI,
+    API_FIREWALL_RULE,
+    API_FIREWALL_RULES,
     API_HEALTH,
     API_LOGIN,
+    API_NETWORKS,
     API_ROGUE_AP,
+    API_USER,
     API_SYSINFO,
 )
 
@@ -293,6 +297,71 @@ class UniFiApi:
             _LOGGER.debug("Health endpoint unavailable", exc_info=True)
 
         return result
+
+    # ── DHCP reservations ───────────────────────────────────────────
+
+    async def set_fixed_ip(self, user_id: str, ip: str) -> None:
+        """Create or update a DHCP reservation for a client.
+
+        *user_id* is the UniFi ``_id`` of the user/client record
+        (found in the output of ``get_all_users()``).
+        """
+        _LOGGER.info("Setting fixed IP %s for user %s", ip, user_id)
+        path = API_USER.replace("{user_id}", user_id)
+        await self._request(
+            "PUT",
+            path,
+            json={"use_fixedip": True, "fixed_ip": ip},
+        )
+
+    async def clear_fixed_ip(self, user_id: str) -> None:
+        """Remove a DHCP reservation."""
+        _LOGGER.info("Clearing fixed IP for user %s", user_id)
+        path = API_USER.replace("{user_id}", user_id)
+        await self._request(
+            "PUT",
+            path,
+            json={"use_fixedip": False, "fixed_ip": ""},
+        )
+
+    async def get_user_by_mac(self, mac: str) -> dict[str, Any] | None:
+        """Find the UniFi user record for a MAC address."""
+        users = await self.get_all_users()
+        mac = mac.lower()
+        for user in users:
+            if user.get("mac", "").lower() == mac:
+                return user
+        return None
+
+    # ── Firewall rules ───────────────────────────────────────────────
+
+    async def get_firewall_rules(self) -> list[dict[str, Any]]:
+        """Return all firewall rules."""
+        return await self._request("GET", API_FIREWALL_RULES)
+
+    async def create_firewall_rule(self, rule: dict[str, Any]) -> dict[str, Any]:
+        """Create a new firewall rule.
+
+        *rule* should contain at least: name, action, ruleset,
+        src_address, dst_address, protocol, etc.
+        """
+        _LOGGER.info("Creating firewall rule: %s", rule.get("name", "unnamed"))
+        result = await self._request("POST", API_FIREWALL_RULES, json=rule)
+        return result[0] if isinstance(result, list) and result else result
+
+    async def update_firewall_rule(self, rule_id: str, rule: dict[str, Any]) -> None:
+        """Update an existing firewall rule."""
+        path = API_FIREWALL_RULE.replace("{rule_id}", rule_id)
+        await self._request("PUT", path, json=rule)
+
+    async def delete_firewall_rule(self, rule_id: str) -> None:
+        """Delete a firewall rule."""
+        path = API_FIREWALL_RULE.replace("{rule_id}", rule_id)
+        await self._request("DELETE", path)
+
+    async def get_networks(self) -> list[dict[str, Any]]:
+        """Return all network configurations."""
+        return await self._request("GET", API_NETWORKS)
 
     async def close(self) -> None:
         """Close the HTTP session if we own it."""

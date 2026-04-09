@@ -72,10 +72,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     await coordinator.async_config_entry_first_refresh()
 
+    # ── local network manager ────────────────────────────────────────
+    from .local_network import LocalNetworkManager
+    local_net = LocalNetworkManager(hass)
+    await local_net.async_load()
+
     hass.data[DOMAIN][entry.entry_id] = {
         "api": api,
         "store": store,
         "coordinator": coordinator,
+        "local_net": local_net,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

@@ -24,6 +24,7 @@ class UniFiBlockerPanel extends HTMLElement {
     this._sortCol = "category";
     this._sortAsc = true;
     this._filter = "";
+    this._localnet = {};
     this._initialized = false;
   }
 
@@ -39,14 +40,16 @@ class UniFiBlockerPanel extends HTMLElement {
   async _ws(type, extra = {}) { if (!this._hass) return null; try { return await this._hass.callWS({ type, ...extra }); } catch (e) { console.warn("[UB]", type, e); return null; } }
 
   async _fetchAll() {
-    const [ov, cl, cats] = await Promise.all([
+    const [ov, cl, cats, ln] = await Promise.all([
       this._ws("unifiblocker/overview"),
       this._ws("unifiblocker/clients"),
       this._ws("unifiblocker/categories"),
+      this._ws("unifiblocker/localnet_status"),
     ]);
     if (ov) this._overview = ov;
     if (cl) this._data = cl;
     if (cats) this._categories = cats.categories || {};
+    if (ln) this._localnet = ln;
     this._render();
   }
 
@@ -55,6 +58,9 @@ class UniFiBlockerPanel extends HTMLElement {
 
   async _action(type, mac) { if (!this._actionMode) return; const r = await this._ws(type, { mac }); if (r && r.ok) setTimeout(() => this._fetchAll(), 800); }
   async _setCategory(mac, category, name) { const r = await this._ws("unifiblocker/set_category", { mac, category, name: name || undefined }); if (r && r.ok) setTimeout(() => this._fetchAll(), 800); }
+  async _assignLocal(mac, category, name) { if (!this._actionMode) { alert("Enable Action Mode first."); return; } const r = await this._ws("unifiblocker/localnet_assign", { mac, category, name: name||undefined }); if (r) { alert(r.ok ? `Assigned ${r.ip} to ${mac}` : `Error: ${r.error}`); setTimeout(() => this._fetchAll(), 800); } }
+  async _removeLocal(mac) { if (!this._actionMode) { alert("Enable Action Mode first."); return; } const r = await this._ws("unifiblocker/localnet_remove", { mac }); if (r) setTimeout(() => this._fetchAll(), 800); }
+  async _ensureRule() { if (!this._actionMode) { alert("Enable Action Mode first."); return; } const r = await this._ws("unifiblocker/localnet_ensure_rule"); if (r) alert(r.ok ? `Firewall rule ${r.status}: ${r.rule_id||"done"}` : `Error: ${r.error}`); setTimeout(() => this._fetchAll(), 800); }
 
   // ── Render ────────────────────────────────────────────────────────
   _render() {
@@ -85,6 +91,7 @@ class UniFiBlockerPanel extends HTMLElement {
             ${this._nav("suspicious", "Suspicious", "⚠")}
             ${this._nav("clients", "All Clients", "📋")}
             ${this._nav("identify", "Identify", "🔍")}
+            ${this._nav("localnet", "Local Only", "🔒")}
             ${catNav ? '<div class="nav-divider">Categories</div>' + catNav : ""}
             ${this._nav("quarantined", "Quarantined", "🚫")}
             ${this._nav("ports", "Port Guide", "🔌")}
@@ -133,6 +140,7 @@ class UniFiBlockerPanel extends HTMLElement {
       case "suspicious": mc.innerHTML = this._vDeviceList((this._overview.suspicious_devices || []).sort((a,b) => (b.suspicion_score||0)-(a.suspicion_score||0)), "Suspicious Traffic", "Devices scored 3+ on behavioral heuristics."); break;
       case "clients": mc.innerHTML = this._vClients(); break;
       case "identify": mc.innerHTML = this._vIdentify(); break;
+      case "localnet": mc.innerHTML = this._vLocalNet(); break;
       case "category": mc.innerHTML = this._vCategory(); break;
       case "quarantined": mc.innerHTML = this._vDeviceList((this._data.clients||[]).filter(c=>c.state==="quarantined"||c.blocked), "Quarantined / Blocked", "Devices blocked on the controller."); break;
       case "ports": mc.innerHTML = this._vPorts(); break;
@@ -146,6 +154,19 @@ class UniFiBlockerPanel extends HTMLElement {
         if (!this._actionMode) { alert("Enable Action Mode first."); return; }
         if (confirm(`${btn.dataset.action} device ${btn.dataset.mac}?`)) this._action(`unifiblocker/${btn.dataset.action}`, btn.dataset.mac);
       });
+    });
+    mc.querySelectorAll("[data-localassign]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const mac = btn.dataset.mac; const cat = btn.dataset.localassign;
+        const nameInput = mc.querySelector(`#lname-${mac.replace(/:/g,"")}`);
+        this._assignLocal(mac, cat, nameInput ? nameInput.value : "");
+      });
+    });
+    mc.querySelectorAll("[data-localremove]").forEach(btn => {
+      btn.addEventListener("click", () => { if(confirm(`Remove local-only assignment for ${btn.dataset.mac}?`)) this._removeLocal(btn.dataset.mac); });
+    });
+    mc.querySelectorAll("[data-ensureFw]").forEach(btn => {
+      btn.addEventListener("click", () => this._ensureRule());
     });
     mc.querySelectorAll("[data-setcat]").forEach(btn => {
       btn.addEventListener("click", () => {
@@ -287,6 +308,105 @@ class UniFiBlockerPanel extends HTMLElement {
     return `<h1>${info.icon||""} ${info.label||cat} <span class="count">${clients.length}</span></h1>
       ${clients.map((d,i) => this._deviceCard(d, i+1)).join("")}
       ${clients.length===0?'<div class="empty">No devices in this category.</div>':""}`;
+  }
+
+  _vLocalNet() {
+    const ln = this._localnet || {};
+    const assignments = ln.assignments || {};
+    const ranges = ln.ranges || [];
+    const fw = ln.firewall || {};
+    const assignArr = Object.entries(assignments);
+    const catLabels = this._overview.category_labels || {};
+    const catIcons = this._overview.category_icons || {};
+
+    // Find devices that could be assigned (cameras, IoT, etc. that aren't already assigned)
+    const assignedMacs = new Set(Object.keys(assignments));
+    const candidates = (this._data.clients || []).filter(c => {
+      const cat = c.category || "unknown";
+      return !assignedMacs.has(c.mac.toLowerCase()) && cat !== "unknown" && c.state !== "quarantined";
+    });
+
+    return `<h1>🔒 Local-Only Network</h1>
+      <p class="subtitle">Devices on 192.168.2.x have no internet access. They work locally only.</p>
+
+      <div class="card ${fw.exists && fw.enabled ? '' : 'danger-card'}">
+        <h2>Firewall Rule</h2>
+        <table class="info-table">
+          <tr><td>Status</td><td>${fw.exists ? (fw.enabled ? '<span class="badge ok">Active</span>' : '<span class="badge warn">Disabled</span>') : '<span class="badge danger">Not Created</span>'}</td></tr>
+          <tr><td>Rule</td><td>${fw.name || FIREWALL_RULE_NAME || 'Block 192.168.2.0/24 → WAN'}</td></tr>
+          ${fw.rule_id ? `<tr><td>Rule ID</td><td class="mono">${fw.rule_id}</td></tr>` : ''}
+          ${fw.error ? `<tr><td>Error</td><td>${fw.error}</td></tr>` : ''}
+        </table>
+        ${!fw.exists && this._actionMode ? '<button class="btn btn-trust" data-ensureFw="1" style="margin-top:10px">Create Firewall Rule</button>' : ''}
+        ${!fw.exists && !this._actionMode ? '<p style="margin-top:8px;font-size:11px;color:#f0a500">Enable Action Mode to create the firewall rule.</p>' : ''}
+      </div>
+
+      <div class="card">
+        <h2>IP Range Allocation</h2>
+        <table class="data-table"><thead><tr><th>Category</th><th>Range</th><th>Used</th><th>Available</th></tr></thead><tbody>
+          ${ranges.map(r => `<tr>
+            <td>${catIcons[r.category]||''} ${catLabels[r.category]||r.category}</td>
+            <td class="mono">${r.range}</td>
+            <td>${r.used}</td>
+            <td>${r.available}</td>
+          </tr>`).join('')}
+        </tbody></table>
+      </div>
+
+      <div class="card">
+        <h2>Current Assignments <span class="count">${assignArr.length}</span></h2>
+        ${assignArr.length === 0 ? '<div class="empty">No local-only assignments yet.</div>' : `
+          <table class="data-table"><thead><tr><th>MAC</th><th>IP</th><th>Category</th><th>Name</th>${this._actionMode?'<th>Remove</th>':''}</tr></thead><tbody>
+            ${assignArr.map(([mac, info]) => `<tr>
+              <td class="mono">${mac}</td>
+              <td class="mono">${info.ip}</td>
+              <td>${catIcons[info.category]||''} ${catLabels[info.category]||info.category}</td>
+              <td>${info.name||'—'}</td>
+              ${this._actionMode?`<td><button class="btn btn-quarantine" data-localremove="1" data-mac="${mac}">Remove</button></td>`:''}
+            </tr>`).join('')}
+          </tbody></table>
+        `}
+      </div>
+
+      <div class="card">
+        <h2>Assign Device to Local-Only</h2>
+        <p class="subtitle">Pick a device and its category. An IP will be auto-assigned from the category range.</p>
+        ${candidates.length === 0 ? '<div class="empty">No unassigned devices available.</div>' : `
+          ${candidates.slice(0, 30).map(d => {
+            const mid = d.mac.replace(/:/g,'');
+            return `<div class="device-card" style="padding:10px;margin-bottom:6px">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span class="mono" style="font-weight:600">${d.mac}</span>
+                <span>${d.name||d.hostname||'—'}</span>
+                <span style="color:var(--secondary-text-color)">${d.vendor||'?'}</span>
+                <span class="badge ${d.category}">${d.category_icon||''} ${d.category_label||''}</span>
+                <span class="mono" style="color:var(--secondary-text-color)">${d.ip||''}</span>
+              </div>
+              ${this._actionMode ? `<div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;align-items:center">
+                <input type="text" id="lname-${mid}" class="id-name" placeholder="Name (optional)" value="${d.name||''}" style="width:160px;padding:4px 6px;font-size:11px" />
+                <button class="btn btn-trust" data-localassign="${d.category||'iot'}" data-mac="${d.mac}">Assign as ${d.category_label||'IoT'}</button>
+              </div>` : '<div style="font-size:10px;color:var(--secondary-text-color);margin-top:4px">Enable Action Mode to assign</div>'}
+            </div>`;
+          }).join('')}
+        `}
+      </div>
+
+      <div class="card">
+        <h2>Setup Guide</h2>
+        <p>This system manages the <strong>192.168.2.0/24</strong> subnet on your flat network.<br/>
+        Devices assigned here get a DHCP reservation in the 192.168.2.x range and are blocked from WAN access by a firewall rule on the UCG Max.</p>
+        <p style="margin-top:8px"><strong>How it works:</strong></p>
+        <ol style="font-size:12px;padding-left:20px;margin-top:4px;line-height:1.8">
+          <li>Click <strong>"Create Firewall Rule"</strong> to block 192.168.2.0/24 from internet</li>
+          <li>Find a device in the list above and click <strong>"Assign"</strong></li>
+          <li>The device gets a reserved IP in its category range (e.g. cameras → .30-.50)</li>
+          <li>After the device renews its DHCP lease, it moves to the new IP</li>
+          <li>The firewall rule ensures it can only talk locally — no internet</li>
+        </ol>
+        <p style="margin-top:8px;font-size:11px;color:var(--secondary-text-color)">
+          IP ranges are configurable. Default layout: cameras .30-.50, ESPHome .51-.70, lights .71-.90, speakers .91-.100, IoT .101-.120, streaming .121-.130, printers .131-.140, gaming .141-.150, crypto .151-.160, NAS .161-.170, HA .171-.180, networking .181-.190, computers .191-.210, phones .211-.220, tablets .221-.230.
+        </p>
+      </div>`;
   }
 
   _vPorts() {
