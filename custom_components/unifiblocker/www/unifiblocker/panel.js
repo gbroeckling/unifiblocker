@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.17";
+const VERSION = "0.3.18";
 const SIDEBAR_THRESHOLD = 5;
 
 class UniFiBlockerPanel extends HTMLElement {
@@ -695,7 +695,31 @@ class UniFiBlockerPanel extends HTMLElement {
   _vCategory() {
     const cat = this._viewArg;
     const info = this._categories[cat] || {};
-    const clients = (this._data.clients || []).filter(c => c.category === cat);
+
+    // Try filtering from clients list first.
+    let clients = (this._data.clients || []).filter(c => c.category === cat);
+
+    // If no matches but category says it has items, the clients WS
+    // might have failed or categories don't match. Fall back to
+    // fetching from the category-specific endpoint.
+    if (clients.length === 0 && info.count > 0) {
+      // Show loading and fetch directly.
+      if (!this._catCache) this._catCache = {};
+      if (this._catCache[cat]) {
+        clients = this._catCache[cat];
+      } else {
+        // Trigger async fetch.
+        this._ws("unifiblocker/category_clients", { category: cat }).then(r => {
+          if (r && r.clients) {
+            this._catCache[cat] = r.clients;
+            this._updateMain();
+          }
+        });
+        return `<h1>${info.icon||""} ${info.label||cat} <span class="count">${info.count}</span></h1>
+          <div class="loading">Loading ${info.label || cat} devices...</div>`;
+      }
+    }
+
     return `<h1>${info.icon||""} ${info.label||cat} <span class="count">${clients.length}</span></h1>
       ${clients.map((d,i) => this._deviceCard(d, i+1)).join("")}
       ${clients.length===0?'<div class="empty">No devices in this category.</div>':""}`;
