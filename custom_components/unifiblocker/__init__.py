@@ -71,13 +71,21 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
     store = DeviceStore(hass)
     await store.async_load()
 
-    # Port scanner (loaded before coordinator so it can auto-scan)
+    # Port scanner
     try:
         from .port_scanner import PortScanner
         scanner = PortScanner()
     except Exception:
         _LOGGER.warning("Port scanner failed to load", exc_info=True)
         scanner = None
+
+    # ONVIF probe engine
+    try:
+        from .onvif_probe import OnvifProbe
+        onvif = OnvifProbe()
+    except Exception:
+        _LOGGER.warning("ONVIF probe failed to load", exc_info=True)
+        onvif = None
 
     coordinator = UniFiBlockerCoordinator(
         hass, api, store,
@@ -87,15 +95,9 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
     )
     await coordinator.async_config_entry_first_refresh()
 
-    # ONVIF probe engine
-    try:
-        from .onvif_probe import OnvifProbe
-        onvif = OnvifProbe()
-        # Run initial discovery in background (don't block startup).
+    # Run ONVIF discovery in background after coordinator is up.
+    if onvif:
         hass.async_create_task(onvif.discover_and_probe_all())
-    except Exception:
-        _LOGGER.warning("ONVIF probe failed to load", exc_info=True)
-        onvif = None
 
     # Local network manager
     try:
