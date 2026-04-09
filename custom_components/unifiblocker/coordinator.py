@@ -157,7 +157,15 @@ class UniFiBlockerData:
             # ── DPI / traffic analysis ───────────────────────────────
             "dpi": self.dpi.get(mac_lower, {}),
             # ── device category ───────────────────────────────────────
-            **(self.categories.get(mac_lower, {})),
+            "category": self.categories.get(mac_lower, {}).get("category", "unknown"),
+            "category_label": self.categories.get(mac_lower, {}).get("category_label", "Unknown"),
+            "category_icon": self.categories.get(mac_lower, {}).get("category_icon", "❓"),
+            "confidence": self.categories.get(mac_lower, {}).get("confidence", "low"),
+            "source": self.categories.get(mac_lower, {}).get("source", "none"),
+            "onvif_manufacturer": self.categories.get(mac_lower, {}).get("onvif_manufacturer", ""),
+            "onvif_model": self.categories.get(mac_lower, {}).get("onvif_model", ""),
+            "onvif_firmware": self.categories.get(mac_lower, {}).get("onvif_firmware", ""),
+            "onvif_serial": self.categories.get(mac_lower, {}).get("onvif_serial", ""),
             # ── ONVIF device info (if probed) ────────────────────────
             "onvif": self._get_onvif_for_ip(client.get("ip", "")),
         }

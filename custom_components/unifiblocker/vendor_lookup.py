@@ -824,15 +824,42 @@ def lookup_vendor_safe(mac: str | None) -> str:
     return lookup_vendor(mac)
 
 
+# Keywords that indicate a camera vendor when found ANYWHERE in the
+# vendor/OUI string (case-insensitive). Catches UniFi's long-form OUI
+# strings like "Hangzhou Hikvision Digital Technology Co.,Ltd."
+CAMERA_VENDOR_KEYWORDS: list[str] = [
+    "hikvision", "dahua", "reolink", "amcrest", "foscam", "xiongmai",
+    "xmeye", "uniview", "axis", "vivotek", "hanwha", "techwin",
+    "ezviz", "imou", "annke", "lorex", "swann", "eufy", "wyze",
+    "yi technology", "wansview", "hiseeu", "zosi", "sunell", "tvt",
+    "provision", "milesight", "tiandy", "kedacom", "geovision",
+    "dericam", "acti", "grandstream", "hisilicon", "ingenic",
+    "sigmastar", "novatek", "grainmedia", "vigi", "ring",
+    "camera", "ipcam", "ip cam", "nvr", "dvr", "surveillance",
+]
+
+
 def is_camera_vendor(vendor: str) -> bool:
-    """Return True if *vendor* is a known camera manufacturer."""
-    return vendor in CAMERA_VENDORS
+    """Return True if *vendor* matches any known camera manufacturer.
+
+    Uses fuzzy matching — checks if any camera keyword appears anywhere
+    in the vendor string (case-insensitive). This catches UniFi's
+    long-form OUI strings like 'Hangzhou Hikvision Digital Technology'.
+    """
+    if not vendor or vendor == "Unknown":
+        return False
+    # Exact match first (fast path).
+    if vendor in CAMERA_VENDORS or vendor in CAMERA_CHIP_VENDORS:
+        return True
+    # Fuzzy match — keyword anywhere in vendor string.
+    vendor_lower = vendor.lower()
+    return any(kw in vendor_lower for kw in CAMERA_VENDOR_KEYWORDS)
 
 
 def is_camera_like(mac: str, hostname: str = "", vendor: str = "") -> bool:
     """Return True if the device looks like an IP camera.
 
-    Checks vendor OUI and hostname patterns.
+    Checks vendor OUI (fuzzy), hostname patterns, and MAC lookup.
     """
     if not vendor:
         vendor = lookup_vendor_safe(mac)

@@ -330,14 +330,14 @@ def categorize_device(
         if scan_cat != "unknown" and scan_conf in ("high", "medium"):
             return _result(scan_cat, scan_conf, "port_scan")
 
-    # 3. Known camera vendor OUI — high confidence
-    if vendor in CAMERA_VENDORS:
+    # 3. Known camera vendor OUI — fuzzy match
+    from .vendor_lookup import is_camera_vendor as _is_cam_vendor, CAMERA_CHIP_VENDORS
+    if _is_cam_vendor(vendor):
         return _result("camera", "high", "vendor")
 
     # 4. Camera chip vendor (HiSilicon, Ingenic, etc.)
     #    These PROBABLY make cameras but could be other embedded devices.
     #    Promote to camera if ANY other signal suggests camera.
-    from .vendor_lookup import CAMERA_CHIP_VENDORS
     if vendor in CAMERA_CHIP_VENDORS:
         # Any camera hostname hint?
         cam_hints = ["ipc", "cam", "dvr", "nvr", "ds-", "dh-", "hik", "dahua"]
@@ -372,10 +372,16 @@ def categorize_device(
                 if pat in hn:
                     return _result(cat, "high" if len(pat) > 4 else "medium", "hostname")
 
-    # 7. General vendor OUI mapping
+    # 7. General vendor OUI mapping (exact then fuzzy)
     if vendor in _VENDOR_CATEGORY:
         cat = _VENDOR_CATEGORY[vendor]
         return _result(cat, "medium", "vendor")
+    # Fuzzy: check if any vendor key appears in the OUI string
+    vendor_lower = vendor.lower() if vendor else ""
+    if vendor_lower:
+        for v_key, v_cat in _VENDOR_CATEGORY.items():
+            if v_key.lower() in vendor_lower:
+                return _result(v_cat, "medium", "vendor_fuzzy")
 
     # 8. DPI-based inference
     if dpi_cats:
