@@ -64,6 +64,13 @@ class UniFiApi:
         self._session = session
         self._owns_session = session is None
         self._csrf_token: str | None = None
+        # Pre-create SSL context to avoid blocking call in event loop.
+        if not verify_ssl:
+            self._ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            self._ssl_ctx.check_hostname = False
+            self._ssl_ctx.verify_mode = ssl.CERT_NONE
+        else:
+            self._ssl_ctx = None  # Use default (True)
 
     # ── helpers ──────────────────────────────────────────────────────
 
@@ -98,10 +105,7 @@ class UniFiApi:
     def _ssl_context(self) -> ssl.SSLContext | bool:
         if self._verify_ssl:
             return True
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        return ctx
+        return self._ssl_ctx or False
 
     async def _ensure_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:

@@ -18,30 +18,34 @@ DOMAIN = "unifiblocker"
 _SAVED_CONFIG_FILE = "unifiblocker_saved_config.json"
 
 
-def _get_saved_config(hass) -> dict[str, Any]:
-    """Load previously used config from disk."""
+async def _get_saved_config(hass) -> dict[str, Any]:
+    """Load previously used config from disk (async-safe)."""
     path = os.path.join(hass.config.config_dir, _SAVED_CONFIG_FILE)
     try:
-        if os.path.exists(path):
-            with open(path, "r") as f:
-                data = json.load(f)
-                _LOGGER.debug("Loaded saved config from %s", path)
-                return data
+        return await hass.async_add_executor_job(_read_json, path)
     except Exception:
-        _LOGGER.debug("No saved config found")
+        return {}
+
+
+async def _save_config_async(hass, data: dict[str, Any]) -> None:
+    """Save config to disk (async-safe)."""
+    path = os.path.join(hass.config.config_dir, _SAVED_CONFIG_FILE)
+    try:
+        await hass.async_add_executor_job(_write_json, path, data)
+    except Exception:
+        _LOGGER.warning("Could not save config", exc_info=True)
+
+
+def _read_json(path: str) -> dict:
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            return json.load(f)
     return {}
 
 
-def _save_config(hass, data: dict[str, Any]) -> None:
-    """Save config to disk so it survives removal/re-add."""
-    path = os.path.join(hass.config.config_dir, _SAVED_CONFIG_FILE)
-    try:
-        to_save = dict(data)
-        with open(path, "w") as f:
-            json.dump(to_save, f)
-        _LOGGER.debug("Saved config to %s", path)
-    except Exception:
-        _LOGGER.warning("Could not save config", exc_info=True)
+def _write_json(path: str, data: dict) -> None:
+    with open(path, "w") as f:
+        json.dump(data, f)
 
 
 def _build_schema(saved: dict[str, Any]) -> vol.Schema:
@@ -71,7 +75,7 @@ class UniFiBlockerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="already_configured")
 
         errors: dict[str, str] = {}
-        saved = _get_saved_config(self.hass)
+        saved = await _get_saved_config(self.hass)
 
         if user_input is not None:
             await self.async_set_unique_id(DOMAIN)
@@ -100,7 +104,7 @@ class UniFiBlockerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if not errors:
                 # Save config for future re-adds.
-                _save_config(self.hass, user_input)
+                await _save_config_async(self.hass, user_input)
                 return self.async_create_entry(
                     title=f"UniFi Blocker ({user_input['host']})",
                     data=user_input,
