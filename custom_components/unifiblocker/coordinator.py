@@ -174,6 +174,7 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         api: UniFiApi,
         store: DeviceStore,
         update_interval: int,
+        scanner: Any = None,
     ) -> None:
         super().__init__(
             hass,
@@ -183,6 +184,8 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         )
         self.api = api
         self.store = store
+        self.scanner = scanner
+        self._auto_scanned: set[str] = set()  # MACs already auto-scanned
 
     async def _async_update_data(self) -> UniFiBlockerData:
         """Fetch clients from the controller and update the store."""
@@ -240,11 +243,37 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         except UniFiApiError:
             _LOGGER.debug("Could not fetch DPI stats", exc_info=True)
 
-        # Categorize every client.
+        # Auto-scan new/unknown devices that have an IP.
+        if self.scanner:
+            scan_targets = []
+            for client in clients:
+                mac = client.get("mac", "").lower()
+                ip = client.get("ip", "")
+                if not mac or not ip or mac in self._auto_scanned:
+                    continue
+                state = self.store.get_state(mac)
+                vendor = client.get("oui") or lookup_vendor_safe(mac)
+                hostname = client.get("hostname") or client.get("name") or ""
+                # Auto-scan if: new state, or unknown vendor, or camera chip vendor, or no hostname
+                from .vendor_lookup import CAMERA_CHIP_VENDORS
+                if state == "new" or vendor == "Unknown" or vendor in CAMERA_CHIP_VENDORS or not hostname.strip():
+                    scan_targets.append({"ip": ip, "mac": mac})
+                    self._auto_scanned.add(mac)
+
+            # Scan up to 5 devices per poll cycle to avoid overwhelming the network.
+            if scan_targets:
+                _LOGGER.info("Auto-scanning %d new/unknown devices", min(len(scan_targets), 5))
+                try:
+                    await self.scanner.scan_multiple(scan_targets[:5])
+                except Exception:
+                    _LOGGER.debug("Auto-scan error", exc_info=True)
+
+        # Categorize every client (now including scan data for better accuracy).
         categories = categorize_devices(
             clients,
             dpi_data=dpi,
             manual_overrides=self.store.get_all_manual_categories(),
+            scan_data=self.scanner.cache if self.scanner else None,
         )
 
         return UniFiBlockerData(

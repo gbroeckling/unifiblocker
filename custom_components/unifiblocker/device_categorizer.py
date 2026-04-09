@@ -262,20 +262,21 @@ def categorize_device(
     oui: str = "",
     dpi_cats: list[dict] | None = None,
     manual_category: str | None = None,
+    scan_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Classify a device into a category.
+    """Classify a device using ALL available signals.
 
-    Returns::
-
-        {
-            "category": "camera",
-            "category_label": "Cameras",
-            "category_icon": "📹",
-            "confidence": "high",   # high / medium / low
-            "source": "vendor",     # vendor / hostname / dpi / manual
-        }
+    Priority order:
+      1. Manual override (user explicitly set it)
+      2. Port scan results (strongest automated signal — proves what it IS)
+      3. Known camera vendor OUI (high confidence)
+      4. Camera chip vendor + any camera signal (medium-high confidence)
+      5. Hostname patterns
+      6. General vendor OUI mapping
+      7. DPI traffic patterns
+      8. Unknown
     """
-    # Manual override always wins.
+    # 1. Manual override always wins.
     if manual_category and manual_category in CATEGORY_LABELS:
         return _result(manual_category, "high", "manual")
 
@@ -283,10 +284,58 @@ def categorize_device(
         vendor = oui or lookup_vendor_safe(mac)
 
     hn = (hostname or "").lower().strip()
-    vendor_lower = vendor.lower()
 
-    # ── 1. Vendor-specific hostname refinement ───────────────────────
+    # 2. PORT SCAN — the strongest signal. If we scanned the device
+    #    and found camera ports, that PROVES what it is.
+    if scan_result and scan_result.get("status") == "complete":
+        scan_cat = scan_result.get("guess_category", "unknown")
+        scan_conf = scan_result.get("guess_confidence", "low")
+        open_ports = scan_result.get("open_ports", [])
 
+        # If the scan identified it as a camera with any confidence, trust it.
+        if scan_cat == "camera":
+            return _result("camera", "high", "port_scan")
+
+        # RTSP port 554 open = camera (almost always)
+        if 554 in open_ports:
+            return _result("camera", "high", "port_scan")
+
+        # ONVIF ports = camera
+        if any(p in open_ports for p in [3702, 8899, 2020, 6000]):
+            return _result("camera", "high", "port_scan")
+
+        # Any Hikvision/Dahua/XMEye specific port = camera
+        if any(p in open_ports for p in [8000, 9527, 8200, 37777, 37778, 34567, 34568, 9530]):
+            return _result("camera", "high", "port_scan")
+
+        # Camera cloud ports = camera
+        if any(p in open_ports for p in [6789, 32100, 19000, 8800, 15000, 20000]):
+            return _result("camera", "high", "port_scan")
+
+        # Scan identified a non-camera category with medium+ confidence
+        if scan_cat != "unknown" and scan_conf in ("high", "medium"):
+            return _result(scan_cat, scan_conf, "port_scan")
+
+    # 3. Known camera vendor OUI — high confidence
+    if vendor in CAMERA_VENDORS:
+        return _result("camera", "high", "vendor")
+
+    # 4. Camera chip vendor (HiSilicon, Ingenic, etc.)
+    #    These PROBABLY make cameras but could be other embedded devices.
+    #    Promote to camera if ANY other signal suggests camera.
+    from .vendor_lookup import CAMERA_CHIP_VENDORS
+    if vendor in CAMERA_CHIP_VENDORS:
+        # Any camera hostname hint?
+        cam_hints = ["ipc", "cam", "dvr", "nvr", "ds-", "dh-", "hik", "dahua"]
+        if hn and any(h in hn for h in cam_hints):
+            return _result("camera", "high", "vendor+hostname")
+        # No hostname at all? Chip vendor + no hostname = very likely camera.
+        if not hn:
+            return _result("camera", "medium", "vendor+no_hostname")
+        # Has a hostname but it doesn't look like a camera — still flag as probable.
+        return _result("camera", "low", "chip_vendor")
+
+    # 5. Vendor-specific hostname refinement (Apple, Amazon, Google)
     if vendor in ("Apple",):
         for hint, cat in _APPLE_HOSTNAME_HINTS.items():
             if hint in hn:
@@ -302,30 +351,26 @@ def categorize_device(
             if hint in hn:
                 return _result(cat, "high", "hostname")
 
-    # ── 2. Hostname pattern matching (any vendor) ────────────────────
-
+    # 6. Hostname pattern matching (any vendor)
     if hn:
         for patterns, cat in _HOSTNAME_PATTERNS:
             for pat in patterns:
                 if pat in hn:
                     return _result(cat, "high" if len(pat) > 4 else "medium", "hostname")
 
-    # ── 3. Vendor OUI mapping ────────────────────────────────────────
-
+    # 7. General vendor OUI mapping
     if vendor in _VENDOR_CATEGORY:
         cat = _VENDOR_CATEGORY[vendor]
         return _result(cat, "medium", "vendor")
 
-    # ── 4. DPI-based inference ───────────────────────────────────────
-
+    # 8. DPI-based inference
     if dpi_cats:
         cat = _infer_from_dpi(dpi_cats)
         if cat:
             return _result(cat, "low", "dpi")
 
-    # ── 5. Wired + unknown vendor heuristics ─────────────────────────
-
-    if vendor == "Unknown":
+    # 9. Unknown vendor + no hostname = suspicious, flag for scan
+    if vendor == "Unknown" and not hn:
         return _result("unknown", "low", "none")
 
     return _result("unknown", "low", "none")
@@ -378,6 +423,7 @@ def categorize_all_clients(
     clients: list[dict[str, Any]],
     dpi_data: dict[str, dict[str, Any]] | None = None,
     manual_overrides: dict[str, str] | None = None,
+    scan_data: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Categorize every client. Returns mac → category result."""
     results: dict[str, dict[str, Any]] = {}
@@ -390,6 +436,7 @@ def categorize_all_clients(
         dpi_entry = (dpi_data or {}).get(mac, {})
         dpi_cats = dpi_entry.get("top_categories") or dpi_entry.get("by_cat")
         manual = (manual_overrides or {}).get(mac)
+        scan = (scan_data or {}).get(mac)
 
         results[mac] = categorize_device(
             mac=mac,
@@ -397,6 +444,7 @@ def categorize_all_clients(
             vendor=vendor,
             dpi_cats=dpi_cats,
             manual_category=manual,
+            scan_result=scan,
         )
     return results
 

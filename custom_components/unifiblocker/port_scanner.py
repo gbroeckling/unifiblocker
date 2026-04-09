@@ -28,35 +28,84 @@ SCAN_COOLDOWN = 300     # don't re-scan same device within 5 minutes
 # Grouped by purpose so results are meaningful.
 
 SCAN_PORTS: dict[int, dict[str, str]] = {
-    # Web interfaces
-    80:    {"name": "HTTP", "group": "web"},
-    443:   {"name": "HTTPS", "group": "web"},
-    8080:  {"name": "HTTP-alt", "group": "web"},
-    8443:  {"name": "HTTPS-alt", "group": "web"},
-    8888:  {"name": "HTTP-alt2", "group": "web"},
-    3000:  {"name": "Dev/Grafana", "group": "web"},
-    # Camera — Hikvision
+    # ═══ CAMERA / SURVEILLANCE (comprehensive) ═══════════════════════
+    #
+    # RTSP — the universal IP camera streaming protocol
     554:   {"name": "RTSP", "group": "camera"},
-    8000:  {"name": "Hikvision SDK", "group": "camera_hik"},
+    8554:  {"name": "RTSP-alt (go2rtc, Frigate)", "group": "camera"},
+    8555:  {"name": "RTSP-alt2 / WebRTC", "group": "camera"},
+    1554:  {"name": "RTSP-alt3", "group": "camera"},
+    10554: {"name": "RTSP-alt (some Dahua)", "group": "camera"},
+    #
+    # RTMP — live video push
+    1935:  {"name": "RTMP live push", "group": "camera"},
+    #
+    # ONVIF — open standard camera discovery and control
+    80:    {"name": "HTTP (ONVIF default)", "group": "web"},
+    8080:  {"name": "HTTP-alt (ONVIF common alt)", "group": "web"},
+    8899:  {"name": "ONVIF HTTP (some cameras)", "group": "onvif"},
+    2020:  {"name": "ONVIF (Axis default)", "group": "onvif"},
+    3702:  {"name": "WS-Discovery (ONVIF probe)", "group": "onvif"},
+    6000:  {"name": "ONVIF media service", "group": "onvif"},
+    8081:  {"name": "ONVIF alt / camera snapshot", "group": "onvif"},
+    8082:  {"name": "ONVIF alt / secondary stream", "group": "onvif"},
+    #
+    # Hikvision-specific ports
+    8000:  {"name": "Hikvision SDK (iVMS-4200)", "group": "camera_hik"},
     8200:  {"name": "Hikvision ISAPI", "group": "camera_hik"},
-    9527:  {"name": "Hikvision SDK2", "group": "camera_hik"},
-    # Camera — Dahua
-    37777: {"name": "Dahua TCP", "group": "camera_dahua"},
-    37778: {"name": "Dahua UDP-TCP", "group": "camera_dahua"},
-    9530:  {"name": "Dahua Debug", "group": "camera_dahua_backdoor"},
-    # Camera — XMEye
-    34567: {"name": "XMEye Control", "group": "camera_xmeye"},
-    34568: {"name": "XMEye Media", "group": "camera_xmeye"},
-    # Camera — general
-    1935:  {"name": "RTMP", "group": "camera"},
-    8554:  {"name": "RTSP-alt", "group": "camera"},
-    8555:  {"name": "RTSP-alt2", "group": "camera"},
-    6000:  {"name": "ONVIF/X11", "group": "camera"},
-    # Camera — cloud phone-home
-    6789:  {"name": "P2P Cloud", "group": "camera_cloud"},
-    32100: {"name": "Reolink P2P", "group": "camera_cloud"},
-    19000: {"name": "EZVIZ P2P", "group": "camera_cloud"},
-    8800:  {"name": "Cloud Relay", "group": "camera_cloud"},
+    9527:  {"name": "Hikvision SDK debug", "group": "camera_hik"},
+    8009:  {"name": "Hikvision alarm push", "group": "camera_hik"},
+    7681:  {"name": "Hikvision websocket stream", "group": "camera_hik"},
+    443:   {"name": "HTTPS (Hik ISAPI/web)", "group": "web"},
+    #
+    # Dahua-specific ports
+    37777: {"name": "Dahua TCP service", "group": "camera_dahua"},
+    37778: {"name": "Dahua UDP/media", "group": "camera_dahua"},
+    37780: {"name": "Dahua HTTP API", "group": "camera_dahua"},
+    37781: {"name": "Dahua HTTPS API", "group": "camera_dahua"},
+    5000:  {"name": "Dahua/Synology web (ambiguous)", "group": "camera_dahua"},
+    9530:  {"name": "Dahua debug BACKDOOR", "group": "camera_dahua_backdoor"},
+    38888: {"name": "Dahua NVR config backup", "group": "camera_dahua"},
+    #
+    # XMEye / Xiongmai DVR ports
+    34567: {"name": "XMEye control protocol", "group": "camera_xmeye"},
+    34568: {"name": "XMEye media stream", "group": "camera_xmeye"},
+    34569: {"name": "XMEye backup/config", "group": "camera_xmeye"},
+    #
+    # Reolink-specific
+    9000:  {"name": "Reolink media", "group": "camera_reolink"},
+    32100: {"name": "Reolink P2P cloud", "group": "camera_cloud"},
+    #
+    # EZVIZ / Hik-Connect cloud
+    19000: {"name": "EZVIZ P2P relay", "group": "camera_cloud"},
+    9010:  {"name": "EZVIZ signal", "group": "camera_cloud"},
+    #
+    # Generic camera cloud / P2P relay
+    6789:  {"name": "P2P cloud relay (generic)", "group": "camera_cloud"},
+    8800:  {"name": "Cloud relay service", "group": "camera_cloud"},
+    10000: {"name": "P2P relay (common)", "group": "camera_cloud"},
+    10001: {"name": "P2P relay alt", "group": "camera_cloud"},
+    15000: {"name": "Cloud broker (common)", "group": "camera_cloud"},
+    20000: {"name": "Cloud video relay", "group": "camera_cloud"},
+    #
+    # Axis-specific
+    2020:  {"name": "Axis ONVIF", "group": "camera_axis"},
+    1900:  {"name": "SSDP/UPnP discovery", "group": "upnp"},
+    #
+    # Uniview-specific
+    7788:  {"name": "Uniview SDK", "group": "camera_uniview"},
+    7681:  {"name": "Uniview web stream", "group": "camera_uniview"},
+    #
+    # Generic camera / NVR
+    8443:  {"name": "HTTPS-alt (camera/NVR web)", "group": "web"},
+    8888:  {"name": "HTTP-alt (many cameras)", "group": "web"},
+    85:    {"name": "HTTP-alt (cheap cameras)", "group": "camera"},
+    81:    {"name": "HTTP-alt (common on cameras)", "group": "camera"},
+    5050:  {"name": "Camera management (misc)", "group": "camera"},
+    9080:  {"name": "Camera HTTP alt", "group": "camera"},
+    #
+    # ═══ NON-CAMERA PORTS ════════════════════════════════════════════
+    #
     # Remote access
     22:    {"name": "SSH", "group": "remote"},
     23:    {"name": "Telnet", "group": "remote_insecure"},
@@ -64,19 +113,19 @@ SCAN_PORTS: dict[int, dict[str, str]] = {
     3389:  {"name": "RDP", "group": "remote"},
     5900:  {"name": "VNC", "group": "remote"},
     # ESPHome / IoT
-    6053:  {"name": "ESPHome API", "group": "esphome"},
+    6053:  {"name": "ESPHome native API", "group": "esphome"},
     # Home Assistant
     8123:  {"name": "Home Assistant", "group": "ha"},
     # DNS
     53:    {"name": "DNS", "group": "network"},
-    5353:  {"name": "mDNS", "group": "network"},
+    5353:  {"name": "mDNS/Bonjour", "group": "network"},
     # DHCP
     67:    {"name": "DHCP Server", "group": "network_risky"},
     # MQTT
     1883:  {"name": "MQTT", "group": "iot"},
     8883:  {"name": "MQTT-TLS", "group": "iot"},
     # Printing
-    9100:  {"name": "RAW Print", "group": "printer"},
+    9100:  {"name": "RAW Print (JetDirect)", "group": "printer"},
     631:   {"name": "IPP/CUPS", "group": "printer"},
     515:   {"name": "LPD", "group": "printer"},
     # File sharing
@@ -85,19 +134,15 @@ SCAN_PORTS: dict[int, dict[str, str]] = {
     21:    {"name": "FTP", "group": "fileshare_insecure"},
     2049:  {"name": "NFS", "group": "fileshare"},
     # NAS
-    5000:  {"name": "Synology DSM", "group": "nas"},
     5001:  {"name": "Synology DSM-TLS", "group": "nas"},
     8384:  {"name": "Syncthing", "group": "nas"},
     # Media servers
     32400: {"name": "Plex", "group": "media"},
     8096:  {"name": "Jellyfin", "group": "media"},
     8920:  {"name": "Jellyfin-TLS", "group": "media"},
-    # UPnP
-    1900:  {"name": "SSDP/UPnP", "group": "upnp"},
-    5000:  {"name": "UPnP Media", "group": "upnp"},
     # Gaming
     3074:  {"name": "Xbox Live", "group": "gaming"},
-    3478:  {"name": "PlayStation", "group": "gaming"},
+    3478:  {"name": "PlayStation/STUN", "group": "gaming"},
     27015: {"name": "Steam", "group": "gaming"},
     # Crypto mining
     3333:  {"name": "Stratum Mining", "group": "crypto"},
@@ -127,29 +172,54 @@ SCAN_PORTS: dict[int, dict[str, str]] = {
 # Checked in order; first match wins.
 
 FINGERPRINT_RULES: list[tuple[set, set, str, str, str, str]] = [
-    # Hikvision camera
-    ({"camera_hik"}, {"camera", "web"},
-     "camera", "Hikvision IP camera — SDK port open, likely phoning home via cloud",
-     "high", "high"),
-    # Dahua camera
-    ({"camera_dahua"}, {"camera", "web"},
-     "camera", "Dahua IP camera — DVR/NVR protocol ports open",
-     "high", "high"),
+    # ── CAMERA-SPECIFIC (highest priority) ──────────────────────────
     # Dahua with backdoor port
     ({"camera_dahua_backdoor"}, set(),
-     "camera", "Dahua camera with DEBUG PORT 9530 OPEN — known backdoor, quarantine immediately",
+     "camera", "Dahua camera with DEBUG PORT 9530 OPEN — known backdoor (CVE-2017-7921, CVE-2021-36260). Quarantine immediately.",
      "high", "critical"),
     # XMEye/Xiongmai DVR
     ({"camera_xmeye"}, {"web"},
-     "camera", "XMEye/Xiongmai DVR — Chinese DVR actively phoning home on ports 34567/34568",
+     "camera", "XMEye/Xiongmai DVR — actively phoning home on 34567/34568. CVE-2018-10088. Cloud can push firmware without consent. Mirai botnet primary target.",
      "high", "critical"),
+    # Hikvision camera
+    ({"camera_hik"}, {"camera", "web"},
+     "camera", "Hikvision IP camera — SDK/ISAPI ports open. CVE-2021-36260 (RCE). Known to phone home to dev.hikvision.com / hik-connect.com.",
+     "high", "high"),
+    # Dahua camera
+    ({"camera_dahua"}, {"camera", "web"},
+     "camera", "Dahua IP camera/NVR — proprietary protocol ports 37777-37781 open. CVE-2021-33044/33045 (auth bypass).",
+     "high", "high"),
+    # Reolink
+    ({"camera_reolink"}, {"camera", "web"},
+     "camera", "Reolink camera — proprietary ports detected. Lower risk than Hikvision/Dahua but still phones home to reolink.com.",
+     "high", "medium"),
+    # Axis
+    ({"camera_axis"}, {"camera", "web", "onvif"},
+     "camera", "Axis camera — professional grade, ONVIF compliant. Better security than Chinese brands but still isolate.",
+     "high", "low"),
+    # Uniview
+    ({"camera_uniview"}, {"camera", "web"},
+     "camera", "Uniview camera — SDK port 7788 open. Chinese manufacturer, isolate to local-only.",
+     "high", "high"),
     # Camera with cloud relay
     ({"camera_cloud"}, {"camera", "web"},
-     "camera", "Camera with P2P cloud relay active — device is calling home to remote servers",
+     "camera", "Camera with P2P cloud relay active — device is calling home to servers you don't control. Video may be accessible externally.",
      "high", "high"),
-    # Generic camera (RTSP open)
+    # Camera with cloud relay but no RTSP (DVR/NVR only)
+    ({"camera_cloud"}, set(),
+     "camera", "P2P cloud relay active — this device is connecting to external servers. Likely a camera or DVR phoning home.",
+     "high", "high"),
+    # ONVIF-only (strong camera indicator)
+    ({"onvif"}, {"web"},
+     "camera", "ONVIF device detected — this is almost certainly an IP camera or NVR. ONVIF is the standard camera control protocol.",
+     "high", "medium"),
+    # RTSP-only (strong camera indicator)
     ({"camera"}, {"web"},
-     "camera", "IP camera — RTSP streaming port open. Check if it also phones home.",
+     "camera", "RTSP streaming port open — this is very likely an IP camera. RTSP is the standard video streaming protocol for cameras.",
+     "medium", "medium"),
+    # RTSP with nothing else
+    ({"camera"}, set(),
+     "camera", "RTSP port responding. Almost certainly a camera or media streaming device.",
      "medium", "medium"),
     # ESPHome device
     ({"esphome"}, {"web"},
