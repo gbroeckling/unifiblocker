@@ -314,26 +314,40 @@ class LocalNetworkManager:
 
     async def _try_create_traffic_rule(self, api: Any) -> dict[str, Any]:
         """Try creating a v2 Traffic Rule (newer UCG Max firmware)."""
+        # v2 Traffic Rules require ALL fields present, UPPERCASE action,
+        # and proper schedule/bandwidth objects.
         rule_payload = {
             "action": "BLOCK",
             "description": FIREWALL_RULE_NAME,
             "enabled": True,
             "matching_target": "INTERNET",
-            "target_devices": [
+            "target_devices": [],
+            "ip_addresses": [
                 {
-                    "type": "NETWORK",
-                    "network_id": "",
-                    "client_mac": "",
+                    "ip_or_subnet": self.cidr,
+                    "ip_version": "v4",
+                    "port_ranges": [],
+                    "ports": [],
                 }
             ],
-            "ip_addresses": [self.cidr],
             "ip_ranges": [],
             "regions": [],
             "domains": [],
             "app_category_ids": [],
             "app_ids": [],
-            "schedule": {},
-            "target": "IP",
+            "network_ids": [],
+            "schedule": {
+                "mode": "ALWAYS",
+                "repeat_on_days": [],
+                "time_all_day": False,
+                "time_range_end": "00:00",
+                "time_range_start": "00:00",
+            },
+            "bandwidth_limit": {
+                "download_limit_kbps": 0,
+                "enabled": False,
+                "upload_limit_kbps": 0,
+            },
         }
 
         _LOGGER.info("Trying v2 Traffic Rule API: block %s → Internet", self.cidr)

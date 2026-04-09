@@ -175,7 +175,10 @@ class UniFiApi:
                         continue
                     if resp.status == 401:
                         raise UniFiAuthError("Re-authentication failed")
-                    resp.raise_for_status()
+                    if resp.status >= 400:
+                        body = await resp.text()
+                        _LOGGER.error("API %s %s → %d: %s", method, url, resp.status, body[:500])
+                        raise UniFiApiError(f"{resp.status}: {body[:200]}")
                     data = await resp.json(content_type=None)
                     # UniFi wraps most responses in {"meta":{}, "data":[]}
                     if isinstance(data, dict) and "data" in data:

@@ -139,5 +139,8 @@ class _OptionsFlow(config_entries.OptionsFlow):
             data_schema=vol.Schema({
                 vol.Optional("scan_interval", default=cur.get("scan_interval", 60)): int,
                 vol.Optional("verify_ssl", default=cur.get("verify_ssl", False)): bool,
+                vol.Optional("local_subnet", default=cur.get("local_subnet", "192.168.2")): str,
+                vol.Optional("local_cidr", default=cur.get("local_cidr", "192.168.2.0/24")): str,
+                vol.Optional("auto_scan_count", default=cur.get("auto_scan_count", 5)): int,
             }),
         )

@@ -36,6 +36,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_block_port)
     websocket_api.async_register_command(hass, ws_block_ports)
     websocket_api.async_register_command(hass, ws_firewall_rules_debug)
+    websocket_api.async_register_command(hass, ws_traffic_rules_debug)
     websocket_api.async_register_command(hass, ws_trust_device)
     websocket_api.async_register_command(hass, ws_ignore_device)
     websocket_api.async_register_command(hass, ws_quarantine_device)
@@ -709,6 +710,26 @@ async def ws_firewall_rules_debug(
         ]
         connection.send_result(msg["id"], {"rules": safe_rules, "count": len(rules)})
     except Exception as err:
+        connection.send_result(msg["id"], {"rules": [], "error": str(err)})
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "unifiblocker/traffic_rules_debug"}
+)
+@websocket_api.async_response
+async def ws_traffic_rules_debug(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Return existing v2 traffic rules for diagnostics."""
+    entry = _get_coordinator(hass)
+    if not entry:
+        connection.send_result(msg["id"], {"rules": [], "error": "not loaded"})
+        return
+    try:
+        rules = await entry["api"].get_traffic_rules()
+        connection.send_result(msg["id"], {"rules": rules, "count": len(rules)})
+    except Exception as err:
+        # Also try to get the raw response for debugging
         connection.send_result(msg["id"], {"rules": [], "error": str(err)})
 
 

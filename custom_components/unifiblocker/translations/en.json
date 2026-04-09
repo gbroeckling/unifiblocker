@@ -26,10 +26,13 @@
   "options": {
     "step": {
       "init": {
-        "title": "UniFi Blocker options",
+        "title": "UniFi Blocker Settings",
         "data": {
           "scan_interval": "Scan interval (seconds)",
-          "verify_ssl": "Verify SSL certificate"
+          "verify_ssl": "Verify SSL certificate",
+          "local_subnet": "Local-only subnet (e.g. 192.168.2)",
+          "local_cidr": "Local-only CIDR (e.g. 192.168.2.0/24)",
+          "auto_scan_count": "Devices to auto-scan per poll cycle"
         }
       }
     }
