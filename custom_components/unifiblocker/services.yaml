@@ -1,0 +1,71 @@
+trust_device:
+  name: Trust device
+  description: Mark a device as trusted and unblock it on the controller.
+  fields:
+    mac:
+      name: MAC address
+      description: The MAC address of the device to trust.
+      required: true
+      example: "aa:bb:cc:dd:ee:ff"
+      selector:
+        text:
+
+ignore_device:
+  name: Ignore device
+  description: Mark a device as ignored so it no longer appears in the review queue.
+  fields:
+    mac:
+      name: MAC address
+      description: The MAC address of the device to ignore.
+      required: true
+      example: "aa:bb:cc:dd:ee:ff"
+      selector:
+        text:
+
+quarantine_device:
+  name: Quarantine device
+  description: Mark a device as quarantined and block it on the controller.
+  fields:
+    mac:
+      name: MAC address
+      description: The MAC address of the device to quarantine.
+      required: true
+      example: "aa:bb:cc:dd:ee:ff"
+      selector:
+        text:
+
+block_device:
+  name: Block device
+  description: Block a client on the UniFi controller (immediate network disconnect).
+  fields:
+    mac:
+      name: MAC address
+      description: The MAC address of the device to block.
+      required: true
+      example: "aa:bb:cc:dd:ee:ff"
+      selector:
+        text:
+
+unblock_device:
+  name: Unblock device
+  description: Unblock a previously blocked client on the UniFi controller.
+  fields:
+    mac:
+      name: MAC address
+      description: The MAC address of the device to unblock.
+      required: true
+      example: "aa:bb:cc:dd:ee:ff"
+      selector:
+        text:
+
+reconnect_device:
+  name: Reconnect device
+  description: Force a client to reconnect (kick and re-associate).
+  fields:
+    mac:
+      name: MAC address
+      description: The MAC address of the device to reconnect.
+      required: true
+      example: "aa:bb:cc:dd:ee:ff"
+      selector:
+        text:

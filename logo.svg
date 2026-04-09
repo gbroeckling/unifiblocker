@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200">
+  <defs>
+    <linearGradient id="bg2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#16213e"/>
+    </linearGradient>
+    <linearGradient id="shield2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f9b8e"/>
+      <stop offset="100%" stop-color="#00d4aa"/>
+    </linearGradient>
+    <linearGradient id="bolt2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e94560"/>
+      <stop offset="100%" stop-color="#ff6b6b"/>
+    </linearGradient>
+    <linearGradient id="text_grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0f9b8e"/>
+      <stop offset="50%" stop-color="#00d4aa"/>
+      <stop offset="100%" stop-color="#0f9b8e"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Icon (compact) -->
+  <g transform="translate(30,10) scale(0.35)">
+    <circle cx="256" cy="256" r="248" fill="url(#bg2)" stroke="#0f9b8e" stroke-width="4"/>
+    <path d="M256 110 C256 110 160 140 140 160 C140 160 130 260 140 310 C150 360 200 410 256 440 C312 410 362 360 372 310 C382 260 372 160 372 160 C352 140 256 110 256 110Z"
+          fill="url(#shield2)" opacity="0.9"/>
+    <g transform="translate(256,265)">
+      <circle cx="0" cy="0" r="60" fill="none" stroke="url(#bolt2)" stroke-width="10" stroke-linecap="round"/>
+      <line x1="-42" y1="42" x2="42" y2="-42" stroke="url(#bolt2)" stroke-width="10" stroke-linecap="round"/>
+    </g>
+    <g transform="translate(256,165)">
+      <rect x="-14" y="-4" width="28" height="22" rx="4" fill="#fff" opacity="0.9"/>
+      <path d="M-8,-4 L-8,-12 A8,8 0 0 1 8,-12 L8,-4" fill="none" stroke="#fff" stroke-width="3" opacity="0.9"/>
+    </g>
+  </g>
+
+  <!-- Text -->
+  <text x="240" y="90" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="60" font-weight="700" fill="url(#text_grad)">UniFi</text>
+  <text x="240" y="155" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="60" font-weight="700" fill="#e94560">Blocker</text>
+  <text x="242" y="185" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="18" fill="#888" letter-spacing="3">NETWORK DEVICE SECURITY</text>
+</svg>

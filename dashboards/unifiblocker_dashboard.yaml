@@ -1,0 +1,216 @@
+###############################################################################
+#  UniFi Blocker – Complete Dashboard
+#
+#  Copy this into a manual Lovelace dashboard in HA:
+#    Settings → Dashboards → Add Dashboard → choose "YAML" mode
+#    then paste the contents of this file.
+#
+#  Alternatively, go to any dashboard → three-dot menu → "Raw config editor"
+#  and paste everything below.
+###############################################################################
+
+title: UniFi Blocker
+views:
+
+  # ════════════════════════════════════════════════════════════════════
+  #  VIEW 1 – Network Overview
+  # ════════════════════════════════════════════════════════════════════
+  - title: Network Overview
+    path: overview
+    icon: mdi:shield-home
+    badges: []
+    cards:
+
+      # ── top row: counters ──────────────────────────────────────────
+      - type: horizontal-stack
+        cards:
+          - type: entity
+            entity: sensor.unifiblocker_connected_clients
+            name: Connected
+            icon: mdi:devices
+          - type: entity
+            entity: sensor.unifiblocker_wireless_clients
+            name: Wireless
+            icon: mdi:wifi
+          - type: entity
+            entity: sensor.unifiblocker_wired_clients
+            name: Wired
+            icon: mdi:ethernet
+
+      - type: horizontal-stack
+        cards:
+          - type: entity
+            entity: sensor.unifiblocker_new_devices
+            name: New / Unreviewed
+            icon: mdi:alert-decagram
+          - type: entity
+            entity: sensor.unifiblocker_blocked_devices
+            name: Blocked
+            icon: mdi:block-helper
+          - type: entity
+            entity: sensor.unifiblocker_quarantined_devices
+            name: Quarantined
+            icon: mdi:shield-alert
+          - type: entity
+            entity: sensor.unifiblocker_trusted_devices
+            name: Trusted
+            icon: mdi:shield-check
+
+      # ── binary alert ───────────────────────────────────────────────
+      - type: entity
+        entity: binary_sensor.unifiblocker_devices_pending_review
+        name: Devices Need Review
+        state_color: true
+
+      # ── history graphs ─────────────────────────────────────────────
+      - type: history-graph
+        title: Client count (24 h)
+        hours_to_show: 24
+        entities:
+          - entity: sensor.unifiblocker_connected_clients
+            name: Total
+          - entity: sensor.unifiblocker_wireless_clients
+            name: Wireless
+          - entity: sensor.unifiblocker_wired_clients
+            name: Wired
+
+      - type: history-graph
+        title: Security states (24 h)
+        hours_to_show: 24
+        entities:
+          - entity: sensor.unifiblocker_new_devices
+            name: New
+          - entity: sensor.unifiblocker_blocked_devices
+            name: Blocked
+          - entity: sensor.unifiblocker_quarantined_devices
+            name: Quarantined
+
+  # ════════════════════════════════════════════════════════════════════
+  #  VIEW 2 – New / Unidentified Devices  (the review queue)
+  # ════════════════════════════════════════════════════════════════════
+  - title: New Devices
+    path: new-devices
+    icon: mdi:alert-decagram
+    cards:
+
+      - type: markdown
+        title: Unidentified Devices Awaiting Review
+        content: >
+          The table below lists every device that has connected to your
+          network but has **not yet been classified**.  Use the service
+          calls below each row to mark the device as **Trusted**,
+          **Ignored**, or **Quarantined** (which blocks it on the
+          controller).
+
+      - type: markdown
+        title: New Device Details
+        content: >
+          {% set devs = state_attr('sensor.unifiblocker_new_devices', 'devices') %}
+          {% if devs and devs | length > 0 %}
+          | # | MAC | Name | Vendor | IP | SSID | RSSI | Wired |
+          |---|-----|------|--------|----|------|------|-------|
+          {% for d in devs %}
+          | {{ loop.index }} | `{{ d.mac }}` | {{ d.name or '—' }} | {{ d.vendor or 'Unknown' }} | {{ d.ip or '—' }} | {{ d.essid or '—' }} | {{ d.rssi if d.rssi is not none else '—' }} | {{ 'Yes' if d.wired else 'No' }} |
+          {% endfor %}
+          {% else %}
+          **No new devices** – all clients have been reviewed.
+          {% endif %}
+
+      - type: markdown
+        title: Quick Actions
+        content: >
+          To classify a device, go to **Developer Tools → Services** and call:
+
+
+          - `unifiblocker.trust_device` — mark safe, unblock if blocked
+
+          - `unifiblocker.ignore_device` — hide from review queue
+
+          - `unifiblocker.quarantine_device` — block on the controller
+
+
+          Pass `mac: "aa:bb:cc:dd:ee:ff"` as the service data.
+
+  # ════════════════════════════════════════════════════════════════════
+  #  VIEW 3 – All Connected Clients  (full detail table)
+  # ════════════════════════════════════════════════════════════════════
+  - title: All Clients
+    path: all-clients
+    icon: mdi:format-list-bulleted
+    cards:
+
+      - type: markdown
+        title: Connected Clients (full detail)
+        content: >
+          {% set clients = state_attr('sensor.unifiblocker_all_clients_detail', 'clients') %}
+          {% if clients and clients | length > 0 %}
+          | MAC | Name | Vendor | IP | State | SSID | Signal | Wired | Blocked |
+          |-----|------|--------|----|-------|------|--------|-------|---------|
+          {% for c in clients | sort(attribute='name') %}
+          | `{{ c.mac }}` | {{ c.name or '—' }} | {{ c.vendor or '?' }} | {{ c.ip or '—' }} | {{ c.state }} | {{ c.essid or '—' }} | {{ c.rssi if c.rssi is not none else '—' }} | {{ '✔' if c.wired else '' }} | {{ '🚫' if c.blocked else '' }} |
+          {% endfor %}
+          {% else %}
+          _No client data yet — waiting for first poll._
+          {% endif %}
+
+  # ════════════════════════════════════════════════════════════════════
+  #  VIEW 4 – Quarantined / Blocked Devices
+  # ════════════════════════════════════════════════════════════════════
+  - title: Quarantined
+    path: quarantined
+    icon: mdi:shield-alert
+    cards:
+
+      - type: entity
+        entity: sensor.unifiblocker_quarantined_devices
+        name: Quarantined devices
+
+      - type: markdown
+        title: Quarantined Device Details
+        content: >
+          {% set devs = state_attr('sensor.unifiblocker_quarantined_devices', 'devices') %}
+          {% if devs and devs | length > 0 %}
+          | MAC | Name | Vendor | IP | Blocked on controller |
+          |-----|------|--------|----|----------------------|
+          {% for d in devs %}
+          | `{{ d.mac }}` | {{ d.name or '—' }} | {{ d.vendor or '?' }} | {{ d.ip or '—' }} | {{ '✔' if d.blocked else '—' }} |
+          {% endfor %}
+          {% else %}
+          _No quarantined devices._
+          {% endif %}
+
+      - type: markdown
+        title: Unblock a device
+        content: >
+          To release a quarantined device call
+          `unifiblocker.unblock_device` with `mac: "xx:xx:xx:xx:xx:xx"`
+          then `unifiblocker.trust_device` to move it out of quarantine.
+
+  # ════════════════════════════════════════════════════════════════════
+  #  VIEW 5 – Device Actions (service call buttons)
+  # ════════════════════════════════════════════════════════════════════
+  - title: Actions
+    path: actions
+    icon: mdi:cog
+    cards:
+
+      - type: markdown
+        content: >
+          ## Device Management Services
+
+
+          Use these service calls from **Developer Tools → Services**
+          or wire them to automations / scripts.
+
+
+          | Service | What it does |
+          |---------|-------------|
+          | `unifiblocker.trust_device` | Mark trusted + unblock |
+          | `unifiblocker.ignore_device` | Hide from review queue |
+          | `unifiblocker.quarantine_device` | Mark quarantined + block |
+          | `unifiblocker.block_device` | Immediately block on controller |
+          | `unifiblocker.unblock_device` | Remove block on controller |
+          | `unifiblocker.reconnect_device` | Force reconnect (kick) |
+
+
+          All services take a single field: `mac` (e.g. `"aa:bb:cc:dd:ee:ff"`)

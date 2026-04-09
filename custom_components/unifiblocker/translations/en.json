@@ -1,0 +1,37 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to UniFi Controller",
+        "description": "Enter your UniFi OS controller details (UCG Max, UDM, etc.).",
+        "data": {
+          "host": "Host (IP or hostname)",
+          "username": "Username",
+          "password": "Password",
+          "site": "Site ID",
+          "verify_ssl": "Verify SSL certificate",
+          "scan_interval": "Scan interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid username or password.",
+      "cannot_connect": "Cannot connect to the UniFi controller.",
+      "unknown": "An unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "UniFi Blocker is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "UniFi Blocker options",
+        "data": {
+          "scan_interval": "Scan interval (seconds)",
+          "verify_ssl": "Verify SSL certificate"
+        }
+      }
+    }
+  }
+}
