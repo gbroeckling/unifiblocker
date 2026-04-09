@@ -31,6 +31,9 @@ API_USER = "/proxy/network/api/s/{site}/rest/user/{user_id}"
 API_FIREWALL_RULES = "/proxy/network/api/s/{site}/rest/firewallrule"
 API_FIREWALL_RULE = "/proxy/network/api/s/{site}/rest/firewallrule/{rule_id}"
 API_NETWORKS = "/proxy/network/api/s/{site}/rest/networkconf"
+# v2 Traffic Rules API (newer UCG Max / UDM firmware)
+API_TRAFFIC_RULES = "/proxy/network/v2/api/site/{site}/trafficrules"
+API_TRAFFIC_RULE = "/proxy/network/v2/api/site/{site}/trafficrules/{rule_id}"
 
 # ── Device states ────────────────────────────────────────────────────
 STATE_NEW = "new"

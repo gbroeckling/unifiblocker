@@ -286,89 +286,101 @@ class LocalNetworkManager:
         return {"ok": True, "mac": mac}
 
     # ── Firewall rule ────────────────────────────────────────────────
+    #
+    # Tries v2 Traffic Rules API first (newer UCG Max firmware), then
+    # falls back to legacy firewall rules API. Only ever creates a
+    # rule that blocks 192.168.2.0/24 from reaching the internet.
 
     async def ensure_firewall_rule(self, api: Any) -> dict[str, Any]:
-        """Create or verify the WAN-block rule for 192.168.2.0/24.
+        """Create or verify the WAN-block rule for the local-only subnet.
 
-        Returns the rule status.
+        Tries v2 Traffic Rules first, falls back to legacy firewall rules.
+        ONLY affects the configured local-only CIDR (default 192.168.2.0/24).
         """
-        # Check if we already have the rule ID cached.
-        if self._firewall_rule_id:
-            try:
-                rules = await api.get_firewall_rules()
-                for rule in rules:
-                    if rule.get("_id") == self._firewall_rule_id:
-                        return {"ok": True, "status": "exists", "rule_id": self._firewall_rule_id}
-            except Exception:
-                pass
-            # Rule was deleted externally — reset.
-            self._firewall_rule_id = None
+        # Check if we already have a cached rule that still exists.
+        existing = await self.get_firewall_status(api)
+        if existing.get("exists"):
+            return {"ok": True, "status": "exists", "rule_id": existing.get("rule_id", ""),
+                    "api": existing.get("api", "unknown")}
 
-        # Check if a rule with our name already exists.
+        # Try v2 Traffic Rules API first (newer firmware).
+        result = await self._try_create_traffic_rule(api)
+        if result.get("ok"):
+            return result
+
+        # Fall back to legacy firewall rules API.
+        result = await self._try_create_legacy_rule(api)
+        return result
+
+    async def _try_create_traffic_rule(self, api: Any) -> dict[str, Any]:
+        """Try creating a v2 Traffic Rule (newer UCG Max firmware)."""
+        rule_payload = {
+            "action": "BLOCK",
+            "description": FIREWALL_RULE_NAME,
+            "enabled": True,
+            "matching_target": "INTERNET",
+            "target_devices": [
+                {
+                    "type": "NETWORK",
+                    "network_id": "",
+                    "client_mac": "",
+                }
+            ],
+            "ip_addresses": [self.cidr],
+            "ip_ranges": [],
+            "regions": [],
+            "domains": [],
+            "app_category_ids": [],
+            "app_ids": [],
+            "schedule": {},
+            "target": "IP",
+        }
+
+        _LOGGER.info("Trying v2 Traffic Rule API: block %s → Internet", self.cidr)
+
         try:
-            rules = await api.get_firewall_rules()
-            for rule in rules:
-                if rule.get("name") == FIREWALL_RULE_NAME:
-                    self._firewall_rule_id = rule["_id"]
-                    await self.async_save()
-                    return {"ok": True, "status": "found_existing", "rule_id": rule["_id"]}
+            result = await api.create_traffic_rule(rule_payload)
+            rule_id = ""
+            if isinstance(result, dict):
+                rule_id = result.get("_id", "")
+            elif isinstance(result, list) and result:
+                rule_id = result[0].get("_id", "")
+
+            self._firewall_rule_id = rule_id or "traffic_rule"
+            self._config["rule_api"] = "v2"
+            await self.async_save()
+            _LOGGER.info("Created v2 traffic rule for %s (ID: %s)", self.cidr, rule_id)
+            return {"ok": True, "status": "created", "rule_id": rule_id, "api": "v2"}
         except Exception as err:
-            return {"ok": False, "error": f"Could not check rules: {err}"}
+            _LOGGER.info("v2 Traffic Rule API failed: %s — trying legacy", err)
+            return {"ok": False, "error": str(err)}
 
-        # First, fetch existing rules to learn the correct schema for
-        # this controller. UCG Max / UDM use different field formats.
-        try:
-            existing_rules = await api.get_firewall_rules()
-        except Exception:
-            existing_rules = []
-
-        # Build a minimal, safe rule. Only blocks 192.168.2.0/24 → WAN.
-        # Uses the simplest possible format that works on UCG Max.
+    async def _try_create_legacy_rule(self, api: Any) -> dict[str, Any]:
+        """Try creating a legacy firewall rule."""
         rule_payload = {
             "name": FIREWALL_RULE_NAME,
             "enabled": True,
             "action": "drop",
+            "ruleset": "WAN_OUT",
             "protocol": "all",
             "rule_index": 4000,
             "src_address": self.cidr,
             "logging": True,
         }
 
-        # Determine the correct ruleset from existing rules.
-        # UCG Max uses "WAN_OUT" or "Internet Out" depending on firmware.
-        rulesets = set()
-        for r in existing_rules:
-            rs = r.get("ruleset", "")
-            if rs and "WAN" in rs.upper():
-                rulesets.add(rs)
-
-        if "WAN_OUT" in rulesets:
-            rule_payload["ruleset"] = "WAN_OUT"
-        elif "WAN_IN" in rulesets:
-            # WAN_OUT not found — try WAN_LOCAL or fall back.
-            rule_payload["ruleset"] = "WAN_OUT"
-        else:
-            # Default for UCG Max / UDM.
-            rule_payload["ruleset"] = "WAN_OUT"
-
-        # Log the payload and existing rule schemas for debugging.
-        _LOGGER.info(
-            "Creating firewall rule: %s → drop %s (ruleset: %s). "
-            "Found %d existing rules with rulesets: %s",
-            FIREWALL_RULE_NAME, self.cidr, rule_payload["ruleset"],
-            len(existing_rules), rulesets,
-        )
-
-        # If we found existing rules, copy their common fields as a
-        # template so we match what this controller expects.
-        if existing_rules:
-            template = existing_rules[0]
-            # Copy required fields that vary by controller model.
-            for field in ["site_id"]:
-                if field in template and field not in rule_payload:
-                    rule_payload[field] = template[field]
+        _LOGGER.info("Trying legacy firewall rule API: drop %s on WAN_OUT", self.cidr)
 
         try:
+            # Try to learn site_id from existing rules.
+            try:
+                existing = await api.get_firewall_rules()
+                if existing:
+                    for field in ["site_id"]:
+                        if field in existing[0]:
+                            rule_payload[field] = existing[0][field]
+            except Exception:
+                pass
+
             result = await api.create_firewall_rule(rule_payload)
             rule_id = ""
             if isinstance(result, dict):
@@ -376,18 +388,34 @@ class LocalNetworkManager:
             elif isinstance(result, list) and result:
                 rule_id = result[0].get("_id", "")
 
-            if rule_id:
-                self._firewall_rule_id = rule_id
-                await self.async_save()
-                _LOGGER.info("Created WAN-block rule for %s (ID: %s)", self.cidr, rule_id)
-                return {"ok": True, "status": "created", "rule_id": rule_id}
-            else:
-                return {"ok": True, "status": "created_no_id"}
+            self._firewall_rule_id = rule_id or "legacy_rule"
+            self._config["rule_api"] = "legacy"
+            await self.async_save()
+            _LOGGER.info("Created legacy firewall rule for %s (ID: %s)", self.cidr, rule_id)
+            return {"ok": True, "status": "created", "rule_id": rule_id, "api": "legacy"}
         except Exception as err:
-            return {"ok": False, "error": f"Failed to create rule: {err}"}
+            return {"ok": False, "error": f"Both v2 and legacy APIs failed. Legacy error: {err}"}
 
     async def get_firewall_status(self, api: Any) -> dict[str, Any]:
-        """Check if the WAN-block rule exists and is enabled."""
+        """Check if the WAN-block rule exists (checks both APIs)."""
+        # Check v2 Traffic Rules.
+        try:
+            rules = await api.get_traffic_rules()
+            for rule in rules:
+                desc = rule.get("description", "")
+                if FIREWALL_RULE_NAME in desc:
+                    return {
+                        "exists": True,
+                        "enabled": rule.get("enabled", False),
+                        "rule_id": rule.get("_id", ""),
+                        "name": desc,
+                        "action": rule.get("action", ""),
+                        "api": "v2",
+                    }
+        except Exception:
+            pass
+
+        # Check legacy firewall rules.
         try:
             rules = await api.get_firewall_rules()
             for rule in rules:
@@ -399,7 +427,9 @@ class LocalNetworkManager:
                         "name": FIREWALL_RULE_NAME,
                         "action": rule.get("action", ""),
                         "src_address": rule.get("src_address", ""),
+                        "api": "legacy",
                     }
-            return {"exists": False}
-        except Exception as err:
-            return {"exists": False, "error": str(err)}
+        except Exception:
+            pass
+
+        return {"exists": False}

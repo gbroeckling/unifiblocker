@@ -21,6 +21,8 @@ from .const import (
     API_LOGIN,
     API_NETWORKS,
     API_ROGUE_AP,
+    API_TRAFFIC_RULE,
+    API_TRAFFIC_RULES,
     API_USER,
     API_SYSINFO,
 )
@@ -436,6 +438,27 @@ class UniFiApi:
     async def get_networks(self) -> list[dict[str, Any]]:
         """Return all network configurations."""
         return await self._request("GET", API_NETWORKS)
+
+    # ── v2 Traffic Rules (newer UCG Max / UDM firmware) ──────────────
+
+    async def get_traffic_rules(self) -> list[dict[str, Any]]:
+        """Return all v2 traffic rules."""
+        return await self._request("GET", API_TRAFFIC_RULES)
+
+    async def create_traffic_rule(self, rule: dict[str, Any]) -> dict[str, Any]:
+        """Create a v2 traffic rule."""
+        _LOGGER.info("Creating traffic rule: %s", rule.get("description", "unnamed"))
+        return await self._request("POST", API_TRAFFIC_RULES, json=rule)
+
+    async def update_traffic_rule(self, rule_id: str, rule: dict[str, Any]) -> None:
+        """Update a v2 traffic rule."""
+        path = API_TRAFFIC_RULE.replace("{rule_id}", rule_id)
+        await self._request("PUT", path, json=rule)
+
+    async def delete_traffic_rule(self, rule_id: str) -> None:
+        """Delete a v2 traffic rule."""
+        path = API_TRAFFIC_RULE.replace("{rule_id}", rule_id)
+        await self._request("DELETE", path)
 
     async def close(self) -> None:
         """Close the HTTP session if we own it."""
