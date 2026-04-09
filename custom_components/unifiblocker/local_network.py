@@ -304,32 +304,46 @@ class LocalNetworkManager:
                     "api": existing.get("api", "unknown")}
 
         # Try v2 Traffic Rules API first (newer firmware).
-        result = await self._try_create_traffic_rule(api)
-        if result.get("ok"):
-            return result
+        v2_result = await self._try_create_traffic_rule(api)
+        if v2_result.get("ok"):
+            return v2_result
 
         # Fall back to legacy firewall rules API.
-        result = await self._try_create_legacy_rule(api)
-        return result
+        legacy_result = await self._try_create_legacy_rule(api)
+        if legacy_result.get("ok"):
+            return legacy_result
+
+        # Both failed — return both errors.
+        return {
+            "ok": False,
+            "error": f"v2: {v2_result.get('error', '?')} | legacy: {legacy_result.get('error', '?')}",
+        }
 
     async def _try_create_traffic_rule(self, api: Any) -> dict[str, Any]:
         """Try creating a v2 Traffic Rule (newer UCG Max firmware)."""
         # v2 Traffic Rules require ALL fields present, UPPERCASE action,
         # and proper schedule/bandwidth objects.
+        # Get the first few octets for the IP range.
+        parts = self.cidr.split("/")[0].split(".")
+        ip_start = f"{parts[0]}.{parts[1]}.{parts[2]}.1"
+        ip_end = f"{parts[0]}.{parts[1]}.{parts[2]}.254"
+
         rule_payload = {
             "action": "BLOCK",
             "description": FIREWALL_RULE_NAME,
             "enabled": True,
             "matching_target": "INTERNET",
-            "target_devices": [],
-            "ip_addresses": [
+            "target_devices": [
                 {
-                    "ip_or_subnet": self.cidr,
-                    "ip_version": "v4",
-                    "port_ranges": [],
-                    "ports": [],
+                    "type": "IP_RANGE",
+                    "ip_range": {
+                        "ip_start": ip_start,
+                        "ip_stop": ip_end,
+                        "ip_version": "v4",
+                    },
                 }
             ],
+            "ip_addresses": [],
             "ip_ranges": [],
             "regions": [],
             "domains": [],
