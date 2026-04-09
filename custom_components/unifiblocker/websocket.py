@@ -71,13 +71,38 @@ async def ws_get_clients(
         clients = data.all_clients_enriched()
     except Exception as err:
         _LOGGER.error("Failed to enrich clients: %s", err, exc_info=True)
-        # Fallback: return basic client data without enrichment.
-        clients = [
-            {"mac": c.get("mac",""), "name": c.get("name") or c.get("hostname",""),
-             "ip": c.get("ip",""), "vendor": c.get("oui",""), "category": "unknown",
-             "category_label": "Unknown", "category_icon": "❓"}
-            for c in data.clients
-        ]
+        clients = []
+
+    # If enrichment returned nothing or crashed, build basic list.
+    if not clients and data.clients:
+        from .vendor_lookup import lookup_vendor_safe
+        for c in data.clients:
+            mac = c.get("mac", "")
+            mac_lower = mac.lower()
+            cat_data = data.categories.get(mac_lower, {})
+            clients.append({
+                "mac": mac,
+                "name": c.get("name") or c.get("hostname") or "",
+                "hostname": c.get("hostname", ""),
+                "ip": c.get("ip", ""),
+                "vendor": c.get("oui") or lookup_vendor_safe(mac),
+                "blocked": c.get("blocked", False),
+                "wired": c.get("is_wired", False),
+                "rssi": c.get("rssi"),
+                "essid": c.get("essid", ""),
+                "tx_bytes": c.get("tx_bytes"),
+                "rx_bytes": c.get("rx_bytes"),
+                "state": data.store.get_state(mac),
+                "category": cat_data.get("category", "unknown"),
+                "category_label": cat_data.get("category_label", "Unknown"),
+                "category_icon": cat_data.get("category_icon", "❓"),
+                "confidence": cat_data.get("confidence", "low"),
+                "suspicious": False,
+                "threat_level": "none",
+                "suspicion_score": 0,
+                "suspicion_flags": [],
+                "is_camera": cat_data.get("category") == "camera",
+            })
     connection.send_result(msg["id"], {"clients": clients})
 
 
@@ -163,8 +188,42 @@ async def ws_get_category_clients(
 
     data = entry["coordinator"].data
     cat_clients = data.clients_by_category(msg["category"])
-    enriched = [data.enrich_client(c) for c in cat_clients]
-    connection.send_result(msg["id"], {"clients": enriched, "category": msg["category"]})
+
+    # Build client dicts WITHOUT full enrichment (which can crash).
+    # Use raw UniFi data + category info from the categorizer directly.
+    from .vendor_lookup import lookup_vendor_safe
+    clients = []
+    for c in cat_clients:
+        mac = c.get("mac", "")
+        mac_lower = mac.lower()
+        cat_data = data.categories.get(mac_lower, {})
+        clients.append({
+            "mac": mac,
+            "name": c.get("name") or c.get("hostname") or "",
+            "hostname": c.get("hostname", ""),
+            "ip": c.get("ip", ""),
+            "vendor": c.get("oui") or lookup_vendor_safe(mac),
+            "blocked": c.get("blocked", False),
+            "wired": c.get("is_wired", False),
+            "rssi": c.get("rssi"),
+            "essid": c.get("essid", ""),
+            "tx_bytes": c.get("tx_bytes"),
+            "rx_bytes": c.get("rx_bytes"),
+            "state": data.store.get_state(mac),
+            "category": cat_data.get("category", "unknown"),
+            "category_label": cat_data.get("category_label", "Unknown"),
+            "category_icon": cat_data.get("category_icon", "❓"),
+            "confidence": cat_data.get("confidence", "low"),
+            "source": cat_data.get("source", "none"),
+            "suspicious": False,
+            "threat_level": "none",
+            "suspicion_score": 0,
+            "suspicion_flags": [],
+            "is_camera": cat_data.get("category") == "camera",
+            "onvif_manufacturer": cat_data.get("onvif_manufacturer", ""),
+            "onvif_model": cat_data.get("onvif_model", ""),
+        })
+    connection.send_result(msg["id"], {"clients": clients, "category": msg["category"]})
 
 
 @websocket_api.websocket_command(
