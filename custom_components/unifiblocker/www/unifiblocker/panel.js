@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.14";
+const VERSION = "0.3.15";
 const SIDEBAR_THRESHOLD = 5;
 
 class UniFiBlockerPanel extends HTMLElement {
@@ -1153,4 +1153,7 @@ h2{font-size:15px;font-weight:600;margin-bottom:10px}.subtitle{color:var(--secon
 @media(max-width:768px){.shell{flex-direction:column}.sidebar{width:100%;min-width:100%;flex-direction:row;border-right:none;border-bottom:1px solid var(--divider-color,#2a2a4a)}.brand{display:none}.nav-items{display:flex;overflow-x:auto;padding:0}.nav-item{padding:8px 12px;border-left:none;border-bottom:3px solid transparent;white-space:nowrap}.nav-item.active{border-bottom-color:var(--primary-color,#0f9b8e)}.nav-item.sub{padding-left:12px}.nav-divider{display:none}.action-toggle{padding:6px 10px;display:flex;align-items:center;gap:6px}.toggle-hint{display:none}.device-body{grid-template-columns:1fr}.stat-grid{grid-template-columns:repeat(3,1fr)}}
 `;
 
-customElements.define("unifiblocker-panel", UniFiBlockerPanel);
+// Guard against double-registration (HA can load the script multiple times).
+if (!customElements.get("unifiblocker-panel")) {
+  customElements.define("unifiblocker-panel", UniFiBlockerPanel);
+}

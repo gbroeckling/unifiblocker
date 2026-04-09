@@ -63,9 +63,9 @@ class LocalNetworkManager:
     def __init__(self, hass: HomeAssistant) -> None:
         self._hass = hass
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
-        # mac → {"ip": "192.168.2.35", "category": "camera", "name": "..."}
         self._assignments: dict[str, dict[str, Any]] = {}
         self._firewall_rule_id: str | None = None
+        self._config: dict[str, Any] = {}
 
     # ── Persistence ──────────────────────────────────────────────────
 
