@@ -21,6 +21,8 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_get_categories)
     websocket_api.async_register_command(hass, ws_get_category_clients)
     websocket_api.async_register_command(hass, ws_set_category)
+    websocket_api.async_register_command(hass, ws_get_learned)
+    websocket_api.async_register_command(hass, ws_get_suggestions)
     websocket_api.async_register_command(hass, ws_localnet_status)
     websocket_api.async_register_command(hass, ws_localnet_assign)
     websocket_api.async_register_command(hass, ws_localnet_remove)
@@ -254,8 +256,89 @@ async def ws_set_category(
     mac = msg["mac"]
     name = msg.get("name")
     await entry["store"].set_manual_category(mac, cat, name=name)
+
+    # Learn from this manual categorization.
+    learned_result = {}
+    learned = entry.get("learned")
+    if learned:
+        # Get the device's details for learning.
+        data = entry["coordinator"].data
+        client = data.client_by_mac(mac) if data else None
+        scan = entry.get("scanner")
+        scan_result = scan.get_result(mac.lower()) if scan else None
+
+        learned_result = await learned.learn_from_device(
+            cat,
+            mac=mac,
+            vendor=client.get("oui", "") if client else "",
+            hostname=client.get("hostname") or (client.get("name", "") if client else ""),
+            open_ports=scan_result.get("open_ports") if scan_result else None,
+        )
+
     await entry["coordinator"].async_request_refresh()
-    connection.send_result(msg["id"], {"ok": True, "mac": mac, "category": cat})
+    connection.send_result(msg["id"], {
+        "ok": True, "mac": mac, "category": cat,
+        "learned": learned_result,
+    })
+
+
+# ── Learning engine ──────────────────────────────────────────────────
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "unifiblocker/learned_rules"}
+)
+@websocket_api.async_response
+async def ws_get_learned(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Return all learned pattern rules."""
+    entry = _get_coordinator(hass)
+    learned = entry.get("learned") if entry else None
+    if not learned:
+        connection.send_result(msg["id"], {"rules": {}, "total_rules": 0})
+        return
+    connection.send_result(msg["id"], learned.rules_summary)
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "unifiblocker/suggestions"}
+)
+@websocket_api.async_response
+async def ws_get_suggestions(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Return uncategorized devices that match learned patterns."""
+    entry = _get_coordinator(hass)
+    if not entry or not entry.get("learned") or not entry["coordinator"].data:
+        connection.send_result(msg["id"], {"suggestions": []})
+        return
+
+    from .vendor_lookup import lookup_vendor_safe
+    data = entry["coordinator"].data
+    scanner = entry.get("scanner")
+
+    # Build basic device info for matching.
+    devices = []
+    for c in data.clients:
+        mac = c.get("mac", "").lower()
+        cat_data = data.categories.get(mac, {})
+        scan_data = scanner.get_result(mac) if scanner else None
+        devices.append({
+            "mac": c.get("mac", ""),
+            "name": c.get("name") or c.get("hostname") or "",
+            "hostname": c.get("hostname", ""),
+            "ip": c.get("ip", ""),
+            "vendor": c.get("oui") or lookup_vendor_safe(c.get("mac", "")),
+            "category": cat_data.get("category", "unknown"),
+            "scan_result": scan_data or {},
+        })
+
+    suggestions = entry["learned"].get_suggestions(devices)
+    connection.send_result(msg["id"], {
+        "suggestions": suggestions,
+        "count": len(suggestions),
+    })
 
 
 # ── ONVIF discovery & probe ───────────────────────────────────────────

@@ -87,17 +87,14 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
         _LOGGER.warning("ONVIF probe failed to load", exc_info=True)
         onvif = None
 
-    coordinator = UniFiBlockerCoordinator(
-        hass, api, store,
-        update_interval=data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
-        scanner=scanner,
-        onvif=onvif,
-    )
-    await coordinator.async_config_entry_first_refresh()
-
-    # Run ONVIF discovery in background after coordinator is up.
-    if onvif:
-        hass.async_create_task(onvif.discover_and_probe_all())
+    # Learning engine
+    try:
+        from .learning import LearnedPatterns
+        learned = LearnedPatterns(hass)
+        await learned.async_load()
+    except Exception:
+        _LOGGER.warning("Learning engine failed to load", exc_info=True)
+        learned = None
 
     # Local network manager
     try:
@@ -108,17 +105,23 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
         _LOGGER.warning("Local network manager failed to load", exc_info=True)
         local_net = None
 
-    # Port scanner
-    try:
-        from .port_scanner import PortScanner
-        scanner = PortScanner(hass)
-    except Exception:
-        _LOGGER.warning("Port scanner failed to load", exc_info=True)
-        scanner = None
+    coordinator = UniFiBlockerCoordinator(
+        hass, api, store,
+        update_interval=data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+        scanner=scanner,
+        onvif=onvif,
+        learned=learned,
+    )
+    await coordinator.async_config_entry_first_refresh()
+
+    # Run ONVIF discovery in background after coordinator is up.
+    if onvif:
+        hass.async_create_task(onvif.discover_and_probe_all())
 
     hass.data[DOMAIN][entry.entry_id] = {
         "api": api, "store": store, "coordinator": coordinator,
         "local_net": local_net, "scanner": scanner, "onvif": onvif,
+        "learned": learned,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

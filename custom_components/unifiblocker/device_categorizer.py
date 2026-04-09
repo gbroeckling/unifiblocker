@@ -264,6 +264,7 @@ def categorize_device(
     manual_category: str | None = None,
     scan_result: dict[str, Any] | None = None,
     onvif_result: dict[str, Any] | None = None,
+    learned_patterns: Any = None,
 ) -> dict[str, Any]:
     """Classify a device using ALL available signals.
 
@@ -276,7 +277,8 @@ def categorize_device(
       6. Hostname patterns
       7. General vendor OUI mapping
       8. DPI traffic patterns
-      9. Unknown
+      9. Learned patterns (from user's manual categorizations)
+      10. Unknown
     """
     # 1. Manual override always wins.
     if manual_category and manual_category in CATEGORY_LABELS:
@@ -389,9 +391,15 @@ def categorize_device(
         if cat:
             return _result(cat, "low", "dpi")
 
-    # 9. Unknown vendor + no hostname = suspicious, flag for scan
-    if vendor == "Unknown" and not hn:
-        return _result("unknown", "low", "none")
+    # 9. Learned patterns — applied BEFORE falling through to unknown.
+    #    These are populated when users manually categorize devices.
+    if learned_patterns is not None:
+        match = learned_patterns.match_device(
+            mac=mac, vendor=vendor, hostname=hostname,
+            open_ports=scan_result.get("open_ports") if scan_result else None,
+        )
+        if match:
+            return _result(match["category"], match["confidence"], match["source"])
 
     return _result("unknown", "low", "none")
 
@@ -445,6 +453,7 @@ def categorize_all_clients(
     manual_overrides: dict[str, str] | None = None,
     scan_data: dict[str, dict[str, Any]] | None = None,
     onvif_data: dict[str, dict[str, Any]] | None = None,
+    learned_patterns: Any = None,
 ) -> dict[str, dict[str, Any]]:
     """Categorize every client. Returns mac → category result."""
     results: dict[str, dict[str, Any]] = {}
@@ -476,6 +485,7 @@ def categorize_all_clients(
             manual_category=manual,
             scan_result=scan,
             onvif_result=onvif,
+            learned_patterns=learned_patterns,
         )
     return results
 

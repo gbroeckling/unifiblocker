@@ -236,6 +236,7 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         update_interval: int,
         scanner: Any = None,
         onvif: Any = None,
+        learned: Any = None,
     ) -> None:
         super().__init__(
             hass,
@@ -247,6 +248,7 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         self.store = store
         self.scanner = scanner
         self.onvif = onvif
+        self.learned = learned
         self._auto_scanned: set[str] = set()  # MACs already auto-scanned
 
     async def _async_update_data(self) -> UniFiBlockerData:
@@ -343,6 +345,7 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             manual_overrides=self.store.get_all_manual_categories(),
             scan_data=self.scanner.cache if self.scanner else None,
             onvif_data=self.onvif.cache if self.onvif else None,
+            learned_patterns=self.learned,
         )
 
         return UniFiBlockerData(
