@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.12";
+const VERSION = "0.3.13";
 const SIDEBAR_THRESHOLD = 5;
 
 class UniFiBlockerPanel extends HTMLElement {
@@ -103,6 +103,7 @@ class UniFiBlockerPanel extends HTMLElement {
             ${this._nav("clients", "All Clients", "📋")}
             ${this._nav("recommendations", "Security", "🛡")}
             ${this._nav("identify", "Identify", "🔍")}
+            ${this._nav("nas", "Network Access", "🌐")}
             ${this._nav("localnet", "Local Only", "🔒")}
             ${catNav ? '<div class="nav-divider">Categories</div>' + catNav : ""}
             ${this._nav("quarantined", "Quarantined", "🚫")}
@@ -159,6 +160,7 @@ class UniFiBlockerPanel extends HTMLElement {
       case "clients": mc.innerHTML = this._vClients(); break;
       case "recommendations": mc.innerHTML = this._vRecommendations(); break;
       case "identify": mc.innerHTML = this._vIdentify(); break;
+      case "nas": mc.innerHTML = this._vNAS(); break;
       case "localnet": mc.innerHTML = this._vLocalNet(); break;
       case "category": mc.innerHTML = this._vCategory(); break;
       case "quarantined": mc.innerHTML = this._vDeviceList((this._data.clients||[]).filter(c=>c.state==="quarantined"||c.blocked), "Quarantined / Blocked", "Devices blocked on the controller."); break;
@@ -697,6 +699,168 @@ class UniFiBlockerPanel extends HTMLElement {
     return `<h1>${info.icon||""} ${info.label||cat} <span class="count">${clients.length}</span></h1>
       ${clients.map((d,i) => this._deviceCard(d, i+1)).join("")}
       ${clients.length===0?'<div class="empty">No devices in this category.</div>':""}`;
+  }
+
+  _vNAS() {
+    const clients = this._data.clients || [];
+    const o = this._overview || {};
+    const ln = this._localnet || {};
+    const fw = ln.firewall || {};
+    const assignments = ln.assignments || {};
+    const assignedMacs = new Set(Object.keys(assignments));
+
+    // Group devices by access level.
+    const internetAccess = [];    // Normal DHCP, has internet
+    const localOnly = [];         // On 192.168.2.x, no internet
+    const blocked = [];           // Quarantined / blocked on controller
+    const unreviewed = [];        // State=new, no decision yet
+
+    clients.forEach(c => {
+      if (c.blocked || c.state === "quarantined") blocked.push(c);
+      else if (assignedMacs.has(c.mac.toLowerCase())) localOnly.push(c);
+      else if (c.state === "new") unreviewed.push(c);
+      else internetAccess.push(c);
+    });
+
+    // Cameras on main network (not local-only, not blocked).
+    const camerasExposed = clients.filter(c =>
+      c.is_camera && !assignedMacs.has(c.mac.toLowerCase()) && !c.blocked && c.state !== "quarantined"
+    );
+
+    // Risk summary.
+    const risks = [];
+    if (!fw.exists) risks.push({icon:"🔴", text:"Firewall rule for local-only subnet not created"});
+    if (camerasExposed.length) risks.push({icon:"🟠", text:`${camerasExposed.length} camera(s) have unrestricted internet access`});
+    if (unreviewed.length > 20) risks.push({icon:"🟡", text:`${unreviewed.length} devices haven't been reviewed yet`});
+    const suspCount = clients.filter(c => c.suspicious).length;
+    if (suspCount) risks.push({icon:"🟠", text:`${suspCount} device(s) flagged as suspicious`});
+
+    return `
+      <h1>🌐 Network Access Security</h1>
+      <p class="subtitle">Complete view of which devices can reach the internet, which are local-only, and which are blocked.</p>
+
+      ${risks.length ? `
+        <div class="card danger-card">
+          <h2>Action Required</h2>
+          ${risks.map(r => `<div style="padding:4px 0;font-size:13px">${r.icon} ${r.text}</div>`).join("")}
+        </div>
+      ` : '<div class="card" style="border-color:#4caf50"><h2 style="color:#4caf50">✅ Network looks good</h2><p>No immediate access control issues found.</p></div>'}
+
+      <div class="stat-grid">
+        ${this._stat("Internet Access", internetAccess.length, "🌍", "", "detail_connected")}
+        ${this._stat("Local Only", localOnly.length, "🔒")}
+        ${this._stat("Blocked", blocked.length, "🚫")}
+        ${this._stat("Unreviewed", unreviewed.length, "🆕", unreviewed.length > 10 ? "warn" : "", "new")}
+        ${this._stat("Cameras Exposed", camerasExposed.length, "📹", camerasExposed.length > 0 ? "danger" : "")}
+      </div>
+
+      <div class="card">
+        <h2>Firewall Status</h2>
+        <table class="info-table">
+          <tr><td>Local-Only Rule</td><td>${fw.exists ? (fw.enabled ? '<span class="badge ok">Active — 192.168.2.0/24 blocked from WAN</span>' : '<span class="badge warn">Exists but disabled</span>') : '<span class="badge danger">Not created</span>'}</td></tr>
+        </table>
+        ${!fw.exists && this._actionMode ? '<button class="btn btn-trust" data-ensureFw="1" style="margin-top:8px">Create Firewall Rule</button>' : ''}
+        ${!fw.exists && !this._actionMode ? '<p style="margin-top:6px;font-size:11px;color:#f0a500">Enable Action Mode to create the rule</p>' : ''}
+      </div>
+
+      <div class="card">
+        <h2>Access Level Summary</h2>
+        <table class="data-table">
+          <thead><tr><th>Level</th><th>Description</th><th>Devices</th><th>Risk</th></tr></thead>
+          <tbody>
+            <tr><td>🌍 Internet</td><td>Full network + internet access (normal DHCP)</td><td>${internetAccess.length}</td><td>${camerasExposed.length ? '<span class="badge warn">Cameras exposed</span>' : '<span class="badge ok">OK</span>'}</td></tr>
+            <tr><td>🔒 Local Only</td><td>Network access but no internet (192.168.2.x)</td><td>${localOnly.length}</td><td><span class="badge ok">Isolated</span></td></tr>
+            <tr><td>🚫 Blocked</td><td>Quarantined — no network access at all</td><td>${blocked.length}</td><td><span class="badge ok">Contained</span></td></tr>
+            <tr><td>🆕 Unreviewed</td><td>Not yet classified — needs your decision</td><td>${unreviewed.length}</td><td>${unreviewed.length > 10 ? '<span class="badge warn">Review needed</span>' : '<span class="badge ok">OK</span>'}</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      ${camerasExposed.length ? `
+        <div class="card warn-card">
+          <h2>📹 Cameras With Internet Access (${camerasExposed.length})</h2>
+          <p class="subtitle">These cameras can phone home to cloud servers. Move them to Local Only to block internet while keeping local streaming.</p>
+          <table class="data-table">
+            <thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>IP</th><th>Threat</th>${this._actionMode ? '<th>Action</th>' : ''}</tr></thead>
+            <tbody>
+              ${camerasExposed.map(c => `<tr>
+                <td class="mono">${c.mac}</td>
+                <td>${c.name||"—"}</td>
+                <td>${c.vendor||"?"}</td>
+                <td class="mono">${c.ip||"—"}</td>
+                <td>${c.threat_level !== "none" ? `<span class="badge ${c.threat_level}">${c.threat_level}</span>` : ""}</td>
+                ${this._actionMode ? `<td>
+                  <button class="btn btn-trust" data-localassign="${c.category||'camera'}" data-mac="${c.mac}" style="font-size:10px">🔒 Local Only</button>
+                  <button class="btn btn-quarantine" data-action="quarantine" data-mac="${c.mac}" style="font-size:10px">🚫 Block</button>
+                </td>` : ''}
+              </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+      ` : ''}
+
+      <div class="card">
+        <h2>🔒 Local Only Devices (${localOnly.length})</h2>
+        ${localOnly.length === 0 ? '<div class="empty">No devices assigned to local-only yet. Use the Local Only view to assign devices.</div>' : `
+          <table class="data-table">
+            <thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>IP</th><th>Category</th></tr></thead>
+            <tbody>
+              ${localOnly.map(c => {
+                const a = assignments[c.mac.toLowerCase()] || {};
+                return `<tr>
+                  <td class="mono">${c.mac}</td>
+                  <td>${c.name||"—"}</td>
+                  <td>${c.vendor||"?"}</td>
+                  <td class="mono">${a.ip || c.ip||"—"}</td>
+                  <td>${c.category_icon||""} ${c.category_label||""}</td>
+                </tr>`;
+              }).join("")}
+            </tbody>
+          </table>
+        `}
+      </div>
+
+      <div class="card">
+        <h2>🚫 Blocked / Quarantined (${blocked.length})</h2>
+        ${blocked.length === 0 ? '<div class="empty">No blocked devices.</div>' : `
+          <table class="data-table">
+            <thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>IP</th><th>State</th>${this._actionMode ? '<th>Action</th>' : ''}</tr></thead>
+            <tbody>
+              ${blocked.map(c => `<tr>
+                <td class="mono">${c.mac}</td>
+                <td>${c.name||"—"}</td>
+                <td>${c.vendor||"?"}</td>
+                <td class="mono">${c.ip||"—"}</td>
+                <td><span class="badge danger">${c.blocked ? "blocked" : c.state}</span></td>
+                ${this._actionMode ? `<td>
+                  <button class="btn btn-trust" data-action="trust" data-mac="${c.mac}" style="font-size:10px">✅ Trust</button>
+                  <button class="btn btn-ignore" data-action="unblock" data-mac="${c.mac}" style="font-size:10px">Unblock</button>
+                </td>` : ''}
+              </tr>`).join("")}
+            </tbody>
+          </table>
+        `}
+      </div>
+
+      <div class="card">
+        <h2>How Network Access Levels Work</h2>
+        <table class="data-table" style="font-size:12px">
+          <thead><tr><th>Level</th><th>Internet</th><th>Local Network</th><th>How to Assign</th></tr></thead>
+          <tbody>
+            <tr><td>🌍 Internet (default)</td><td>✅ Yes</td><td>✅ Yes</td><td>Default for all DHCP devices (192.168.3.x)</td></tr>
+            <tr><td>🔒 Local Only</td><td>🚫 No</td><td>✅ Yes</td><td>Assign in Local Only view → gets 192.168.2.x + firewall block</td></tr>
+            <tr><td>🚫 Blocked</td><td>🚫 No</td><td>🚫 No</td><td>Quarantine or Block → controller rejects all connections</td></tr>
+            <tr><td>✅ Trusted (reserved)</td><td>✅ Yes</td><td>✅ Yes</td><td>Trust + DHCP reservation in 192.168.1.x</td></tr>
+          </tbody>
+        </table>
+        <p style="margin-top:10px;font-size:12px">
+          <strong>Recommended workflow for cameras:</strong> Scan ports → review vendor/model → if it's a camera, move to <strong>Local Only</strong>.
+          The camera keeps working for local RTSP/ONVIF streaming but can't phone home to Chinese cloud servers.
+          If a device is actively malicious (backdoor ports, rogue DHCP), <strong>Block</strong> it entirely.
+        </p>
+      </div>
+
+      ${!this._actionMode ? '<div class="ro-banner">Read-only mode — enable Action Mode in the sidebar to change device access levels</div>' : ''}`;
   }
 
   _vLocalNet() {
