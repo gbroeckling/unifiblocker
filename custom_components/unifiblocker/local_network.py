@@ -143,25 +143,58 @@ class LocalNetworkManager:
     def next_available_ip(self, category: str) -> str | None:
         """Pick the next free IP in the category's range.
 
-        Falls back to DEFAULT_RANGE if the category range is full.
+        Waterfall strategy — never returns None until ALL 254 addresses
+        are exhausted:
+          1. Try the category's own range first
+          2. Try the overflow/default range
+          3. Steal from other category ranges that have free slots
+             (least-used ranges first)
+          4. Sweep the entire .1-.254 space for anything still free
         """
         used = self.used_ips() | RESERVED
         cat_ranges = self.category_ranges
-        start, end = cat_ranges.get(category, DEFAULT_RANGE)
+        own_start, own_end = cat_ranges.get(category, DEFAULT_RANGE)
 
-        # Try category range first.
-        for octet in range(start, end + 1):
+        # 1. Own category range.
+        for octet in range(own_start, own_end + 1):
             if octet not in used:
                 return f"{self.subnet}.{octet}"
 
-        # Category range full — try default range.
-        if (start, end) != DEFAULT_RANGE:
+        # 2. Default / overflow range.
+        if (own_start, own_end) != DEFAULT_RANGE:
             ds, de = DEFAULT_RANGE
             for octet in range(ds, de + 1):
                 if octet not in used:
                     return f"{self.subnet}.{octet}"
 
-        _LOGGER.error("No available IPs in %s.x for category %s", self.subnet, category)
+        # 3. Steal from other ranges, least-used first.
+        other_ranges = [
+            (cat, s, e) for cat, (s, e) in cat_ranges.items()
+            if (s, e) != (own_start, own_end)
+        ]
+        # Sort by how many free slots each range has (most free first).
+        other_ranges.sort(
+            key=lambda r: -sum(1 for o in range(r[1], r[2] + 1) if o not in used)
+        )
+        for _cat, s, e in other_ranges:
+            for octet in range(s, e + 1):
+                if octet not in used:
+                    _LOGGER.info(
+                        "Category %s full, borrowing .%d from %s range",
+                        category, octet, _cat,
+                    )
+                    return f"{self.subnet}.{octet}"
+
+        # 4. Full sweep — anything from .1 to .254 that's still free.
+        for octet in range(1, 255):
+            if octet not in used:
+                _LOGGER.info(
+                    "All ranges full, using last-resort .%d for %s",
+                    octet, category,
+                )
+                return f"{self.subnet}.{octet}"
+
+        _LOGGER.error("All 254 addresses in %s.x are exhausted", self.subnet)
         return None
 
     def get_range_info(self) -> list[dict[str, Any]]:
