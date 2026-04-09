@@ -336,6 +336,14 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
                 except Exception:
                     _LOGGER.debug("Auto-scan error", exc_info=True)
 
+        # Log what UniFi is reporting for the first 10 clients so we can
+        # debug categorization. This will show in HA logs.
+        for i, c in enumerate(clients[:10]):
+            _LOGGER.warning(
+                "CLIENT DIAG #%d: mac=%s oui='%s' hostname='%s' name='%s'",
+                i, c.get("mac","?"), c.get("oui",""), c.get("hostname",""), c.get("name",""),
+            )
+
         # Categorize every client using ALL available signals.
         categories = categorize_devices(
             clients,
@@ -344,6 +352,15 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             scan_data=self.scanner.cache if self.scanner else None,
             onvif_data=self.onvif.cache if self.onvif else None,
         )
+
+        # Log category results for first 10 clients.
+        for i, c in enumerate(clients[:10]):
+            mac = c.get("mac", "").lower()
+            cat = categories.get(mac, {})
+            _LOGGER.warning(
+                "CAT DIAG #%d: mac=%s → category=%s source=%s confidence=%s",
+                i, mac, cat.get("category","?"), cat.get("source","?"), cat.get("confidence","?"),
+            )
 
         return UniFiBlockerData(
             clients=clients,
