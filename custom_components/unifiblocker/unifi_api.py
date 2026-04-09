@@ -13,7 +13,11 @@ from .const import (
     API_CLIENTS,
     API_DEVICE_CMD,
     API_DEVICES,
+    API_EVENTS,
+    API_DPI,
+    API_HEALTH,
     API_LOGIN,
+    API_ROGUE_AP,
     API_SYSINFO,
 )
 
@@ -61,10 +65,27 @@ class UniFiApi:
 
     @property
     def _base(self) -> str:
-        proto = "https"
-        host = self._host
+        """Normalize the host into a base URL.
+
+        Accepts any of these input formats:
+          192.168.1.1
+          192.168.1.1:443
+          https://192.168.1.1
+          https://192.168.1.1:443
+          http://192.168.1.1:8080
+          unifi.local
+
+        Defaults to https:// if no scheme is provided (UCG Max always
+        uses HTTPS on port 443).
+        """
+        host = self._host.strip().rstrip("/")
         if "://" in host:
             proto, host = host.split("://", 1)
+        else:
+            proto = "https"
+        # Strip any trailing path segments (e.g. /manage or /network)
+        if "/" in host:
+            host = host.split("/")[0]
         return f"{proto}://{host}"
 
     def _url(self, path: str) -> str:
@@ -201,6 +222,33 @@ class UniFiApi:
             json={"cmd": "kick-sta", "mac": mac.lower()},
         )
 
+    async def get_events(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Return recent IDS/IPS and connectivity events.
+
+        The UCG Max logs threat events (IPS alerts, rogue DHCP, etc.)
+        in its event stream.  We pull the latest *limit* entries.
+        """
+        return await self._request(
+            "GET", API_EVENTS + f"?_limit={limit}"
+        )
+
+    async def get_rogue_aps(self) -> list[dict[str, Any]]:
+        """Return detected rogue / neighbouring access points."""
+        return await self._request("GET", API_ROGUE_AP)
+
+    async def get_health(self) -> list[dict[str, Any]]:
+        """Return network health subsystem statuses (WAN, LAN, WLAN)."""
+        return await self._request("GET", API_HEALTH)
+
+    async def get_dpi_stats(self) -> list[dict[str, Any]]:
+        """Return per-client DPI (Deep Packet Inspection) data.
+
+        Each entry has ``mac``, ``by_cat`` (traffic by category), and
+        ``by_app`` (traffic by application).  The UCG Max groups traffic
+        into categories like "Streaming", "Web", "Social", etc.
+        """
+        return await self._request("GET", API_DPI)
+
     async def test_connection(self) -> dict[str, Any]:
         """Login and fetch sysinfo to verify the connection works.
 
@@ -209,6 +257,42 @@ class UniFiApi:
         await self.login()
         info = await self.get_sysinfo()
         return info[0] if info else {}
+
+    async def check_health(self) -> dict[str, Any]:
+        """Quick connectivity + health check.
+
+        Returns a summary dict with connection_ok, subsystem statuses,
+        and controller hostname.  Used by the connection health sensor.
+        """
+        result: dict[str, Any] = {"connection_ok": False}
+        try:
+            info = await self.get_sysinfo()
+            result["connection_ok"] = True
+            if info:
+                result["hostname"] = info[0].get("hostname", "")
+                result["version"] = info[0].get("version", "")
+                result["uptime"] = info[0].get("uptime", 0)
+        except UniFiApiError as err:
+            result["error"] = str(err)
+            return result
+
+        try:
+            health = await self.get_health()
+            subsystems = {}
+            for sub in health:
+                name = sub.get("subsystem", "unknown")
+                subsystems[name] = {
+                    "status": sub.get("status", "unknown"),
+                    "num_adopted": sub.get("num_adopted"),
+                    "num_user": sub.get("num_user"),
+                    "tx_bytes_r": sub.get("tx_bytes-r"),
+                    "rx_bytes_r": sub.get("rx_bytes-r"),
+                }
+            result["subsystems"] = subsystems
+        except UniFiApiError:
+            _LOGGER.debug("Health endpoint unavailable", exc_info=True)
+
+        return result
 
     async def close(self) -> None:
         """Close the HTTP session if we own it."""

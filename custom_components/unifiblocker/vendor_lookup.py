@@ -474,7 +474,206 @@ _OUI_TABLE: dict[str, str] = {
     # ── Lutron ───────────────────────────────────────────────────────
     "00:0C:C1": "Lutron",
     "00:17:9A": "Lutron",
+    # ══════════════════════════════════════════════════════════════════
+    #  SURVEILLANCE CAMERAS & DVR/NVR VENDORS
+    #  (primary targets for the blocker)
+    # ══════════════════════════════════════════════════════════════════
+    # ── Hikvision / HiWatch ──────────────────────────────────────────
+    "00:0E:DB": "Hikvision",
+    "10:12:FB": "Hikvision",
+    "18:68:CB": "Hikvision",
+    "1C:C3:16": "Hikvision",
+    "24:28:FD": "Hikvision",
+    "28:57:BE": "Hikvision",
+    "2C:A5:9C": "Hikvision",
+    "34:E8:94": "Hikvision",
+    "38:AF:29": "Hikvision",
+    "44:47:CC": "Hikvision",
+    "48:AD:08": "Hikvision",
+    "4C:BD:8F": "Hikvision",
+    "54:C4:15": "Hikvision",
+    "58:03:FB": "Hikvision",
+    "5C:E0:CA": "Hikvision",
+    "64:A4:00": "Hikvision",
+    "6C:EF:C6": "Hikvision",
+    "74:DA:88": "Hikvision",
+    "7C:46:D2": "Hikvision",
+    "80:A4:47": "Hikvision",
+    "88:40:3B": "Hikvision",
+    "8C:E7:48": "Hikvision",
+    "94:E1:AC": "Hikvision",
+    "A0:3E:6B": "Hikvision",
+    "A4:14:37": "Hikvision",
+    "A8:62:A2": "Hikvision",
+    "B0:68:E6": "Hikvision",
+    "B4:A3:82": "Hikvision",
+    "BC:AD:28": "Hikvision",
+    "C0:5C:20": "Hikvision",
+    "C0:56:E3": "Hikvision",
+    "C4:2F:90": "Hikvision",
+    "C8:02:8F": "Hikvision",
+    "CC:D3:9D": "Hikvision",
+    "D4:43:0E": "Hikvision",
+    "D8:AF:3B": "Hikvision",
+    "DC:80:84": "Hikvision",
+    "E0:1C:FD": "Hikvision",
+    "E0:AB:FE": "Hikvision",
+    "E4:24:6C": "Hikvision",
+    "EC:8E:B5": "Hikvision",
+    "F4:5E:47": "Hikvision",
+    "F8:4D:FC": "Hikvision",
+    # ── Dahua ────────────────────────────────────────────────────────
+    "00:19:48": "Dahua",
+    "0C:E6:00": "Dahua",
+    "10:01:2C": "Dahua",
+    "14:A7:8B": "Dahua",
+    "18:93:7F": "Dahua",
+    "1C:C5:64": "Dahua",
+    "20:17:42": "Dahua",
+    "24:29:34": "Dahua",
+    "28:AD:3E": "Dahua",
+    "2C:99:24": "Dahua",
+    "34:DA:B7": "Dahua",
+    "38:AF:D7": "Dahua",
+    "3C:EF:8C": "Dahua",
+    "40:F4:13": "Dahua",
+    "48:33:DD": "Dahua",
+    "4C:11:BF": "Dahua",
+    "54:2B:DE": "Dahua",
+    "58:11:22": "Dahua",
+    "60:FD:56": "Dahua",
+    "68:A4:0E": "Dahua",
+    "70:E1:D4": "Dahua",
+    "74:1A:E0": "Dahua",
+    "80:2D:BF": "Dahua",
+    "84:9A:40": "Dahua",
+    "A0:BD:1D": "Dahua",
+    "A4:8C:47": "Dahua",
+    "B0:60:88": "Dahua",
+    "B4:A3:15": "Dahua",
+    "C8:F5:D6": "Dahua",
+    "D4:43:A8": "Dahua",
+    "E0:50:8B": "Dahua",
+    "E4:81:B3": "Dahua",
+    "F8:4F:AD": "Dahua",
+    # ── Reolink ──────────────────────────────────────────────────────
+    "58:72:D4": "Reolink",
+    "B4:6D:C2": "Reolink",
+    "EC:71:DB": "Reolink",
+    "9C:8E:CD": "Reolink",
+    # ── Amcrest / Foscam ─────────────────────────────────────────────
+    "9C:8E:CD": "Amcrest",
+    "00:62:6E": "Amcrest",
+    "C0:3C:04": "Foscam",
+    "00:62:6E": "Foscam",
+    # ── XMEye / Xiongmai (XM) ────────────────────────────────────────
+    "00:12:12": "XMEye/Xiongmai",
+    "00:12:13": "XMEye/Xiongmai",
+    "00:12:14": "XMEye/Xiongmai",
+    "00:12:15": "XMEye/Xiongmai",
+    "00:12:16": "XMEye/Xiongmai",
+    "00:12:17": "XMEye/Xiongmai",
+    "00:12:41": "XMEye/Xiongmai",
+    "00:12:42": "XMEye/Xiongmai",
+    "E0:62:90": "XMEye/Xiongmai",
+    # ── Uniview ──────────────────────────────────────────────────────
+    "24:16:6D": "Uniview",
+    "68:61:54": "Uniview",
+    "A0:CF:2B": "Uniview",
+    # ── TP-Link VIGI (cameras) ───────────────────────────────────────
+    "54:AF:97": "TP-Link VIGI",
+    "74:FE:CE": "TP-Link VIGI",
+    # ── Axis Communications ──────────────────────────────────────────
+    "00:40:8C": "Axis",
+    "AC:CC:8E": "Axis",
+    "B8:A4:4F": "Axis",
+    # ── Vivotek ──────────────────────────────────────────────────────
+    "00:02:D1": "Vivotek",
+    "00:22:CF": "Vivotek",
+    # ── Hanwha (Samsung Techwin) ─────────────────────────────────────
+    "00:09:18": "Hanwha/Samsung Techwin",
+    "00:16:6C": "Hanwha/Samsung Techwin",
+    "9C:43:1E": "Hanwha/Samsung Techwin",
+    # ── EZVIZ (Hikvision consumer) ───────────────────────────────────
+    "28:29:86": "EZVIZ",
+    "48:C8:62": "EZVIZ",
+    "60:F4:3A": "EZVIZ",
+    "C4:1E:CE": "EZVIZ",
+    # ── Imou (Dahua consumer) ────────────────────────────────────────
+    "7C:14:76": "Imou",
+    "AC:3B:77": "Imou",
+    # ── Annke ────────────────────────────────────────────────────────
+    "00:01:F0": "Annke",
+    # ── Lorex ────────────────────────────────────────────────────────
+    "00:40:3B": "Lorex",
+    # ── Swann ────────────────────────────────────────────────────────
+    "00:A1:D8": "Swann",
+    # ── Eufy Security ────────────────────────────────────────────────
+    "98:8B:0A": "Eufy",
+    "FC:D7:49": "Eufy",
+    # ── Wyze Cam (already partial above, add more) ───────────────────
+    "2C:AA:8E": "Wyze",
+    "7C:78:B2": "Wyze",
+    "A4:DA:22": "Wyze",
+    # ── YI Technology ────────────────────────────────────────────────
+    "78:A5:04": "YI Technology",
+    # ── Wansview ─────────────────────────────────────────────────────
+    "18:BA:A6": "Wansview",
+    # ── Hiseeu ───────────────────────────────────────────────────────
+    "C8:E7:F0": "Hiseeu",
+    # ── Zosi ─────────────────────────────────────────────────────────
+    "38:D5:47": "Zosi",
 }
+
+
+# Vendors that manufacture surveillance cameras.  Used by the suspicious
+# traffic analyzer to flag camera-like devices automatically.
+CAMERA_VENDORS: set[str] = {
+    "Hikvision",
+    "Dahua",
+    "Reolink",
+    "Amcrest",
+    "Foscam",
+    "XMEye/Xiongmai",
+    "Uniview",
+    "TP-Link VIGI",
+    "Axis",
+    "Vivotek",
+    "Hanwha/Samsung Techwin",
+    "EZVIZ",
+    "Imou",
+    "Annke",
+    "Lorex",
+    "Swann",
+    "Eufy",
+    "Wyze",
+    "YI Technology",
+    "Wansview",
+    "Hiseeu",
+    "Zosi",
+    "Ring",
+}
+
+# Hostname patterns commonly seen on IP cameras.
+CAMERA_HOSTNAME_PATTERNS: list[str] = [
+    "ipc",
+    "ipcam",
+    "camera",
+    "cam",
+    "dvr",
+    "nvr",
+    "hikvision",
+    "dahua",
+    "dh-",
+    "ds-",        # Hikvision model prefix
+    "ipc-",       # Dahua model prefix
+    "reolink",
+    "amcrest",
+    "foscam",
+    "xmeye",
+    "ezviz",
+    "imou",
+]
 
 
 def lookup_vendor(mac: str) -> str:
@@ -488,3 +687,21 @@ def lookup_vendor_safe(mac: str | None) -> str:
     if not mac:
         return "Unknown"
     return lookup_vendor(mac)
+
+
+def is_camera_vendor(vendor: str) -> bool:
+    """Return True if *vendor* is a known camera manufacturer."""
+    return vendor in CAMERA_VENDORS
+
+
+def is_camera_like(mac: str, hostname: str = "", vendor: str = "") -> bool:
+    """Return True if the device looks like an IP camera.
+
+    Checks vendor OUI and hostname patterns.
+    """
+    if not vendor:
+        vendor = lookup_vendor_safe(mac)
+    if is_camera_vendor(vendor):
+        return True
+    hn = hostname.lower()
+    return any(pat in hn for pat in CAMERA_HOSTNAME_PATTERNS)

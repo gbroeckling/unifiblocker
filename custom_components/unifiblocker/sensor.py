@@ -31,6 +31,9 @@ async def async_setup_entry(
             WirelessClientsSensor(coordinator, entry),
             WiredClientsSensor(coordinator, entry),
             AllClientDetailsSensor(coordinator, entry),
+            SuspiciousDevicesSensor(coordinator, entry),
+            ConnectionHealthSensor(coordinator, entry),
+            ThreatEventsSensor(coordinator, entry),
         ]
     )
 
@@ -185,3 +188,94 @@ class AllClientDetailsSensor(_BaseSensor):
         if not self._data:
             return None
         return {"clients": self._data.all_clients_enriched()}
+
+
+class SuspiciousDevicesSensor(_BaseSensor):
+    """Number of clients flagged as suspicious by traffic analysis."""
+
+    def __init__(self, coordinator: UniFiBlockerCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "suspicious_devices", "Suspicious devices", "mdi:alert-octagon")
+
+    @property
+    def native_value(self) -> int | None:
+        return self._data.suspicious_count if self._data else None
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        if not self._data:
+            return None
+        enriched = []
+        for c in self._data.suspicious_clients:
+            d = self._data.enrich_client(c)
+            enriched.append(d)
+        # Sort by suspicion score descending so the worst offenders are first.
+        enriched.sort(key=lambda x: x.get("suspicion_score", 0), reverse=True)
+        return {"devices": enriched}
+
+
+class ConnectionHealthSensor(_BaseSensor):
+    """UCG Max connection and network health status."""
+
+    _attr_state_class = None
+
+    def __init__(self, coordinator: UniFiBlockerCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "connection_health", "Controller connection", "mdi:server-network")
+
+    @property
+    def native_value(self) -> str | None:
+        if not self._data:
+            return None
+        return "connected" if self._data.health.get("connection_ok") else "disconnected"
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        if not self._data:
+            return None
+        h = self._data.health
+        attrs: dict = {
+            "connection_ok": h.get("connection_ok", False),
+            "controller_hostname": h.get("hostname", ""),
+            "controller_version": h.get("version", ""),
+            "controller_uptime": h.get("uptime", 0),
+        }
+        subs = h.get("subsystems", {})
+        for name, info in subs.items():
+            attrs[f"{name}_status"] = info.get("status", "unknown")
+            if info.get("num_user") is not None:
+                attrs[f"{name}_clients"] = info["num_user"]
+        if h.get("error"):
+            attrs["last_error"] = h["error"]
+        return attrs
+
+
+class ThreatEventsSensor(_BaseSensor):
+    """Count of recent IDS/IPS threat events from the controller."""
+
+    def __init__(self, coordinator: UniFiBlockerCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "threat_events", "Threat events", "mdi:shield-bug")
+
+    @property
+    def native_value(self) -> int | None:
+        if not self._data:
+            return None
+        return len(self._data.threat_events)
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        if not self._data:
+            return None
+        events = self._data.threat_events[:20]  # cap at 20 for attribute size
+        return {
+            "events": [
+                {
+                    "key": e.get("key", ""),
+                    "msg": e.get("msg", ""),
+                    "time": e.get("time"),
+                    "src_ip": e.get("src_ip", ""),
+                    "dst_ip": e.get("dst_ip", ""),
+                    "catname": e.get("catname", ""),
+                    "inner_alert_severity": e.get("inner_alert_severity", ""),
+                }
+                for e in events
+            ],
+        }

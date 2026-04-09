@@ -23,6 +23,10 @@ API_ALL_USERS = "/proxy/network/api/s/{site}/rest/user"
 API_DEVICE_CMD = "/proxy/network/api/s/{site}/cmd/stamgr"
 API_DEVICES = "/proxy/network/api/s/{site}/stat/device"
 API_SYSINFO = "/proxy/network/api/s/{site}/stat/sysinfo"
+API_EVENTS = "/proxy/network/api/s/{site}/stat/event"
+API_ROGUE_AP = "/proxy/network/api/s/{site}/stat/rogueap"
+API_HEALTH = "/proxy/network/api/s/{site}/stat/health"
+API_DPI = "/proxy/network/api/s/{site}/stat/stadpi"
 
 # ── Device states ────────────────────────────────────────────────────
 STATE_NEW = "new"

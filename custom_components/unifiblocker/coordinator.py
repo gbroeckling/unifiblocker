@@ -10,8 +10,10 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .const import DOMAIN, STATE_NEW, STATE_QUARANTINED, STATE_TRUSTED, STATE_IGNORED
 from .device_store import DeviceStore
+from .port_identify import analyze_dpi_entry
+from .suspicious_traffic import analyze_all_clients
 from .unifi_api import UniFiApi, UniFiApiError
-from .vendor_lookup import lookup_vendor_safe
+from .vendor_lookup import is_camera_like, lookup_vendor_safe
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,10 +26,18 @@ class UniFiBlockerData:
         clients: list[dict[str, Any]],
         devices: list[dict[str, Any]],
         store: DeviceStore,
+        suspicion: dict[str, dict[str, Any]],
+        events: list[dict[str, Any]],
+        health: dict[str, Any],
+        dpi: dict[str, dict[str, Any]],
     ) -> None:
         self.clients = clients
         self.devices = devices
         self.store = store
+        self.suspicion = suspicion          # mac → analysis result
+        self.events = events                # recent IDS/IPS events
+        self.health = health                # connection + subsystem health
+        self.dpi = dpi                      # mac → DPI analysis result
 
     # ── convenience counts ───────────────────────────────────────────
 
@@ -63,6 +73,29 @@ class UniFiBlockerData:
     def ignored_count(self) -> int:
         return len(self.store.get_devices_by_state(STATE_IGNORED))
 
+    @property
+    def suspicious_clients(self) -> list[dict[str, Any]]:
+        """Clients flagged as suspicious."""
+        return [
+            c for c in self.clients
+            if self.suspicion.get(c.get("mac", "").lower(), {}).get("suspicious")
+        ]
+
+    @property
+    def suspicious_count(self) -> int:
+        return len(self.suspicious_clients)
+
+    @property
+    def threat_events(self) -> list[dict[str, Any]]:
+        """IDS/IPS events from the controller."""
+        return [
+            e for e in self.events
+            if e.get("key", "").startswith("EVT_IPS")
+            or "threat" in e.get("msg", "").lower()
+            or "intrusion" in e.get("msg", "").lower()
+            or "attack" in e.get("msg", "").lower()
+        ]
+
     def client_by_mac(self, mac: str) -> dict[str, Any] | None:
         mac = mac.lower()
         for c in self.clients:
@@ -73,6 +106,8 @@ class UniFiBlockerData:
     def enrich_client(self, client: dict[str, Any]) -> dict[str, Any]:
         """Return a display-friendly dict for a single client."""
         mac = client.get("mac", "")
+        mac_lower = mac.lower()
+        susp = self.suspicion.get(mac_lower, {})
         return {
             "mac": mac,
             "name": client.get("name") or client.get("hostname") or "",
@@ -94,6 +129,19 @@ class UniFiBlockerData:
             "state": self.store.get_state(mac),
             "first_seen": client.get("first_seen"),
             "last_seen": client.get("last_seen"),
+            # ── suspicious traffic fields ────────────────────────────
+            "suspicious": susp.get("suspicious", False),
+            "threat_level": susp.get("threat_level", "none"),
+            "suspicion_score": susp.get("score", 0),
+            "suspicion_flags": susp.get("flags", []),
+            # ── camera detection ─────────────────────────────────────
+            "is_camera": is_camera_like(
+                mac,
+                client.get("hostname") or client.get("name") or "",
+                client.get("oui") or lookup_vendor_safe(mac),
+            ),
+            # ── DPI / traffic analysis ───────────────────────────────
+            "dpi": self.dpi.get(mac_lower, {}),
         }
 
     def all_clients_enriched(self) -> list[dict[str, Any]]:
@@ -128,7 +176,9 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         except UniFiApiError as err:
             raise UpdateFailed(f"Error communicating with UniFi: {err}") from err
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
+        now_iso = now.isoformat()
+        now_ts = now.timestamp()
 
         # Merge every active client into the persistent store.
         for client in clients:
@@ -140,10 +190,46 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             if first_seen and isinstance(first_seen, (int, float)):
                 first_seen = datetime.fromtimestamp(first_seen, tz=timezone.utc).isoformat()
             await self.store.upsert_from_unifi(
-                mac, name=name, first_seen=first_seen, last_seen=now
+                mac, name=name, first_seen=first_seen, last_seen=now_iso
             )
 
         # Persist once after the full batch.
         await self.store.async_save()
 
-        return UniFiBlockerData(clients=clients, devices=devices, store=self.store)
+        # Run suspicious-traffic analysis on every client.
+        suspicion = analyze_all_clients(
+            clients,
+            now_ts=now_ts,
+            store_get_state=self.store.get_state,
+        )
+
+        # Pull IDS/IPS events, health, and DPI (best-effort, don't fail the poll).
+        events: list[dict[str, Any]] = []
+        health: dict[str, Any] = {}
+        dpi: dict[str, dict[str, Any]] = {}
+        try:
+            events = await self.api.get_events(limit=100)
+        except UniFiApiError:
+            _LOGGER.debug("Could not fetch events", exc_info=True)
+        try:
+            health = await self.api.check_health()
+        except UniFiApiError:
+            _LOGGER.debug("Could not fetch health", exc_info=True)
+        try:
+            raw_dpi = await self.api.get_dpi_stats()
+            for entry in raw_dpi:
+                mac_key = entry.get("mac", "").lower()
+                if mac_key:
+                    dpi[mac_key] = analyze_dpi_entry(entry)
+        except UniFiApiError:
+            _LOGGER.debug("Could not fetch DPI stats", exc_info=True)
+
+        return UniFiBlockerData(
+            clients=clients,
+            devices=devices,
+            store=self.store,
+            suspicion=suspicion,
+            events=events,
+            health=health,
+            dpi=dpi,
+        )

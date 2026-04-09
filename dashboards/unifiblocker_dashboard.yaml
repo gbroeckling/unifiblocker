@@ -21,6 +21,18 @@ views:
     badges: []
     cards:
 
+      # ── controller health ──────────────────────────────────────────
+      - type: horizontal-stack
+        cards:
+          - type: entity
+            entity: binary_sensor.unifiblocker_controller_reachable
+            name: UCG Max
+            state_color: true
+          - type: entity
+            entity: sensor.unifiblocker_connection_health
+            name: Connection
+            state_color: true
+
       # ── top row: counters ──────────────────────────────────────────
       - type: horizontal-stack
         cards:
@@ -37,12 +49,17 @@ views:
             name: Wired
             icon: mdi:ethernet
 
+      # ── security counters ──────────────────────────────────────────
       - type: horizontal-stack
         cards:
           - type: entity
             entity: sensor.unifiblocker_new_devices
-            name: New / Unreviewed
+            name: New
             icon: mdi:alert-decagram
+          - type: entity
+            entity: sensor.unifiblocker_suspicious_devices
+            name: Suspicious
+            icon: mdi:alert-octagon
           - type: entity
             entity: sensor.unifiblocker_blocked_devices
             name: Blocked
@@ -56,11 +73,42 @@ views:
             name: Trusted
             icon: mdi:shield-check
 
-      # ── binary alert ───────────────────────────────────────────────
+      # ── binary alerts ──────────────────────────────────────────────
+      - type: horizontal-stack
+        cards:
+          - type: entity
+            entity: binary_sensor.unifiblocker_devices_pending_review
+            name: New Devices Alert
+            state_color: true
+          - type: entity
+            entity: binary_sensor.unifiblocker_suspicious_traffic_detected
+            name: Suspicious Traffic Alert
+            state_color: true
+
+      # ── threat events ──────────────────────────────────────────────
       - type: entity
-        entity: binary_sensor.unifiblocker_devices_pending_review
-        name: Devices Need Review
-        state_color: true
+        entity: sensor.unifiblocker_threat_events
+        name: IDS/IPS Threat Events
+        icon: mdi:shield-bug
+
+      # ── controller details ─────────────────────────────────────────
+      - type: markdown
+        title: Controller Status
+        content: >
+          {% set h = state_attr('sensor.unifiblocker_connection_health', 'controller_hostname') %}
+          {% set v = state_attr('sensor.unifiblocker_connection_health', 'controller_version') %}
+          {% set u = state_attr('sensor.unifiblocker_connection_health', 'controller_uptime') %}
+          {% set wan = state_attr('sensor.unifiblocker_connection_health', 'wan_status') %}
+          {% set lan = state_attr('sensor.unifiblocker_connection_health', 'lan_status') %}
+          {% set wlan = state_attr('sensor.unifiblocker_connection_health', 'wlan_status') %}
+          | Property | Value |
+          |----------|-------|
+          | Hostname | {{ h or '—' }} |
+          | Firmware | {{ v or '—' }} |
+          | Uptime | {{ ((u or 0) / 3600) | round(1) }} hours |
+          | WAN | {{ wan or '—' }} |
+          | LAN | {{ lan or '—' }} |
+          | WLAN | {{ wlan or '—' }} |
 
       # ── history graphs ─────────────────────────────────────────────
       - type: history-graph
@@ -80,13 +128,90 @@ views:
         entities:
           - entity: sensor.unifiblocker_new_devices
             name: New
+          - entity: sensor.unifiblocker_suspicious_devices
+            name: Suspicious
           - entity: sensor.unifiblocker_blocked_devices
             name: Blocked
           - entity: sensor.unifiblocker_quarantined_devices
             name: Quarantined
 
   # ════════════════════════════════════════════════════════════════════
-  #  VIEW 2 – New / Unidentified Devices  (the review queue)
+  #  VIEW 2 – Suspicious Traffic
+  # ════════════════════════════════════════════════════════════════════
+  - title: Suspicious
+    path: suspicious
+    icon: mdi:alert-octagon
+    cards:
+
+      - type: entity
+        entity: sensor.unifiblocker_suspicious_devices
+        name: Suspicious devices
+        state_color: true
+
+      - type: markdown
+        title: Suspicious Traffic Analysis
+        content: >
+          Devices are scored on: randomized MAC, unknown vendor, no
+          hostname, camera vendor detected, high bandwidth, camera on
+          main network, guest-network abuse, phone-home traffic (DPI),
+          and prior block status.  Score **3+** = suspicious.
+
+      - type: markdown
+        title: Flagged Devices
+        content: >
+          {% set devs = state_attr('sensor.unifiblocker_suspicious_devices', 'devices') %}
+          {% if devs and devs | length > 0 %}
+          {% for d in devs %}
+          ### {{ loop.index }}. `{{ d.mac }}` — {{ d.name or 'No name' }} ({{ d.vendor or 'Unknown' }})
+
+          {% if d.is_camera %}**📹 CAMERA DETECTED**{% endif %}
+
+          **Threat level:** {{ d.threat_level | upper }}  |  **Score:** {{ d.suspicion_score }}  |  **IP:** {{ d.ip or '—' }}  |  **SSID:** {{ d.essid or '—' }}  |  **State:** {{ d.state }}
+
+          **Flags:**
+          {% for f in d.suspicion_flags %}
+          - {{ f }}
+          {% endfor %}
+          {% if d.dpi and d.dpi.top_categories is defined and d.dpi.top_categories | length > 0 %}
+
+          **Traffic breakdown (DPI):**
+
+          | Category | Download | Upload |
+          |----------|----------|--------|
+          {% for cat in d.dpi.top_categories %}
+          | {{ cat.category }} | {{ cat.rx_mb }} MB | {{ cat.tx_mb }} MB |
+          {% endfor %}
+          {% endif %}
+          {% if d.dpi and d.dpi.flags is defined and d.dpi.flags | length > 0 %}
+
+          **DPI warnings:**
+          {% for f in d.dpi.flags %}
+          - {{ f }}
+          {% endfor %}
+          {% endif %}
+
+          ---
+          {% endfor %}
+          {% else %}
+          **No suspicious devices detected.**  All clients look normal.
+          {% endif %}
+
+      - type: markdown
+        title: IDS/IPS Threat Events
+        content: >
+          {% set evts = state_attr('sensor.unifiblocker_threat_events', 'events') %}
+          {% if evts and evts | length > 0 %}
+          | Time | Category | Message | Source | Dest |
+          |------|----------|---------|--------|------|
+          {% for e in evts %}
+          | {{ e.time }} | {{ e.catname or '—' }} | {{ e.msg[:60] if e.msg else '—' }} | {{ e.src_ip or '—' }} | {{ e.dst_ip or '—' }} |
+          {% endfor %}
+          {% else %}
+          _No recent threat events from the controller._
+          {% endif %}
+
+  # ════════════════════════════════════════════════════════════════════
+  #  VIEW 3 – New / Unidentified Devices  (the review queue)
   # ════════════════════════════════════════════════════════════════════
   - title: New Devices
     path: new-devices
@@ -96,21 +221,53 @@ views:
       - type: markdown
         title: Unidentified Devices Awaiting Review
         content: >
-          The table below lists every device that has connected to your
-          network but has **not yet been classified**.  Use the service
-          calls below each row to mark the device as **Trusted**,
-          **Ignored**, or **Quarantined** (which blocks it on the
-          controller).
+          Every device below has connected to your network but has
+          **not been classified**.  Suspicious indicators are shown
+          inline.  Use the services to mark each device.
 
       - type: markdown
         title: New Device Details
         content: >
           {% set devs = state_attr('sensor.unifiblocker_new_devices', 'devices') %}
           {% if devs and devs | length > 0 %}
-          | # | MAC | Name | Vendor | IP | SSID | RSSI | Wired |
-          |---|-----|------|--------|----|------|------|-------|
           {% for d in devs %}
-          | {{ loop.index }} | `{{ d.mac }}` | {{ d.name or '—' }} | {{ d.vendor or 'Unknown' }} | {{ d.ip or '—' }} | {{ d.essid or '—' }} | {{ d.rssi if d.rssi is not none else '—' }} | {{ 'Yes' if d.wired else 'No' }} |
+          ### {{ loop.index }}. `{{ d.mac }}` {% if d.is_camera %} 📹 CAMERA{% endif %}
+
+          | Field | Value |
+          |-------|-------|
+          | **Name** | {{ d.name or '—' }} |
+          | **Hostname** | {{ d.hostname or '—' }} |
+          | **Vendor** | {{ d.vendor or 'Unknown' }} |
+          | **IP** | {{ d.ip or '—' }} |
+          | **SSID** | {{ d.essid or '—' }} |
+          | **Wired** | {{ 'Yes' if d.wired else 'No' }} |
+          | **RSSI** | {{ d.rssi if d.rssi is not none else '—' }} dBm |
+          | **Channel** | {{ d.channel or '—' }} / {{ d.radio or '—' }} |
+          | **Camera** | {{ 'YES' if d.is_camera else 'No' }} |
+          | **Suspicious** | {{ '**YES** (' ~ d.threat_level ~ ')' if d.suspicious else 'No' }} |
+          {% if d.suspicion_flags | length > 0 %}
+          | **Flags** | {% for f in d.suspicion_flags %}{{ f }}{{ '; ' if not loop.last }}{% endfor %} |
+          {% endif %}
+          | **TX/RX** | {{ ((d.tx_bytes or 0) / 1000000) | round(1) }} / {{ ((d.rx_bytes or 0) / 1000000) | round(1) }} MB |
+          {% if d.dpi and d.dpi.top_categories is defined and d.dpi.top_categories | length > 0 %}
+
+          **What it's doing (DPI):**
+
+          | Category | Down | Up |
+          |----------|------|-----|
+          {% for cat in d.dpi.top_categories %}
+          | {{ cat.category }} | {{ cat.rx_mb }} MB | {{ cat.tx_mb }} MB |
+          {% endfor %}
+          {% endif %}
+          {% if d.dpi and d.dpi.flags is defined and d.dpi.flags | length > 0 %}
+
+          **⚠ DPI warnings:**
+          {% for f in d.dpi.flags %}
+          - {{ f }}
+          {% endfor %}
+          {% endif %}
+
+          ---
           {% endfor %}
           {% else %}
           **No new devices** – all clients have been reviewed.
@@ -119,20 +276,18 @@ views:
       - type: markdown
         title: Quick Actions
         content: >
-          To classify a device, go to **Developer Tools → Services** and call:
+          Call these services from **Developer Tools → Services** or
+          use automations.  Pass `mac: "aa:bb:cc:dd:ee:ff"`.
 
 
-          - `unifiblocker.trust_device` — mark safe, unblock if blocked
+          - `unifiblocker.trust_device` — safe, unblock if blocked
 
           - `unifiblocker.ignore_device` — hide from review queue
 
           - `unifiblocker.quarantine_device` — block on the controller
 
-
-          Pass `mac: "aa:bb:cc:dd:ee:ff"` as the service data.
-
   # ════════════════════════════════════════════════════════════════════
-  #  VIEW 3 – All Connected Clients  (full detail table)
+  #  VIEW 4 – All Connected Clients  (full detail table)
   # ════════════════════════════════════════════════════════════════════
   - title: All Clients
     path: all-clients
@@ -140,21 +295,21 @@ views:
     cards:
 
       - type: markdown
-        title: Connected Clients (full detail)
+        title: Connected Clients
         content: >
           {% set clients = state_attr('sensor.unifiblocker_all_clients_detail', 'clients') %}
           {% if clients and clients | length > 0 %}
-          | MAC | Name | Vendor | IP | State | SSID | Signal | Wired | Blocked |
-          |-----|------|--------|----|-------|------|--------|-------|---------|
+          | MAC | Name | Vendor | IP | State | SSID | RSSI | Wired | Blocked | Cam | Threat |
+          |-----|------|--------|----|-------|------|------|-------|---------|-----|--------|
           {% for c in clients | sort(attribute='name') %}
-          | `{{ c.mac }}` | {{ c.name or '—' }} | {{ c.vendor or '?' }} | {{ c.ip or '—' }} | {{ c.state }} | {{ c.essid or '—' }} | {{ c.rssi if c.rssi is not none else '—' }} | {{ '✔' if c.wired else '' }} | {{ '🚫' if c.blocked else '' }} |
+          | `{{ c.mac }}` | {{ c.name or '—' }} | {{ c.vendor or '?' }} | {{ c.ip or '—' }} | {{ c.state }} | {{ c.essid or '—' }} | {{ c.rssi if c.rssi is not none else '—' }} | {{ '✔' if c.wired else '' }} | {{ '🚫' if c.blocked else '' }} | {{ '📹' if c.is_camera else '' }} | {{ c.threat_level if c.threat_level != 'none' else '' }} |
           {% endfor %}
           {% else %}
           _No client data yet — waiting for first poll._
           {% endif %}
 
   # ════════════════════════════════════════════════════════════════════
-  #  VIEW 4 – Quarantined / Blocked Devices
+  #  VIEW 5 – Quarantined / Blocked Devices
   # ════════════════════════════════════════════════════════════════════
   - title: Quarantined
     path: quarantined
@@ -170,10 +325,10 @@ views:
         content: >
           {% set devs = state_attr('sensor.unifiblocker_quarantined_devices', 'devices') %}
           {% if devs and devs | length > 0 %}
-          | MAC | Name | Vendor | IP | Blocked on controller |
-          |-----|------|--------|----|----------------------|
+          | MAC | Name | Vendor | IP | Blocked | Threat |
+          |-----|------|--------|----|---------|--------|
           {% for d in devs %}
-          | `{{ d.mac }}` | {{ d.name or '—' }} | {{ d.vendor or '?' }} | {{ d.ip or '—' }} | {{ '✔' if d.blocked else '—' }} |
+          | `{{ d.mac }}` | {{ d.name or '—' }} | {{ d.vendor or '?' }} | {{ d.ip or '—' }} | {{ '✔' if d.blocked else '—' }} | {{ d.threat_level }} |
           {% endfor %}
           {% else %}
           _No quarantined devices._
@@ -187,7 +342,107 @@ views:
           then `unifiblocker.trust_device` to move it out of quarantine.
 
   # ════════════════════════════════════════════════════════════════════
-  #  VIEW 5 – Device Actions (service call buttons)
+  #  VIEW 6 – Connection & Access
+  # ════════════════════════════════════════════════════════════════════
+  - title: Connection
+    path: connection
+    icon: mdi:server-network
+    cards:
+
+      - type: entity
+        entity: binary_sensor.unifiblocker_controller_reachable
+        name: UCG Max Reachable
+        state_color: true
+
+      - type: entity
+        entity: sensor.unifiblocker_connection_health
+        name: Connection Status
+
+      - type: markdown
+        title: Controller Details
+        content: >
+          {% set h = states.sensor.unifiblocker_connection_health.attributes %}
+          | Property | Value |
+          |----------|-------|
+          | Connection | {{ h.connection_ok if h.connection_ok is defined else '—' }} |
+          | Hostname | {{ h.controller_hostname or '—' }} |
+          | Firmware | {{ h.controller_version or '—' }} |
+          | Uptime | {{ ((h.controller_uptime or 0) / 3600) | round(1) }} hours |
+          {% if h.last_error %}
+          | Last Error | {{ h.last_error }} |
+          {% endif %}
+
+      - type: markdown
+        title: UCG Max Setup Guide
+        content: >
+          ## How to connect UniFi Blocker to your UCG Max
+
+
+          **1. Create a local-only admin account on the UCG Max**
+
+
+          UniFi Blocker connects directly to the controller's local
+          HTTPS API. Cloud-only (Ubiquiti SSO) accounts **will not
+          work** — you must create a local admin:
+
+
+          - Open the UniFi OS console at `https://<your-ucg-ip>`
+
+          - Go to **OS Settings → Admins & Users → Add Admin**
+
+          - Choose **"Local Access Only"**
+
+          - Set a strong username and password
+
+          - Role: **Administrator** (needed for block/unblock)
+
+
+          **2. Find your controller IP**
+
+
+          Your UCG Max is typically at `192.168.1.1`.  You can also
+          check **Settings → System → General** in the UniFi console.
+
+
+          **3. Configure the integration**
+
+
+          In HA, go to **Settings → Devices & Services → Add Integration
+          → UniFi Blocker** and enter:
+
+          - **Host:** your UCG Max IP (e.g. `192.168.1.1`)
+
+          - **Username:** the local admin you just created
+
+          - **Password:** the local admin password
+
+          - **Site:** `default` (unless you renamed it)
+
+          - **Verify SSL:** Off (UCG Max uses a self-signed cert)
+
+          - **Scan interval:** 60 seconds (adjust as needed)
+
+
+          The integration tests the connection before saving.
+          If it fails, check:
+
+          - Is the IP correct and reachable?
+
+          - Is the account local (not cloud-only)?
+
+          - Is the account an Administrator role?
+
+          - Is port 443 open on the UCG Max?
+
+
+          **4. Firewall note**
+
+
+          If HA and the UCG Max are on different VLANs, ensure HA
+          can reach the controller on TCP 443.
+
+  # ════════════════════════════════════════════════════════════════════
+  #  VIEW 7 – Actions
   # ════════════════════════════════════════════════════════════════════
   - title: Actions
     path: actions
@@ -214,3 +469,78 @@ views:
 
 
           All services take a single field: `mac` (e.g. `"aa:bb:cc:dd:ee:ff"`)
+
+  # ════════════════════════════════════════════════════════════════════
+  #  VIEW 8 – Port & Protocol Reference
+  # ════════════════════════════════════════════════════════════════════
+  - title: Port Guide
+    path: port-guide
+    icon: mdi:lan
+    cards:
+
+      - type: markdown
+        title: What Ports Mean
+        content: >
+          When you see a device using these ports, here's what it's
+          likely doing.  **Red = risky / phone-home.**
+
+
+          ## Camera Ports (watch for these)
+
+
+          | Port | Protocol | What it means |
+          |------|----------|---------------|
+          | 554 | RTSP | Live video stream — normal for local viewing |
+          | 1935 | RTMP | Live video push — often to cloud servers |
+          | 8554 | RTSP-alt | Alternate video stream port |
+          | 8000 | Hikvision | Hikvision SDK management |
+          | 8200 | Hikvision | Hikvision ISAPI web services |
+          | 9527 | Hikvision | Hikvision SDK — camera control |
+          | 34567 | **XMEye** | **Chinese DVR phoning home to cloud** |
+          | 34568 | **XMEye** | **XMEye media — DVR sending video to China** |
+          | 37777 | Dahua TCP | Dahua DVR/NVR connection |
+          | 37778 | Dahua UDP | Dahua DVR/NVR media stream |
+          | 9530 | **Dahua** | **Dahua debug/backdoor port** |
+          | 6789 | **P2P cloud** | **P2P relay — camera phoning home** |
+          | 32100 | **Reolink** | **Reolink P2P cloud connection** |
+          | 19000 | **EZVIZ** | **EZVIZ/Hikvision P2P cloud relay** |
+          | 8800 | **Cloud relay** | **Generic cloud callback** |
+
+
+          ## Risky / Suspicious Ports
+
+
+          | Port | Protocol | What it means |
+          |------|----------|---------------|
+          | 23 | **Telnet** | **Insecure remote access — often a backdoor** |
+          | 2323 | **Telnet-alt** | **Alternate telnet — IoT malware target** |
+          | 21 | FTP | File transfer (insecure) — data exfiltration |
+          | 25 | SMTP | Email sending — could be spam relay |
+          | 445 | SMB | Windows file sharing — lateral movement |
+          | 1900 | UPnP | Can auto-open firewall holes |
+          | 67 | DHCP-server | Rogue DHCP server? |
+
+
+          ## Normal Network Ports
+
+
+          | Port | Protocol | What it means |
+          |------|----------|---------------|
+          | 53 | DNS | Name resolution |
+          | 80 | HTTP | Web traffic |
+          | 443 | HTTPS | Encrypted web traffic |
+          | 123 | NTP | Time sync |
+          | 5353 | mDNS | Local device discovery |
+          | 1883 | MQTT | IoT messaging |
+          | 8883 | MQTT-TLS | Encrypted IoT messaging |
+          | 22 | SSH | Secure remote management |
+
+
+          ## What to do
+
+
+          If you see a camera hitting ports **34567, 34568, 6789, 9530,
+          32100, or 19000** — it's phoning home to a cloud server
+          (likely in China).  **Quarantine it** with
+          `unifiblocker.quarantine_device` and consider isolating all
+          cameras to a dedicated VLAN with no WAN access.
