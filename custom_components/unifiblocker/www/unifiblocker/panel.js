@@ -136,6 +136,12 @@ class UniFiBlockerPanel extends HTMLElement {
     if (!mc) return;
     switch (this._view) {
       case "overview": mc.innerHTML = this._vOverview(); break;
+      case "detail_connected": mc.innerHTML = this._vDetailConnected(); break;
+      case "detail_wireless": mc.innerHTML = this._vDetailWireless(); break;
+      case "detail_wired": mc.innerHTML = this._vDetailWired(); break;
+      case "detail_blocked": mc.innerHTML = this._vDetailBlocked(); break;
+      case "detail_trusted": mc.innerHTML = this._vDetailTrusted(); break;
+      case "detail_threats": mc.innerHTML = this._vDetailThreats(); break;
       case "new": mc.innerHTML = this._vDeviceList(this._overview.new_devices || [], "New / Unidentified Devices", "Devices that haven't been classified yet."); break;
       case "suspicious": mc.innerHTML = this._vDeviceList((this._overview.suspicious_devices || []).sort((a,b) => (b.suspicion_score||0)-(a.suspicion_score||0)), "Suspicious Traffic", "Devices scored 3+ on behavioral heuristics."); break;
       case "clients": mc.innerHTML = this._vClients(); break;
@@ -149,6 +155,9 @@ class UniFiBlockerPanel extends HTMLElement {
   }
 
   _bindActions(mc) {
+    mc.querySelectorAll("[data-statview]").forEach(el => {
+      el.addEventListener("click", () => { this._view = el.dataset.statview; this._viewArg = null; this._render(); });
+    });
     mc.querySelectorAll("[data-action]").forEach(btn => {
       btn.addEventListener("click", () => {
         if (!this._actionMode) { alert("Enable Action Mode first."); return; }
@@ -199,14 +208,14 @@ class UniFiBlockerPanel extends HTMLElement {
     return `
       <h1>Network Overview</h1>
       <div class="stat-grid">
-        ${this._stat("Connected", o.total_clients||0, "📱")}
-        ${this._stat("Wireless", o.wireless_count||0, "📶")}
-        ${this._stat("Wired", o.wired_count||0, "🔗")}
-        ${this._stat("New", o.new_count||0, "🆕", o.new_count>0?"warn":"")}
-        ${this._stat("Suspicious", o.suspicious_count||0, "⚠", o.suspicious_count>0?"danger":"")}
-        ${this._stat("Blocked", o.blocked_count||0, "🚫")}
-        ${this._stat("Trusted", o.trusted_count||0, "✅")}
-        ${this._stat("Threats", o.threat_events||0, "🐛", o.threat_events>0?"danger":"")}
+        ${this._stat("Connected", o.total_clients||0, "📱", "", "detail_connected")}
+        ${this._stat("Wireless", o.wireless_count||0, "📶", "", "detail_wireless")}
+        ${this._stat("Wired", o.wired_count||0, "🔗", "", "detail_wired")}
+        ${this._stat("New", o.new_count||0, "🆕", o.new_count>0?"warn":"", "new")}
+        ${this._stat("Suspicious", o.suspicious_count||0, "⚠", o.suspicious_count>0?"danger":"", "suspicious")}
+        ${this._stat("Blocked", o.blocked_count||0, "🚫", "", "detail_blocked")}
+        ${this._stat("Trusted", o.trusted_count||0, "✅", "", "detail_trusted")}
+        ${this._stat("Threats", o.threat_events||0, "🐛", o.threat_events>0?"danger":"", "detail_threats")}
       </div>
       ${catSummary}
       <div class="card"><h2>Controller</h2>
@@ -218,6 +227,270 @@ class UniFiBlockerPanel extends HTMLElement {
         </table>
       </div>
       ${this._actionMode?"":"<div class=\"ro-banner\">Read-only mode — enable Action Mode in the sidebar</div>"}`;
+  }
+
+  // ── Detail views (stat card click-through) ────────────────────────
+
+  _vDetailConnected() {
+    const clients = this._data.clients || [];
+    const o = this._overview;
+    const catCounts = o.category_counts || {};
+    const catLabels = o.category_labels || {};
+    const catIcons = o.category_icons || {};
+    const totalTx = clients.reduce((s,c) => s + (c.tx_bytes||0), 0);
+    const totalRx = clients.reduce((s,c) => s + (c.rx_bytes||0), 0);
+    const avgRssi = clients.filter(c=>c.rssi).reduce((s,c,_,a) => s + c.rssi/a.length, 0);
+
+    // Top talkers
+    const topTalkers = clients.slice().sort((a,b) => ((b.tx_bytes||0)+(b.rx_bytes||0)) - ((a.tx_bytes||0)+(a.rx_bytes||0))).slice(0, 10);
+
+    return `
+      <button class="btn-back" data-statview="overview">← Back to Overview</button>
+      <h1>📱 Connected Clients <span class="count">${clients.length}</span></h1>
+      <p class="subtitle">Every device currently on your network. Tap any column to sort.</p>
+
+      <div class="stat-grid">
+        ${this._stat("Total", clients.length, "📱")}
+        ${this._stat("Wireless", o.wireless_count||0, "📶")}
+        ${this._stat("Wired", o.wired_count||0, "🔗")}
+        ${this._stat("Total Upload", this._fmtB(totalTx), "⬆")}
+        ${this._stat("Total Download", this._fmtB(totalRx), "⬇")}
+        ${this._stat("Avg Signal", avgRssi?Math.round(avgRssi)+" dBm":"—", "📡")}
+      </div>
+
+      <div class="card"><h2>Category Breakdown</h2>
+        <div class="cat-grid">
+          ${Object.entries(catCounts).sort((a,b)=>b[1]-a[1]).map(([cat,cnt]) =>
+            `<div class="cat-item"><span class="cat-icon">${catIcons[cat]||"❓"}</span><span class="cat-count">${cnt}</span><span class="cat-label">${catLabels[cat]||cat}</span></div>`
+          ).join("")}
+        </div>
+      </div>
+
+      <div class="card"><h2>Top 10 Bandwidth Users</h2>
+        <table class="data-table"><thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>Category</th><th>Upload</th><th>Download</th><th>Total</th></tr></thead><tbody>
+          ${topTalkers.map(c => `<tr>
+            <td class="mono">${c.mac}</td><td>${c.name||"—"}</td><td>${c.vendor||"?"}</td>
+            <td>${c.category_icon||""} ${c.category_label||""}</td>
+            <td>${this._fmtB(c.tx_bytes)}</td><td>${this._fmtB(c.rx_bytes)}</td>
+            <td><strong>${this._fmtB((c.tx_bytes||0)+(c.rx_bytes||0))}</strong></td>
+          </tr>`).join("")}
+        </tbody></table>
+      </div>
+
+      <div class="card"><h2>All Connected (${clients.length})</h2>
+        ${clients.map((d,i) => this._deviceCard(d, i+1)).join("")}
+      </div>`;
+  }
+
+  _vDetailWireless() {
+    const clients = (this._data.clients || []).filter(c => !c.wired);
+    // Group by SSID
+    const ssidMap = {};
+    clients.forEach(c => { const s = c.essid||"Unknown"; ssidMap[s] = (ssidMap[s]||0)+1; });
+    // Group by channel
+    const chanMap = {};
+    clients.forEach(c => { if(c.channel) chanMap[c.channel] = (chanMap[c.channel]||0)+1; });
+    // Signal distribution
+    const sigBuckets = {"Excellent (>-50)":0, "Good (-50 to -65)":0, "Fair (-65 to -75)":0, "Weak (-75 to -85)":0, "Very Weak (<-85)":0, "Unknown":0};
+    clients.forEach(c => {
+      const r = c.rssi;
+      if(r==null) sigBuckets["Unknown"]++;
+      else if(r>-50) sigBuckets["Excellent (>-50)"]++;
+      else if(r>-65) sigBuckets["Good (-50 to -65)"]++;
+      else if(r>-75) sigBuckets["Fair (-65 to -75)"]++;
+      else if(r>-85) sigBuckets["Weak (-75 to -85)"]++;
+      else sigBuckets["Very Weak (<-85)"]++;
+    });
+
+    return `
+      <button class="btn-back" data-statview="overview">← Back to Overview</button>
+      <h1>📶 Wireless Clients <span class="count">${clients.length}</span></h1>
+      <p class="subtitle">All Wi-Fi connected devices with signal quality, SSID, channel, and radio band information.</p>
+
+      <div class="card"><h2>By SSID</h2>
+        <table class="data-table"><thead><tr><th>SSID</th><th>Clients</th></tr></thead><tbody>
+          ${Object.entries(ssidMap).sort((a,b)=>b[1]-a[1]).map(([s,n]) => `<tr><td><strong>${s}</strong></td><td>${n}</td></tr>`).join("")}
+        </tbody></table>
+      </div>
+
+      <div class="card"><h2>By Channel</h2>
+        <table class="data-table"><thead><tr><th>Channel</th><th>Clients</th></tr></thead><tbody>
+          ${Object.entries(chanMap).sort((a,b)=>a[0]-b[0]).map(([ch,n]) => `<tr><td>Channel ${ch}</td><td>${n}</td></tr>`).join("")}
+        </tbody></table>
+      </div>
+
+      <div class="card"><h2>Signal Quality Distribution</h2>
+        <table class="data-table"><thead><tr><th>Signal Level</th><th>Clients</th></tr></thead><tbody>
+          ${Object.entries(sigBuckets).filter(([,n])=>n>0).map(([lbl,n]) => `<tr><td>${lbl}</td><td>${n}</td></tr>`).join("")}
+        </tbody></table>
+      </div>
+
+      <div class="card"><h2>All Wireless Clients</h2>
+        <table class="data-table"><thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>IP</th><th>SSID</th><th>Ch</th><th>Radio</th><th>RSSI</th><th>TX/RX</th></tr></thead><tbody>
+          ${clients.sort((a,b)=>(a.rssi||0)-(b.rssi||0)).map(c => `<tr class="${c.rssi&&c.rssi<-80?"row-warn":""}">
+            <td class="mono">${c.mac}</td><td>${c.name||"—"}</td><td>${c.vendor||"?"}</td><td class="mono">${c.ip||"—"}</td>
+            <td>${c.essid||"—"}</td><td>${c.channel||"—"}</td><td>${c.radio||"—"}</td>
+            <td>${c.rssi!=null?c.rssi+" dBm":"—"}</td><td>${this._fmtB(c.tx_bytes)}/${this._fmtB(c.rx_bytes)}</td>
+          </tr>`).join("")}
+        </tbody></table>
+      </div>`;
+  }
+
+  _vDetailWired() {
+    const clients = (this._data.clients || []).filter(c => c.wired);
+    const totalTx = clients.reduce((s,c) => s + (c.tx_bytes||0), 0);
+    const totalRx = clients.reduce((s,c) => s + (c.rx_bytes||0), 0);
+
+    return `
+      <button class="btn-back" data-statview="overview">← Back to Overview</button>
+      <h1>🔗 Wired Clients <span class="count">${clients.length}</span></h1>
+      <p class="subtitle">Devices connected via Ethernet. These have stable, high-speed connections and no signal concerns.</p>
+
+      <div class="stat-grid">
+        ${this._stat("Wired Clients", clients.length, "🔗")}
+        ${this._stat("Total Upload", this._fmtB(totalTx), "⬆")}
+        ${this._stat("Total Download", this._fmtB(totalRx), "⬇")}
+      </div>
+
+      <div class="card"><h2>All Wired Clients</h2>
+        <table class="data-table"><thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>IP</th><th>Category</th><th>State</th><th>Upload</th><th>Download</th></tr></thead><tbody>
+          ${clients.map(c => `<tr>
+            <td class="mono">${c.mac}</td><td>${c.name||"—"}</td><td>${c.vendor||"?"}</td><td class="mono">${c.ip||"—"}</td>
+            <td>${c.category_icon||""} ${c.category_label||""}</td><td><span class="badge ${c.state}">${c.state}</span></td>
+            <td>${this._fmtB(c.tx_bytes)}</td><td>${this._fmtB(c.rx_bytes)}</td>
+          </tr>`).join("")}
+        </tbody></table>
+      </div>`;
+  }
+
+  _vDetailBlocked() {
+    const clients = (this._data.clients || []).filter(c => c.blocked);
+    const quarantined = (this._data.clients || []).filter(c => c.state === "quarantined");
+    const allBlocked = [...new Map([...clients, ...quarantined].map(c=>[c.mac,c])).values()];
+
+    return `
+      <button class="btn-back" data-statview="overview">← Back to Overview</button>
+      <h1>🚫 Blocked Devices <span class="count">${allBlocked.length}</span></h1>
+      <p class="subtitle">Devices currently blocked on the UniFi controller or quarantined by UniFi Blocker. These devices cannot access the network.</p>
+
+      <div class="card">
+        <h2>What "Blocked" Means</h2>
+        <p>A blocked device has its MAC address added to the controller's block list. It can still see your Wi-Fi network and attempt to connect, but the controller will reject the association. The device gets no IP address and cannot send or receive any traffic.</p>
+        <p style="margin-top:8px">To unblock a device, enable <strong>Action Mode</strong> and click the Trust button, or call <code>unifiblocker.unblock_device</code>.</p>
+      </div>
+
+      ${allBlocked.length === 0 ? '<div class="empty">No blocked devices. Your network is allowing all connected clients.</div>' : ''}
+      ${allBlocked.map((d,i) => this._deviceCard(d, i+1)).join("")}`;
+  }
+
+  _vDetailTrusted() {
+    const clients = (this._data.clients || []).filter(c => c.state === "trusted");
+
+    return `
+      <button class="btn-back" data-statview="overview">← Back to Overview</button>
+      <h1>✅ Trusted Devices <span class="count">${clients.length}</span></h1>
+      <p class="subtitle">Devices you have explicitly marked as trusted. They will not appear in the New Devices review queue and will be automatically unblocked if blocked.</p>
+
+      <div class="card">
+        <h2>What "Trusted" Means</h2>
+        <p>A trusted device is one you recognize and want on your network. When you trust a device:</p>
+        <ul style="font-size:12px;padding-left:20px;margin-top:6px;line-height:1.8">
+          <li>It's removed from the New Devices review queue</li>
+          <li>If it was blocked, it's automatically unblocked on the controller</li>
+          <li>It stays in your trusted list across restarts</li>
+          <li>It won't be flagged by suspicious traffic analysis (but still monitored)</li>
+        </ul>
+      </div>
+
+      <div class="card"><h2>Category Breakdown</h2>
+        <div class="cat-grid">
+          ${(() => {
+            const cats = {};
+            clients.forEach(c => { const k = c.category_label||"Unknown"; cats[k] = (cats[k]||0)+1; });
+            return Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([cat,n]) =>
+              `<div class="cat-item"><span class="cat-count">${n}</span><span class="cat-label">${cat}</span></div>`
+            ).join("");
+          })()}
+        </div>
+      </div>
+
+      <div class="card"><h2>All Trusted (${clients.length})</h2>
+        <table class="data-table"><thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>IP</th><th>Category</th><th>SSID</th><th>TX/RX</th></tr></thead><tbody>
+          ${clients.map(c => `<tr>
+            <td class="mono">${c.mac}</td><td>${c.name||"—"}</td><td>${c.vendor||"?"}</td><td class="mono">${c.ip||"—"}</td>
+            <td>${c.category_icon||""} ${c.category_label||""}</td><td>${c.essid||"—"}</td>
+            <td>${this._fmtB(c.tx_bytes)}/${this._fmtB(c.rx_bytes)}</td>
+          </tr>`).join("")}
+        </tbody></table>
+      </div>`;
+  }
+
+  _vDetailThreats() {
+    const o = this._overview;
+    const suspDevices = o.suspicious_devices || [];
+    const evts = []; // We'd need threat events from WS — for now show suspicious devices
+    const cameras = (this._data.clients||[]).filter(c => c.is_camera);
+    const blocked = (this._data.clients||[]).filter(c => c.blocked);
+
+    return `
+      <button class="btn-back" data-statview="overview">← Back to Overview</button>
+      <h1>🐛 Threat Overview <span class="count">${o.threat_events||0} events</span></h1>
+      <p class="subtitle">Security events, suspicious devices, and potential threats detected on your network.</p>
+
+      <div class="stat-grid">
+        ${this._stat("IDS/IPS Events", o.threat_events||0, "🛡", o.threat_events>0?"danger":"")}
+        ${this._stat("Suspicious", o.suspicious_count||0, "⚠", o.suspicious_count>0?"danger":"")}
+        ${this._stat("Cameras", cameras.length, "📹", cameras.length>0?"warn":"")}
+        ${this._stat("Blocked", blocked.length, "🚫")}
+      </div>
+
+      <div class="card">
+        <h2>What to Watch For</h2>
+        <ul style="font-size:12px;padding-left:20px;line-height:2">
+          <li><strong>IDS/IPS Events</strong> — The UCG Max's built-in intrusion detection has flagged traffic patterns that match known attack signatures</li>
+          <li><strong>Suspicious Devices</strong> — Scored 3+ on our heuristic analysis: randomized MAC, unknown vendor, no hostname, camera phoning home, high bandwidth on guest network</li>
+          <li><strong>Cameras on Main Network</strong> — IP cameras that aren't isolated to an IoT VLAN can be used as a pivot point to reach other devices</li>
+          <li><strong>Devices Phoning Home</strong> — Cameras or IoT devices making outbound connections to cloud servers (ports 34567, 6789, 32100, etc.)</li>
+        </ul>
+      </div>
+
+      <div class="card danger-card"><h2>⚠ Suspicious Devices (${suspDevices.length})</h2>
+        ${suspDevices.length === 0 ? '<div class="empty">No suspicious devices — your network looks clean.</div>' : ''}
+        ${suspDevices.slice(0,10).map((d,i) => {
+          const flags = d.suspicion_flags||[];
+          return `<div style="padding:8px 0;border-bottom:1px solid var(--divider-color,#2a2a4a)">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span class="mono" style="font-weight:600">${d.mac}</span>
+              <span>${d.name||"—"}</span>
+              <span style="color:var(--secondary-text-color)">${d.vendor||"?"}</span>
+              <span class="badge ${d.threat_level}">${d.threat_level} (${d.suspicion_score}pts)</span>
+              ${d.is_camera?'<span class="badge camera">📹</span>':""}
+            </div>
+            ${flags.length?`<div style="margin-top:4px;font-size:11px">${flags.map(f=>`<div>⚠ ${f}</div>`).join("")}</div>`:""}
+          </div>`;
+        }).join("")}
+      </div>
+
+      ${cameras.length?`<div class="card warn-card"><h2>📹 Cameras on Network (${cameras.length})</h2>
+        <p class="subtitle">Every detected camera. Consider isolating these to a local-only subnet (192.168.2.x) to prevent phone-home traffic.</p>
+        <table class="data-table"><thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>IP</th><th>State</th><th>Blocked</th><th>TX/RX</th></tr></thead><tbody>
+          ${cameras.map(c=>`<tr>
+            <td class="mono">${c.mac}</td><td>${c.name||"—"}</td><td>${c.vendor||"?"}</td><td class="mono">${c.ip||"—"}</td>
+            <td><span class="badge ${c.state}">${c.state}</span></td><td>${c.blocked?"🚫":""}</td>
+            <td>${this._fmtB(c.tx_bytes)}/${this._fmtB(c.rx_bytes)}</td>
+          </tr>`).join("")}
+        </tbody></table>
+      </div>`:""}
+
+      <div class="card">
+        <h2>Recommended Actions</h2>
+        <ol style="font-size:12px;padding-left:20px;line-height:2">
+          <li>Review all <strong>Suspicious</strong> devices — quarantine anything you don't recognize</li>
+          <li>Move cameras to the <strong>Local-Only</strong> subnet (🔒 in sidebar) to block internet access</li>
+          <li>Check the <strong>Port Guide</strong> (🔌 in sidebar) for phone-home port reference</li>
+          <li>Enable IDS/IPS on the UCG Max if not already active (Network → Security → Threat Management)</li>
+        </ol>
+      </div>`;
   }
 
   _vDeviceList(devices, title, subtitle) {
@@ -428,7 +701,7 @@ class UniFiBlockerPanel extends HTMLElement {
   }
 
   // ── Components ────────────────────────────────────────────────────
-  _stat(l,v,i,t="") { return `<div class="stat-card ${t}"><div class="stat-icon">${i}</div><div class="stat-value">${v}</div><div class="stat-label">${l}</div></div>`; }
+  _stat(l,v,i,t="",click="") { return `<div class="stat-card ${t} ${click?"clickable":""}" ${click?`data-statview="${click}"`:``}><div class="stat-icon">${i}</div><div class="stat-value">${v}</div><div class="stat-label">${l}</div></div>`; }
 
   _deviceCard(d, num) {
     const flags = d.suspicion_flags||[]; const dpi = d.dpi||{}; const cats = dpi.top_categories||[];
@@ -487,7 +760,9 @@ h2{font-size:15px;font-weight:600;margin-bottom:10px}.subtitle{color:var(--secon
 .empty{padding:30px;text-align:center;color:var(--secondary-text-color,#888);font-size:13px}
 .ro-banner{background:rgba(15,155,142,.1);border:1px solid var(--primary-color,#0f9b8e);border-radius:8px;padding:10px;margin-top:16px;font-size:12px;text-align:center}
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-bottom:16px}
-.stat-card{background:var(--card-background-color,#16213e);border-radius:8px;padding:14px;text-align:center;border:1px solid var(--divider-color,#2a2a4a)}
+.stat-card{background:var(--card-background-color,#16213e);border-radius:8px;padding:14px;text-align:center;border:1px solid var(--divider-color,#2a2a4a);transition:transform .15s,border-color .15s}
+.stat-card.clickable{cursor:pointer}.stat-card.clickable:hover{transform:translateY(-2px);border-color:var(--primary-color,#0f9b8e)}
+.btn-back{background:none;border:1px solid var(--divider-color,#2a2a4a);color:var(--primary-color,#0f9b8e);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;margin-bottom:12px;transition:background .15s}.btn-back:hover{background:rgba(15,155,142,.1)}
 .stat-card.warn{border-color:#f0a500}.stat-card.danger{border-color:#e94560}
 .stat-icon{font-size:22px}.stat-value{font-size:26px;font-weight:700;margin:3px 0}.stat-card.warn .stat-value{color:#f0a500}.stat-card.danger .stat-value{color:#e94560}
 .stat-label{font-size:11px;color:var(--secondary-text-color,#888);text-transform:uppercase;letter-spacing:.5px}
