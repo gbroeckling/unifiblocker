@@ -5,11 +5,13 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.config_validation import config_entry_only_config_schema
 
 _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "unifiblocker"
 PLATFORMS = ["sensor", "binary_sensor"]
+CONFIG_SCHEMA = config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:

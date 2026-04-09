@@ -36,9 +36,7 @@ def _save_config(hass, data: dict[str, Any]) -> None:
     """Save config to disk so it survives removal/re-add."""
     path = os.path.join(hass.config.config_dir, _SAVED_CONFIG_FILE)
     try:
-        # Don't save the password in plain text — save everything else.
-        to_save = {k: v for k, v in data.items() if k != "password"}
-        to_save["_has_password"] = True
+        to_save = dict(data)
         with open(path, "w") as f:
             json.dump(to_save, f)
         _LOGGER.debug("Saved config to %s", path)
@@ -48,11 +46,12 @@ def _save_config(hass, data: dict[str, Any]) -> None:
 
 def _build_schema(saved: dict[str, Any]) -> vol.Schema:
     """Build the form schema, pre-filling from saved config."""
+    pw = saved.get("password", "")
     return vol.Schema(
         {
             vol.Required("host", default=saved.get("host", "")): str,
             vol.Required("username", default=saved.get("username", "")): str,
-            vol.Required("password"): str,
+            vol.Required("password", default=pw): str,
             vol.Optional("site", default=saved.get("site", "default")): str,
             vol.Optional("verify_ssl", default=saved.get("verify_ssl", False)): bool,
             vol.Optional("scan_interval", default=saved.get("scan_interval", 60)): int,
