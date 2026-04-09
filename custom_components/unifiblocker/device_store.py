@@ -122,6 +122,38 @@ class DeviceStore:
                 entry["last_seen"] = last_seen
         # Batch-save happens in the coordinator after a full poll.
 
+    def get_manual_category(self, mac: str) -> str | None:
+        """Return the manual category override for *mac*, or None."""
+        entry = self._devices.get(mac.lower())
+        return entry.get("manual_category") if entry else None
+
+    def get_all_manual_categories(self) -> dict[str, str]:
+        """Return {mac: category} for all manually categorized devices."""
+        return {
+            mac: info["manual_category"]
+            for mac, info in self._devices.items()
+            if info.get("manual_category")
+        }
+
+    async def set_manual_category(
+        self, mac: str, category: str, *, name: str | None = None
+    ) -> None:
+        """Set a manual category override and persist."""
+        mac = mac.lower()
+        entry = self._devices.setdefault(mac, {"state": STATE_NEW})
+        entry["manual_category"] = category
+        if name is not None:
+            entry["name"] = name
+        await self.async_save()
+
+    async def clear_manual_category(self, mac: str) -> None:
+        """Remove the manual category override."""
+        mac = mac.lower()
+        entry = self._devices.get(mac)
+        if entry:
+            entry.pop("manual_category", None)
+            await self.async_save()
+
     async def remove(self, mac: str) -> None:
         """Delete a device record entirely."""
         self._devices.pop(mac.lower(), None)

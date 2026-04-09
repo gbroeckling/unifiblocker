@@ -18,6 +18,9 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     """Register all WebSocket command handlers."""
     websocket_api.async_register_command(hass, ws_get_clients)
     websocket_api.async_register_command(hass, ws_get_overview)
+    websocket_api.async_register_command(hass, ws_get_categories)
+    websocket_api.async_register_command(hass, ws_get_category_clients)
+    websocket_api.async_register_command(hass, ws_set_category)
     websocket_api.async_register_command(hass, ws_trust_device)
     websocket_api.async_register_command(hass, ws_ignore_device)
     websocket_api.async_register_command(hass, ws_quarantine_device)
@@ -70,6 +73,7 @@ async def ws_get_overview(
         return
 
     data = entry["coordinator"].data
+    from .device_categorizer import CATEGORY_LABELS, CATEGORY_ICONS
     connection.send_result(msg["id"], {
         "total_clients": data.total_clients,
         "new_count": data.new_count,
@@ -86,7 +90,90 @@ async def ws_get_overview(
         "suspicious_devices": [
             data.enrich_client(c) for c in data.suspicious_clients
         ],
+        "category_counts": data.category_counts,
+        "category_labels": CATEGORY_LABELS,
+        "category_icons": CATEGORY_ICONS,
     })
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "unifiblocker/categories"}
+)
+@websocket_api.async_response
+async def ws_get_categories(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Return category counts and metadata."""
+    entry = _get_coordinator(hass)
+    if not entry or not entry["coordinator"].data:
+        connection.send_result(msg["id"], {"categories": {}})
+        return
+
+    from .device_categorizer import CATEGORY_LABELS, CATEGORY_ICONS
+    data = entry["coordinator"].data
+    counts = data.category_counts
+    result = {}
+    for cat, count in sorted(counts.items(), key=lambda x: -x[1]):
+        result[cat] = {
+            "count": count,
+            "label": CATEGORY_LABELS.get(cat, cat),
+            "icon": CATEGORY_ICONS.get(cat, "❓"),
+            "show_in_sidebar": count >= 5,
+        }
+    connection.send_result(msg["id"], {"categories": result})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "unifiblocker/category_clients",
+        vol.Required("category"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_get_category_clients(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Return enriched clients for a specific category."""
+    entry = _get_coordinator(hass)
+    if not entry or not entry["coordinator"].data:
+        connection.send_result(msg["id"], {"clients": []})
+        return
+
+    data = entry["coordinator"].data
+    cat_clients = data.clients_by_category(msg["category"])
+    enriched = [data.enrich_client(c) for c in cat_clients]
+    connection.send_result(msg["id"], {"clients": enriched, "category": msg["category"]})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "unifiblocker/set_category",
+        vol.Required("mac"): str,
+        vol.Required("category"): str,
+        vol.Optional("name"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_set_category(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Manually set a device's category."""
+    entry = _get_coordinator(hass)
+    if not entry:
+        connection.send_error(msg["id"], "not_ready", "Integration not loaded")
+        return
+
+    from .device_categorizer import CATEGORY_LABELS
+    cat = msg["category"]
+    if cat not in CATEGORY_LABELS:
+        connection.send_error(msg["id"], "invalid_category", f"Unknown category: {cat}")
+        return
+
+    mac = msg["mac"]
+    name = msg.get("name")
+    await entry["store"].set_manual_category(mac, cat, name=name)
+    await entry["coordinator"].async_request_refresh()
+    connection.send_result(msg["id"], {"ok": True, "mac": mac, "category": cat})
 
 
 # ── Write commands (require action mode) ─────────────────────────────

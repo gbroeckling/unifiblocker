@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN, STATE_NEW, STATE_QUARANTINED, STATE_TRUSTED, STATE_IGNORED
+from .device_categorizer import categorize_all_clients as categorize_devices, get_category_counts
 from .device_store import DeviceStore
 from .port_identify import analyze_dpi_entry
 from .suspicious_traffic import analyze_all_clients
@@ -30,6 +31,7 @@ class UniFiBlockerData:
         events: list[dict[str, Any]],
         health: dict[str, Any],
         dpi: dict[str, dict[str, Any]],
+        categories: dict[str, dict[str, Any]],
     ) -> None:
         self.clients = clients
         self.devices = devices
@@ -38,6 +40,18 @@ class UniFiBlockerData:
         self.events = events                # recent IDS/IPS events
         self.health = health                # connection + subsystem health
         self.dpi = dpi                      # mac → DPI analysis result
+        self.categories = categories        # mac → category result
+
+    @property
+    def category_counts(self) -> dict[str, int]:
+        return get_category_counts(self.categories)
+
+    def clients_by_category(self, category: str) -> list[dict[str, Any]]:
+        """Return clients matching a specific category."""
+        return [
+            c for c in self.clients
+            if self.categories.get(c.get("mac", "").lower(), {}).get("category") == category
+        ]
 
     # ── convenience counts ───────────────────────────────────────────
 
@@ -142,6 +156,8 @@ class UniFiBlockerData:
             ),
             # ── DPI / traffic analysis ───────────────────────────────
             "dpi": self.dpi.get(mac_lower, {}),
+            # ── device category ───────────────────────────────────────
+            **(self.categories.get(mac_lower, {})),
         }
 
     def all_clients_enriched(self) -> list[dict[str, Any]]:
@@ -224,6 +240,13 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         except UniFiApiError:
             _LOGGER.debug("Could not fetch DPI stats", exc_info=True)
 
+        # Categorize every client.
+        categories = categorize_devices(
+            clients,
+            dpi_data=dpi,
+            manual_overrides=self.store.get_all_manual_categories(),
+        )
+
         return UniFiBlockerData(
             clients=clients,
             devices=devices,
@@ -232,4 +255,5 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             events=events,
             health=health,
             dpi=dpi,
+            categories=categories,
         )
