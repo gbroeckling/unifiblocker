@@ -3,11 +3,8 @@
   "name": "UniFi Blocker",
   "codeowners": ["@gbroeckling"],
   "config_flow": true,
-  "dependencies": [],
   "documentation": "https://github.com/gbroeckling/unifiblocker",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/gbroeckling/unifiblocker/issues",
-  "requirements": [],
-  "single_config_entry": true,
-  "version": "0.2.6"
+  "version": "0.2.7"
 }

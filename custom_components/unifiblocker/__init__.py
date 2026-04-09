@@ -6,43 +6,43 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN, PLATFORMS
-
 _LOGGER = logging.getLogger(__name__)
+
+DOMAIN = "unifiblocker"
+PLATFORMS = ["sensor", "binary_sensor"]
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Set up the integration (YAML not used, but required by HA)."""
     hass.data.setdefault(DOMAIN, {})
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up UniFi Blocker from a config entry."""
-    # All heavy imports are deferred to here so the config flow can load
-    # without pulling in aiohttp, coordinator, etc.
+    hass.data.setdefault(DOMAIN, {})
+
+    try:
+        await _do_setup(hass, entry)
+    except Exception:
+        _LOGGER.exception("UniFi Blocker setup failed")
+        raise
+
+    return True
+
+
+async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """All real setup logic lives here — deferred imports only."""
     import voluptuous as vol
     from homeassistant.helpers import config_validation as cv
 
     from .const import (
-        CONF_HOST,
-        CONF_PASSWORD,
-        CONF_SCAN_INTERVAL,
-        CONF_SITE,
-        CONF_USERNAME,
-        CONF_VERIFY_SSL,
-        DEFAULT_SCAN_INTERVAL,
-        DEFAULT_SITE,
-        DEFAULT_VERIFY_SSL,
-        STATE_IGNORED,
-        STATE_QUARANTINED,
-        STATE_TRUSTED,
+        CONF_HOST, CONF_PASSWORD, CONF_SCAN_INTERVAL, CONF_SITE,
+        CONF_USERNAME, CONF_VERIFY_SSL, DEFAULT_SCAN_INTERVAL,
+        DEFAULT_SITE, DEFAULT_VERIFY_SSL,
+        STATE_IGNORED, STATE_QUARANTINED, STATE_TRUSTED,
     )
     from .coordinator import UniFiBlockerCoordinator
     from .device_store import DeviceStore
     from .unifi_api import UniFiApi
-
-    hass.data.setdefault(DOMAIN, {})
 
     data = {**entry.data, **entry.options}
 
@@ -65,101 +65,67 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await store.async_load()
 
     coordinator = UniFiBlockerCoordinator(
-        hass,
-        api,
-        store,
+        hass, api, store,
         update_interval=data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
     )
     await coordinator.async_config_entry_first_refresh()
 
-    # ── local network manager ────────────────────────────────────────
-    from .local_network import LocalNetworkManager
-    local_net = LocalNetworkManager(hass)
-    await local_net.async_load()
+    # Local network manager
+    try:
+        from .local_network import LocalNetworkManager
+        local_net = LocalNetworkManager(hass)
+        await local_net.async_load()
+    except Exception:
+        _LOGGER.warning("Local network manager failed to load", exc_info=True)
+        local_net = None
 
     hass.data[DOMAIN][entry.entry_id] = {
-        "api": api,
-        "store": store,
-        "coordinator": coordinator,
-        "local_net": local_net,
+        "api": api, "store": store, "coordinator": coordinator, "local_net": local_net,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # ── register sidebar panel ────────────────────────────────────────
+    # Sidebar panel
     try:
         from .panel import async_register_panel
         await async_register_panel(hass)
     except Exception:
         _LOGGER.warning("Could not register sidebar panel", exc_info=True)
 
-    # ── register websocket API ────────────────────────────────────────
+    # WebSocket API
     try:
         from .websocket import async_register_websocket_commands
         async_register_websocket_commands(hass)
     except Exception:
         _LOGGER.warning("Could not register WebSocket commands", exc_info=True)
 
-    # ── register services (only once) ────────────────────────────────
+    # Services
     MAC_SCHEMA = vol.Schema({vol.Required("mac"): cv.string})
 
     if not hass.services.has_service(DOMAIN, "trust_device"):
+        async def _ed():
+            for _, d in hass.data.get(DOMAIN, {}).items():
+                if isinstance(d, dict) and "api" in d: return d
+            raise RuntimeError("Not loaded")
 
-        async def _get_entry_data() -> dict:
-            for _eid, edata in hass.data.get(DOMAIN, {}).items():
-                if isinstance(edata, dict) and "api" in edata:
-                    return edata
-            raise RuntimeError("No UniFi Blocker entry loaded")
+        async def h_trust(c):
+            d = await _ed(); await d["store"].set_state(c.data["mac"], STATE_TRUSTED); await d["api"].unblock_client(c.data["mac"]); await d["coordinator"].async_request_refresh()
+        async def h_ignore(c):
+            d = await _ed(); await d["store"].set_state(c.data["mac"], STATE_IGNORED); await d["coordinator"].async_request_refresh()
+        async def h_quarantine(c):
+            d = await _ed(); await d["store"].set_state(c.data["mac"], STATE_QUARANTINED); await d["api"].block_client(c.data["mac"]); await d["coordinator"].async_request_refresh()
+        async def h_block(c):
+            d = await _ed(); await d["api"].block_client(c.data["mac"]); await d["coordinator"].async_request_refresh()
+        async def h_unblock(c):
+            d = await _ed(); await d["api"].unblock_client(c.data["mac"]); await d["coordinator"].async_request_refresh()
+        async def h_reconnect(c):
+            d = await _ed(); await d["api"].reconnect_client(c.data["mac"]); await d["coordinator"].async_request_refresh()
 
-        async def handle_trust(call):
-            d = await _get_entry_data()
-            mac = call.data["mac"]
-            await d["store"].set_state(mac, STATE_TRUSTED)
-            await d["api"].unblock_client(mac)
-            await d["coordinator"].async_request_refresh()
-
-        async def handle_ignore(call):
-            d = await _get_entry_data()
-            await d["store"].set_state(call.data["mac"], STATE_IGNORED)
-            await d["coordinator"].async_request_refresh()
-
-        async def handle_quarantine(call):
-            d = await _get_entry_data()
-            mac = call.data["mac"]
-            await d["store"].set_state(mac, STATE_QUARANTINED)
-            await d["api"].block_client(mac)
-            await d["coordinator"].async_request_refresh()
-
-        async def handle_block(call):
-            d = await _get_entry_data()
-            await d["api"].block_client(call.data["mac"])
-            await d["coordinator"].async_request_refresh()
-
-        async def handle_unblock(call):
-            d = await _get_entry_data()
-            await d["api"].unblock_client(call.data["mac"])
-            await d["coordinator"].async_request_refresh()
-
-        async def handle_reconnect(call):
-            d = await _get_entry_data()
-            await d["api"].reconnect_client(call.data["mac"])
-            await d["coordinator"].async_request_refresh()
-
-        for name, handler in [
-            ("trust_device", handle_trust),
-            ("ignore_device", handle_ignore),
-            ("quarantine_device", handle_quarantine),
-            ("block_device", handle_block),
-            ("unblock_device", handle_unblock),
-            ("reconnect_device", handle_reconnect),
-        ]:
-            hass.services.async_register(DOMAIN, name, handler, schema=MAC_SCHEMA)
-
-    return True
+        for n, h in [("trust_device", h_trust), ("ignore_device", h_ignore), ("quarantine_device", h_quarantine), ("block_device", h_block), ("unblock_device", h_unblock), ("reconnect_device", h_reconnect)]:
+            hass.services.async_register(DOMAIN, n, h, schema=MAC_SCHEMA)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         entry_data = hass.data[DOMAIN].pop(entry.entry_id, {})
