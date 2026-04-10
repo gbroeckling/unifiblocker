@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.28";
+const VERSION = "0.3.29";
 const SIDEBAR_THRESHOLD = 5;
 
 class UniFiBlockerPanel extends HTMLElement {
@@ -105,6 +105,7 @@ class UniFiBlockerPanel extends HTMLElement {
             ${this._nav("identify", "Identify", "🔍")}
             ${this._nav("nas", "Network Access", "🌐")}
             ${this._nav("localnet", "Local Only", "🔒")}
+            ${this._hasNasDevices() ? this._nav("storage", "Storage / NAS", "💾") : ""}
             ${catNav ? '<div class="nav-divider">Categories</div>' + catNav : ""}
             ${this._nav("quarantined", "Quarantined", "🚫")}
             ${this._nav("ports", "Port Guide", "🔌")}
@@ -162,6 +163,7 @@ class UniFiBlockerPanel extends HTMLElement {
       case "identify": mc.innerHTML = this._vIdentify(); break;
       case "nas": mc.innerHTML = this._vNAS(); break;
       case "localnet": mc.innerHTML = this._vLocalNet(); break;
+      case "storage": mc.innerHTML = this._vStorage(); break;
       case "category": mc.innerHTML = this._vCategory(); break;
       case "quarantined": mc.innerHTML = this._vDeviceList((this._data.clients||[]).filter(c=>c.state==="quarantined"||c.blocked), "Quarantined / Blocked", "Devices blocked on the controller."); break;
       case "ports": mc.innerHTML = this._vPorts(); break;
@@ -885,6 +887,123 @@ class UniFiBlockerPanel extends HTMLElement {
       </div>
 
       ${!this._actionMode ? '<div class="ro-banner">Read-only mode — enable Action Mode in the sidebar to change device access levels</div>' : ''}`;
+  }
+
+  _hasNasDevices() {
+    const cats = this._categories || {};
+    return (cats["nas"] && cats["nas"].count > 0);
+  }
+
+  _getNasDevices() {
+    return (this._data.clients || []).filter(c => c.category === "nas");
+  }
+
+  _vStorage() {
+    const nasDevices = this._getNasDevices();
+
+    // If no NAS from client list, try category cache.
+    let devices = nasDevices;
+    if (devices.length === 0 && this._catCache && this._catCache["nas"]) {
+      devices = this._catCache["nas"];
+    }
+    if (devices.length === 0 && this._hasNasDevices()) {
+      this._ws("unifiblocker/category_clients", { category: "nas" }).then(r => {
+        if (r && r.clients) {
+          if (!this._catCache) this._catCache = {};
+          this._catCache["nas"] = r.clients;
+          this._updateMain();
+        }
+      });
+      return `<h1>💾 Storage / NAS</h1><div class="loading">Loading NAS devices...</div>`;
+    }
+
+    // Identify UNAS vs other NAS.
+    const unas = devices.filter(d => {
+      const v = (d.vendor || "").toLowerCase();
+      const h = (d.hostname || d.name || "").toLowerCase();
+      return v.includes("ubiquiti") || h.includes("unas") || h.includes("unifi-nas");
+    });
+    const otherNas = devices.filter(d => !unas.includes(d));
+
+    return `
+      <h1>💾 Storage / NAS <span class="count">${devices.length}</span></h1>
+      <p class="subtitle">Network-attached storage devices detected on your network.</p>
+
+      ${unas.length ? `
+        <div class="card" style="border-color:#0f9b8e">
+          <h2>UniFi NAS (UNAS)</h2>
+          ${unas.map(d => `
+            <div style="display:flex;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--divider-color,#2a2a4a)">
+              <span style="font-size:28px">💾</span>
+              <div>
+                <div style="font-weight:600">${d.name || d.hostname || "UniFi NAS"}</div>
+                <div class="mono" style="font-size:11px;color:var(--secondary-text-color)">${d.ip || "—"} • ${d.mac}</div>
+                <div style="font-size:11px;color:var(--secondary-text-color)">${d.vendor || "Ubiquiti"}</div>
+              </div>
+            </div>
+          `).join("")}
+
+          <div style="margin-top:12px">
+            <h3 style="font-size:13px;margin-bottom:8px">HA Backup to UNAS</h3>
+            <p style="font-size:12px;line-height:1.6">
+              The UniFi NAS can serve as your Home Assistant backup target.
+            </p>
+            <ol style="font-size:12px;padding-left:20px;line-height:2;margin-top:6px">
+              <li>On the UNAS, create an SMB share (e.g. <code>ha-backups</code>)</li>
+              <li>Create a user with write access to that share</li>
+              <li>In HA, install the <strong>Samba Backup</strong> add-on (Settings → Add-ons)</li>
+              <li>Configure it:
+                <ul style="padding-left:16px;line-height:1.8">
+                  <li>Host: <code>${unas[0]?.ip || "your-unas-ip"}</code></li>
+                  <li>Share: <code>ha-backups</code></li>
+                  <li>Username/Password: the user you created</li>
+                </ul>
+              </li>
+              <li>Set a backup schedule (daily recommended)</li>
+              <li>Test with a manual backup first</li>
+            </ol>
+          </div>
+
+          <div style="margin-top:12px">
+            <h3 style="font-size:13px;margin-bottom:8px">Network Recommendations</h3>
+            <ul style="font-size:12px;padding-left:20px;line-height:2">
+              <li>Keep the UNAS on your <strong>trusted network</strong> (192.168.1.x) with a reserved IP</li>
+              <li>The UNAS needs internet access for firmware updates and cloud features</li>
+              <li>Do <strong>NOT</strong> put it on the local-only subnet (192.168.2.x)</li>
+              <li>Consider giving it a static IP via DHCP reservation for reliable backups</li>
+            </ul>
+          </div>
+        </div>
+      ` : ""}
+
+      ${otherNas.length ? `
+        <div class="card">
+          <h2>Other NAS Devices (${otherNas.length})</h2>
+          <table class="data-table">
+            <thead><tr><th>Name</th><th>Vendor</th><th>IP</th><th>MAC</th><th>State</th></tr></thead>
+            <tbody>
+              ${otherNas.map(d => `<tr>
+                <td>${d.name || d.hostname || "—"}</td>
+                <td>${d.vendor || "?"}</td>
+                <td class="mono">${d.ip || "—"}</td>
+                <td class="mono">${d.mac}</td>
+                <td><span class="badge ${d.state || "new"}">${d.state || "new"}</span></td>
+              </tr>`).join("")}
+            </tbody>
+          </table>
+
+          <div style="margin-top:12px">
+            <h3 style="font-size:13px;margin-bottom:8px">Backup Options</h3>
+            <p style="font-size:12px;line-height:1.6">
+              These NAS devices can also be used for HA backups via SMB, NFS, or rsync.
+              Install the <strong>Samba Backup</strong> or <strong>Remote Backup</strong> add-on in HA.
+            </p>
+          </div>
+        </div>
+      ` : ""}
+
+      ${devices.length === 0 ? '<div class="empty">No NAS devices detected on your network.</div>' : ""}
+    `;
   }
 
   _vLocalNet() {
