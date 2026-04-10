@@ -126,6 +126,11 @@ _VENDOR_CATEGORY: dict[str, str] = {
     # NAS
     "Synology": "nas",
     "QNAP": "nas",
+    "Western Digital": "nas",
+    "Buffalo": "nas",
+    "Asustor": "nas",
+    "TerraMaster": "nas",
+    "Drobo": "nas",
     # VM
     "VMware": "computer",
     "QEMU/KVM virtual NIC": "computer",
@@ -176,8 +181,11 @@ _HOSTNAME_PATTERNS: list[tuple[list[str], str]] = [
     (["esphome", "esp32", "esp8266", "esp-", "esph-", "espresense"], "esphome"),
     # Home Assistant
     (["homeassistant", "home-assistant", "hassio", "hass.", "ha-", "supervisor"], "ha_device"),
-    # WLED / Smart lights
-    (["wled", "govee", "yeelight", "bulb", "light", "lamp", "led-", "lifx", "nanoleaf", "hue-"], "led"),
+    # WLED / Smart lights (expanded patterns)
+    (["wled", "wled-", "govee", "yeelight", "bulb", "light-", "lamp", "led-", "led_",
+      "lifx", "nanoleaf", "hue-", "hue_", "tradfri", "ikea-", "sengled",
+      "cync", "wyze-bulb", "kasa-", "tp-link-", "tapo-", "magic-home",
+      "flux-", "tuya-light", "tuya-led", "smartlight", "strip", "rgb"], "led"),
     # Cameras
     (["ipc", "ipcam", "camera", "cam-", "dvr", "nvr", "hikvision", "dahua",
       "dh-", "ds-", "reolink", "amcrest", "foscam", "xmeye", "ezviz", "imou"], "camera"),
@@ -205,8 +213,11 @@ _HOSTNAME_PATTERNS: list[tuple[list[str], str]] = [
       "thinkpad", "dell-", "hp-", "surface", "pc-", "workstation",
       "windows", "win-", "linux-"], "computer"),
     # NAS
-    (["nas", "synology", "diskstation", "qnap", "truenas", "freenas",
-      "unraid"], "nas"),
+    (["nas", "synology", "diskstation", "ds220", "ds920", "ds1621", "ds423",
+      "qnap", "ts-", "truenas", "freenas", "unraid", "openmediavault",
+      "omv", "netgear-readynas", "readynas", "terramaster", "asustor",
+      "drobo", "buffalo-nas", "linkstation", "terastation", "wd-mycloud",
+      "mycloud", "wdmycloud", "iosafe"], "nas"),
     # Networking
     (["router", "switch", "gateway", "ap-", "access-point", "mesh",
       "ubnt", "unifi", "uap", "usw", "uxg", "ucg", "udm", "usg"], "networking"),

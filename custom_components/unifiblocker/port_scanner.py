@@ -114,6 +114,9 @@ SCAN_PORTS: dict[int, dict[str, str]] = {
     5900:  {"name": "VNC", "group": "remote"},
     # ESPHome / IoT
     6053:  {"name": "ESPHome native API", "group": "esphome"},
+    # WLED
+    21324: {"name": "WLED E1.31/sACN UDP", "group": "wled"},
+    80:    {"name": "HTTP (WLED web UI)", "group": "web"},
     # Home Assistant
     8123:  {"name": "Home Assistant", "group": "ha"},
     # DNS
@@ -134,8 +137,16 @@ SCAN_PORTS: dict[int, dict[str, str]] = {
     21:    {"name": "FTP", "group": "fileshare_insecure"},
     2049:  {"name": "NFS", "group": "fileshare"},
     # NAS
+    5000:  {"name": "Synology DSM / NAS web", "group": "nas"},
     5001:  {"name": "Synology DSM-TLS", "group": "nas"},
     8384:  {"name": "Syncthing", "group": "nas"},
+    8080:  {"name": "QNAP QTS / HTTP-alt", "group": "web"},
+    443:   {"name": "HTTPS / NAS-TLS", "group": "web"},
+    6690:  {"name": "Synology Drive", "group": "nas"},
+    5005:  {"name": "Synology WebDAV", "group": "nas"},
+    5006:  {"name": "Synology WebDAV-TLS", "group": "nas"},
+    8443:  {"name": "QNAP QTS-TLS / HTTPS-alt", "group": "web"},
+    9090:  {"name": "TrueNAS / Cockpit", "group": "nas"},
     # Media servers
     32400: {"name": "Plex", "group": "media"},
     8096:  {"name": "Jellyfin", "group": "media"},
@@ -221,6 +232,10 @@ FINGERPRINT_RULES: list[tuple[set, set, str, str, str, str]] = [
     ({"camera"}, set(),
      "camera", "RTSP port responding. Almost certainly a camera or media streaming device.",
      "medium", "medium"),
+    # WLED device
+    ({"wled"}, {"web"},
+     "led", "WLED LED controller — E1.31/sACN port open, running WLED firmware",
+     "high", "low"),
     # ESPHome device
     ({"esphome"}, {"web"},
      "esphome", "ESPHome device — native API port 6053 open, managed by Home Assistant",

@@ -255,17 +255,25 @@ class LocalNetworkManager:
         except Exception as err:
             return {"ok": False, "error": f"Failed to set reservation: {err}"}
 
+        # Block internet for this device via v2 Traffic Rule.
+        block_result = await self.block_device_internet(api, mac)
+        rule_id = block_result.get("rule_id", "")
+
         # Store locally.
         self._assignments[mac] = {
             "ip": ip,
             "category": category,
             "name": name,
             "user_id": user_id,
+            "traffic_rule_id": rule_id,
         }
         await self.async_save()
 
-        _LOGGER.info("Assigned %s → %s (category: %s)", mac, ip, category)
-        return {"ok": True, "ip": ip, "mac": mac, "category": category}
+        _LOGGER.info("Assigned %s → %s (category: %s, internet blocked: %s)",
+                      mac, ip, category, block_result.get("ok", False))
+        return {"ok": True, "ip": ip, "mac": mac, "category": category,
+                "internet_blocked": block_result.get("ok", False),
+                "block_error": block_result.get("error", "")}
 
     async def remove_assignment(self, api: Any, mac: str) -> dict[str, Any]:
         """Remove a local-only IP assignment and clear the reservation."""
@@ -281,6 +289,9 @@ class LocalNetworkManager:
             except Exception as err:
                 _LOGGER.warning("Could not clear reservation for %s: %s", mac, err)
 
+        # Remove internet block.
+        await self.unblock_device_internet(api, mac)
+
         self._assignments.pop(mac, None)
         await self.async_save()
         return {"ok": True, "mac": mac}
@@ -292,56 +303,67 @@ class LocalNetworkManager:
     # rule that blocks 192.168.2.0/24 from reaching the internet.
 
     async def ensure_firewall_rule(self, api: Any) -> dict[str, Any]:
-        """Create or verify the WAN-block rule for the local-only subnet.
+        """Verify internet blocking is active for local-only devices.
 
-        Tries v2 Traffic Rules first, falls back to legacy firewall rules.
-        ONLY affects the configured local-only CIDR (default 192.168.2.0/24).
+        On the UCG Max, internet blocking is done per-device using v2
+        Traffic Rules (one rule per MAC). This method checks that all
+        assigned devices have their block rule in place.
         """
-        # Check if we already have a cached rule that still exists.
-        existing = await self.get_firewall_status(api)
-        if existing.get("exists"):
-            return {"ok": True, "status": "exists", "rule_id": existing.get("rule_id", ""),
-                    "api": existing.get("api", "unknown")}
+        if not self._assignments:
+            return {"ok": True, "status": "no_devices_assigned",
+                    "message": "No devices assigned to local-only yet. Assign a device first."}
 
-        # Try v2 Traffic Rules API first (newer firmware).
-        v2_result = await self._try_create_traffic_rule(api)
-        if v2_result.get("ok"):
-            return v2_result
+        # Check existing traffic rules for our blocks.
+        blocked = 0
+        missing = []
+        try:
+            rules = await api.get_traffic_rules()
+            rule_descs = {r.get("description", "").lower() for r in rules}
+            for mac in self._assignments:
+                if f"ub: {mac}" in rule_descs:
+                    blocked += 1
+                else:
+                    missing.append(mac)
+        except Exception as err:
+            return {"ok": False, "error": f"Could not check rules: {err}"}
 
-        # Fall back to legacy firewall rules API.
-        legacy_result = await self._try_create_legacy_rule(api)
-        if legacy_result.get("ok"):
-            return legacy_result
+        # Create missing rules.
+        created = 0
+        for mac in missing:
+            result = await self.block_device_internet(api, mac)
+            if result.get("ok"):
+                created += 1
 
-        # Both failed — return both errors.
+        total = len(self._assignments)
         return {
-            "ok": False,
-            "error": f"v2: {v2_result.get('error', '?')} | legacy: {legacy_result.get('error', '?')}",
+            "ok": True,
+            "status": "per_device",
+            "total_devices": total,
+            "already_blocked": blocked,
+            "newly_blocked": created,
+            "message": f"{blocked + created}/{total} devices have internet blocked",
         }
 
     async def _try_create_traffic_rule(self, api: Any) -> dict[str, Any]:
         """Try creating a v2 Traffic Rule (newer UCG Max firmware)."""
         # v2 Traffic Rules require ALL fields present, UPPERCASE action,
         # and proper schedule/bandwidth objects.
-        # Get the first few octets for the IP range.
-        parts = self.cidr.split("/")[0].split(".")
-        ip_start = f"{parts[0]}.{parts[1]}.{parts[2]}.1"
-        ip_end = f"{parts[0]}.{parts[1]}.{parts[2]}.254"
+        # The UCG Max v2 API only supports per-client or per-network
+        # rules, not per-subnet. So instead of one subnet rule, we
+        # block internet for each device individually when it gets
+        # assigned to local-only. This method creates a single rule
+        # that blocks a specific MAC from internet.
+        return {"ok": False, "error": "Subnet rules not supported — using per-device blocking instead"}
 
+    async def block_device_internet(self, api: Any, mac: str) -> dict[str, Any]:
+        """Block a specific device from internet using v2 Traffic Rules."""
         rule_payload = {
             "action": "BLOCK",
-            "description": FIREWALL_RULE_NAME,
+            "description": f"UB: {mac} local-only",
             "enabled": True,
             "matching_target": "INTERNET",
             "target_devices": [
-                {
-                    "type": "IP_RANGE",
-                    "ip_range": {
-                        "ip_start": ip_start,
-                        "ip_stop": ip_end,
-                        "ip_version": "v4",
-                    },
-                }
+                {"client_mac": mac.lower(), "type": "CLIENT"}
             ],
             "ip_addresses": [],
             "ip_ranges": [],
@@ -364,100 +386,55 @@ class LocalNetworkManager:
             },
         }
 
-        _LOGGER.info("Trying v2 Traffic Rule API: block %s → Internet", self.cidr)
-
         try:
             result = await api.create_traffic_rule(rule_payload)
             rule_id = ""
             if isinstance(result, dict):
                 rule_id = result.get("_id", "")
-            elif isinstance(result, list) and result:
-                rule_id = result[0].get("_id", "")
-
-            self._firewall_rule_id = rule_id or "traffic_rule"
-            self._config["rule_api"] = "v2"
-            await self.async_save()
-            _LOGGER.info("Created v2 traffic rule for %s (ID: %s)", self.cidr, rule_id)
-            return {"ok": True, "status": "created", "rule_id": rule_id, "api": "v2"}
+            _LOGGER.info("Blocked internet for %s (rule: %s)", mac, rule_id)
+            return {"ok": True, "rule_id": rule_id, "mac": mac}
         except Exception as err:
-            _LOGGER.info("v2 Traffic Rule API failed: %s — trying legacy", err)
             return {"ok": False, "error": str(err)}
 
-    async def _try_create_legacy_rule(self, api: Any) -> dict[str, Any]:
-        """Try creating a legacy firewall rule."""
-        rule_payload = {
-            "name": FIREWALL_RULE_NAME,
-            "enabled": True,
-            "action": "drop",
-            "ruleset": "WAN_OUT",
-            "protocol": "all",
-            "rule_index": 2000,
-            "src_address": self.cidr,
-            "logging": True,
-        }
-
-        _LOGGER.info("Trying legacy firewall rule API: drop %s on WAN_OUT", self.cidr)
-
-        try:
-            # Try to learn site_id from existing rules.
-            try:
-                existing = await api.get_firewall_rules()
-                if existing:
-                    for field in ["site_id"]:
-                        if field in existing[0]:
-                            rule_payload[field] = existing[0][field]
-            except Exception:
-                pass
-
-            result = await api.create_firewall_rule(rule_payload)
-            rule_id = ""
-            if isinstance(result, dict):
-                rule_id = result.get("_id", "")
-            elif isinstance(result, list) and result:
-                rule_id = result[0].get("_id", "")
-
-            self._firewall_rule_id = rule_id or "legacy_rule"
-            self._config["rule_api"] = "legacy"
-            await self.async_save()
-            _LOGGER.info("Created legacy firewall rule for %s (ID: %s)", self.cidr, rule_id)
-            return {"ok": True, "status": "created", "rule_id": rule_id, "api": "legacy"}
-        except Exception as err:
-            return {"ok": False, "error": f"Both v2 and legacy APIs failed. Legacy error: {err}"}
-
-    async def get_firewall_status(self, api: Any) -> dict[str, Any]:
-        """Check if the WAN-block rule exists (checks both APIs)."""
-        # Check v2 Traffic Rules.
+    async def unblock_device_internet(self, api: Any, mac: str) -> dict[str, Any]:
+        """Remove the internet block for a specific device."""
         try:
             rules = await api.get_traffic_rules()
             for rule in rules:
                 desc = rule.get("description", "")
-                if FIREWALL_RULE_NAME in desc:
-                    return {
-                        "exists": True,
-                        "enabled": rule.get("enabled", False),
-                        "rule_id": rule.get("_id", ""),
-                        "name": desc,
-                        "action": rule.get("action", ""),
-                        "api": "v2",
-                    }
-        except Exception:
-            pass
+                if f"UB: {mac.lower()}" in desc.lower() or f"ub: {mac.lower()}" in desc.lower():
+                    await api.delete_traffic_rule(rule["_id"])
+                    _LOGGER.info("Unblocked internet for %s", mac)
+                    return {"ok": True, "mac": mac}
+            return {"ok": False, "error": "No matching rule found"}
+        except Exception as err:
+            return {"ok": False, "error": str(err)}
 
-        # Check legacy firewall rules.
+    async def _try_create_legacy_rule(self, api: Any) -> dict[str, Any]:
+        """Legacy firewall rules — not supported on newer UCG Max."""
+        return {"ok": False, "error": "Legacy API not supported on this controller"}
+
+    async def get_firewall_status(self, api: Any) -> dict[str, Any]:
+        """Check internet blocking status for local-only devices."""
+        if not self._assignments:
+            return {"exists": False, "message": "No devices assigned yet"}
+
+        blocked_count = 0
+        total = len(self._assignments)
         try:
-            rules = await api.get_firewall_rules()
-            for rule in rules:
-                if rule.get("name") == FIREWALL_RULE_NAME:
-                    return {
-                        "exists": True,
-                        "enabled": rule.get("enabled", False),
-                        "rule_id": rule.get("_id", ""),
-                        "name": FIREWALL_RULE_NAME,
-                        "action": rule.get("action", ""),
-                        "src_address": rule.get("src_address", ""),
-                        "api": "legacy",
-                    }
+            rules = await api.get_traffic_rules()
+            rule_descs = {r.get("description", "").lower() for r in rules}
+            for mac in self._assignments:
+                if f"ub: {mac}" in rule_descs:
+                    blocked_count += 1
         except Exception:
             pass
 
-        return {"exists": False}
+        return {
+            "exists": blocked_count > 0,
+            "enabled": blocked_count == total,
+            "blocked_count": blocked_count,
+            "total_devices": total,
+            "name": f"Per-device internet blocking ({blocked_count}/{total})",
+            "api": "v2_per_device",
+        }
