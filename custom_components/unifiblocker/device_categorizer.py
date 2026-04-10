@@ -213,11 +213,13 @@ _HOSTNAME_PATTERNS: list[tuple[list[str], str]] = [
       "thinkpad", "dell-", "hp-", "surface", "pc-", "workstation",
       "windows", "win-", "linux-"], "computer"),
     # NAS
-    (["nas", "synology", "diskstation", "ds220", "ds920", "ds1621", "ds423",
-      "qnap", "ts-", "truenas", "freenas", "unraid", "openmediavault",
-      "omv", "netgear-readynas", "readynas", "terramaster", "asustor",
-      "drobo", "buffalo-nas", "linkstation", "terastation", "wd-mycloud",
-      "mycloud", "wdmycloud", "iosafe"], "nas"),
+    (["nas", "unas", "unifi-nas", "synology", "diskstation", "ds220", "ds920",
+      "ds1621", "ds423", "qnap", "ts-", "truenas", "freenas", "unraid",
+      "openmediavault", "omv", "netgear-readynas", "readynas", "terramaster",
+      "asustor", "drobo", "buffalo-nas", "linkstation", "terastation",
+      "wd-mycloud", "mycloud", "wdmycloud", "iosafe"], "nas"),
+    # Ubiquiti NAS (check BEFORE general networking to avoid misclassification)
+    (["unas", "unifi-nas", "unifi nas"], "nas"),
     # Networking
     (["router", "switch", "gateway", "ap-", "access-point", "mesh",
       "ubnt", "unifi", "uap", "usw", "uxg", "ucg", "udm", "usg"], "networking"),
