@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.29";
+const VERSION = "0.3.30";
 const SIDEBAR_THRESHOLD = 5;
 
 class UniFiBlockerPanel extends HTMLElement {
@@ -106,6 +106,7 @@ class UniFiBlockerPanel extends HTMLElement {
             ${this._nav("nas", "Network Access", "🌐")}
             ${this._nav("localnet", "Local Only", "🔒")}
             ${this._hasNasDevices() ? this._nav("storage", "Storage / NAS", "💾") : ""}
+            ${this._nav("netmap", "Network Map", "🗺")}
             ${catNav ? '<div class="nav-divider">Categories</div>' + catNav : ""}
             ${this._nav("quarantined", "Quarantined", "🚫")}
             ${this._nav("ports", "Port Guide", "🔌")}
@@ -164,6 +165,7 @@ class UniFiBlockerPanel extends HTMLElement {
       case "nas": mc.innerHTML = this._vNAS(); break;
       case "localnet": mc.innerHTML = this._vLocalNet(); break;
       case "storage": mc.innerHTML = this._vStorage(); break;
+      case "netmap": mc.innerHTML = this._vNetMap(); break;
       case "category": mc.innerHTML = this._vCategory(); break;
       case "quarantined": mc.innerHTML = this._vDeviceList((this._data.clients||[]).filter(c=>c.state==="quarantined"||c.blocked), "Quarantined / Blocked", "Devices blocked on the controller."); break;
       case "ports": mc.innerHTML = this._vPorts(); break;
@@ -1006,6 +1008,167 @@ class UniFiBlockerPanel extends HTMLElement {
     `;
   }
 
+  _vNetMap() {
+    const clients = this._data.clients || [];
+    const o = this._overview || {};
+    const h = o.health || {};
+    const cats = this._categories || {};
+    const ln = this._localnet || {};
+    const assignments = ln.assignments || {};
+    const assignedMacs = new Set(Object.keys(assignments));
+
+    // Group by subnet.
+    const trusted = clients.filter(c => c.ip && c.ip.startsWith("192.168.1."));
+    const localOnly = clients.filter(c => c.ip && c.ip.startsWith("192.168.2."));
+    const dhcp = clients.filter(c => c.ip && c.ip.startsWith("192.168.3."));
+    const other = clients.filter(c => c.ip && !c.ip.startsWith("192.168.1.") && !c.ip.startsWith("192.168.2.") && !c.ip.startsWith("192.168.3."));
+
+    // Category counts per zone.
+    const countCats = (list) => {
+      const m = {};
+      list.forEach(c => { const k = c.category_icon || "❓"; m[k] = (m[k]||0)+1; });
+      return Object.entries(m).map(([i,n]) => `${i}${n}`).join(" ");
+    };
+
+    // Build SVG network diagram.
+    const svgW = 800, svgH = 520;
+
+    return `
+      <h1>🗺 Network Map</h1>
+      <p class="subtitle">Visual layout of your network — devices grouped by subnet and access level.</p>
+
+      <div class="netmap-container">
+        <svg viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg" class="netmap-svg">
+          <defs>
+            <linearGradient id="grd1" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#0f9b8e" stop-opacity="0.15"/>
+              <stop offset="100%" stop-color="#0f9b8e" stop-opacity="0.05"/>
+            </linearGradient>
+            <linearGradient id="grd2" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#e94560" stop-opacity="0.12"/>
+              <stop offset="100%" stop-color="#e94560" stop-opacity="0.04"/>
+            </linearGradient>
+            <linearGradient id="grd3" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#42a5f5" stop-opacity="0.12"/>
+              <stop offset="100%" stop-color="#42a5f5" stop-opacity="0.04"/>
+            </linearGradient>
+            <filter id="shadow"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.3"/></filter>
+          </defs>
+
+          <!-- Internet cloud -->
+          <ellipse cx="400" cy="45" rx="90" ry="30" fill="#1a1a2e" stroke="#e94560" stroke-width="2" filter="url(#shadow)"/>
+          <text x="400" y="50" text-anchor="middle" fill="#e94560" font-size="14" font-weight="bold">🌍 Internet</text>
+
+          <!-- Router -->
+          <rect x="330" y="95" width="140" height="50" rx="10" fill="#16213e" stroke="#0f9b8e" stroke-width="2" filter="url(#shadow)"/>
+          <text x="400" y="118" text-anchor="middle" fill="#0f9b8e" font-size="12" font-weight="bold">🌐 UCG Max</text>
+          <text x="400" y="135" text-anchor="middle" fill="#888" font-size="9">${h.hostname || "192.168.1.1"}</text>
+
+          <!-- Connection: Internet to Router -->
+          <line x1="400" y1="75" x2="400" y2="95" stroke="#e94560" stroke-width="2" stroke-dasharray="6,3"/>
+
+          <!-- Connection lines: Router to zones -->
+          <line x1="350" y1="145" x2="140" y2="190" stroke="#4caf50" stroke-width="2"/>
+          <line x1="400" y1="145" x2="400" y2="190" stroke="#e94560" stroke-width="2"/>
+          <line x1="450" y1="145" x2="660" y2="190" stroke="#42a5f5" stroke-width="2"/>
+
+          <!-- Zone 1: Trusted (192.168.1.x) -->
+          <rect x="20" y="190" width="240" height="${Math.max(180, 100 + trusted.length * 4)}" rx="12" fill="url(#grd1)" stroke="#4caf50" stroke-width="1.5"/>
+          <text x="140" y="215" text-anchor="middle" fill="#4caf50" font-size="13" font-weight="bold">✅ Trusted — 192.168.1.x</text>
+          <text x="140" y="233" text-anchor="middle" fill="#888" font-size="10">Reserved IPs • Full Internet</text>
+          <text x="140" y="253" text-anchor="middle" fill="#ccc" font-size="22" font-weight="bold">${trusted.length}</text>
+          <text x="140" y="268" text-anchor="middle" fill="#888" font-size="10">devices</text>
+          <text x="140" y="290" text-anchor="middle" fill="#aaa" font-size="10">${countCats(trusted)}</text>
+
+          <!-- Zone 2: Local Only (192.168.2.x) -->
+          <rect x="280" y="190" width="240" height="${Math.max(180, 100 + localOnly.length * 4)}" rx="12" fill="url(#grd2)" stroke="#e94560" stroke-width="1.5"/>
+          <text x="400" y="215" text-anchor="middle" fill="#e94560" font-size="13" font-weight="bold">🔒 Local Only — 192.168.2.x</text>
+          <text x="400" y="233" text-anchor="middle" fill="#888" font-size="10">Reserved IPs • NO Internet</text>
+          <text x="400" y="253" text-anchor="middle" fill="#ccc" font-size="22" font-weight="bold">${localOnly.length}</text>
+          <text x="400" y="268" text-anchor="middle" fill="#888" font-size="10">devices</text>
+          <text x="400" y="290" text-anchor="middle" fill="#aaa" font-size="10">${countCats(localOnly)}</text>
+          <!-- Firewall icon -->
+          <text x="400" y="175" text-anchor="middle" fill="#e94560" font-size="16">🛡</text>
+
+          <!-- Zone 3: DHCP (192.168.3.x) -->
+          <rect x="540" y="190" width="240" height="${Math.max(180, 100 + dhcp.length * 4)}" rx="12" fill="url(#grd3)" stroke="#42a5f5" stroke-width="1.5"/>
+          <text x="660" y="215" text-anchor="middle" fill="#42a5f5" font-size="13" font-weight="bold">📱 DHCP — 192.168.3.x</text>
+          <text x="660" y="233" text-anchor="middle" fill="#888" font-size="10">Dynamic IPs • Full Internet</text>
+          <text x="660" y="253" text-anchor="middle" fill="#ccc" font-size="22" font-weight="bold">${dhcp.length}</text>
+          <text x="660" y="268" text-anchor="middle" fill="#888" font-size="10">devices</text>
+          <text x="660" y="290" text-anchor="middle" fill="#aaa" font-size="10">${countCats(dhcp)}</text>
+
+          <!-- Blocked indicator on local-only zone -->
+          <line x1="395" y1="160" x2="395" y2="190" stroke="#e94560" stroke-width="2"/>
+          <line x1="405" y1="160" x2="405" y2="190" stroke="#e94560" stroke-width="2"/>
+          <line x1="388" y1="170" x2="412" y2="170" stroke="#e94560" stroke-width="2"/>
+
+          <!-- Legend -->
+          <rect x="20" y="${svgH - 60}" width="760" height="50" rx="8" fill="#16213e" stroke="#2a2a4a" stroke-width="1"/>
+          <circle cx="50" cy="${svgH - 35}" r="6" fill="#4caf50"/><text x="62" y="${svgH - 31}" fill="#aaa" font-size="10">Internet Access</text>
+          <circle cx="200" cy="${svgH - 35}" r="6" fill="#e94560"/><text x="212" y="${svgH - 31}" fill="#aaa" font-size="10">No Internet (Blocked)</text>
+          <circle cx="380" cy="${svgH - 35}" r="6" fill="#42a5f5"/><text x="392" y="${svgH - 31}" fill="#aaa" font-size="10">Dynamic / Unmanaged</text>
+          <text x="560" y="${svgH - 31}" fill="#666" font-size="10">Total: ${clients.length} devices</text>
+        </svg>
+      </div>
+
+      <div class="card">
+        <h2>Zone Details</h2>
+        <table class="data-table">
+          <thead><tr><th>Zone</th><th>Subnet</th><th>IP Type</th><th>Internet</th><th>Devices</th><th>Cameras</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>✅ Trusted</td><td class="mono">192.168.1.0/24</td><td>Reserved</td>
+              <td><span class="badge ok">Yes</span></td><td>${trusted.length}</td>
+              <td>${trusted.filter(c=>c.is_camera).length}</td>
+            </tr>
+            <tr>
+              <td>🔒 Local Only</td><td class="mono">192.168.2.0/24</td><td>Reserved</td>
+              <td><span class="badge danger">Blocked</span></td><td>${localOnly.length}</td>
+              <td>${localOnly.filter(c=>c.is_camera).length}</td>
+            </tr>
+            <tr>
+              <td>📱 DHCP</td><td class="mono">192.168.3.0/24</td><td>Dynamic</td>
+              <td><span class="badge ok">Yes</span></td><td>${dhcp.length}</td>
+              <td>${dhcp.filter(c=>c.is_camera).length}</td>
+            </tr>
+            ${other.length ? `<tr>
+              <td>❓ Other</td><td class="mono">Various</td><td>Mixed</td>
+              <td>—</td><td>${other.length}</td>
+              <td>${other.filter(c=>c.is_camera).length}</td>
+            </tr>` : ""}
+          </tbody>
+        </table>
+      </div>
+
+      ${trusted.filter(c=>c.is_camera).length ? `
+        <div class="card warn-card">
+          <h2>⚠ Cameras on Trusted Network</h2>
+          <p class="subtitle">${trusted.filter(c=>c.is_camera).length} camera(s) are on the trusted subnet with full internet access. Consider moving them to Local Only.</p>
+          <table class="data-table">
+            <thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>IP</th></tr></thead>
+            <tbody>${trusted.filter(c=>c.is_camera).map(c => `<tr>
+              <td class="mono">${c.mac}</td><td>${c.name||"—"}</td><td>${c.vendor||"?"}</td><td class="mono">${c.ip}</td>
+            </tr>`).join("")}</tbody>
+          </table>
+        </div>
+      ` : ""}
+
+      ${dhcp.filter(c=>c.is_camera).length ? `
+        <div class="card danger-card">
+          <h2>🚨 Cameras on DHCP (Unsecured)</h2>
+          <p class="subtitle">${dhcp.filter(c=>c.is_camera).length} camera(s) are on the DHCP pool with full internet. They can phone home freely.</p>
+          <table class="data-table">
+            <thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>IP</th></tr></thead>
+            <tbody>${dhcp.filter(c=>c.is_camera).map(c => `<tr>
+              <td class="mono">${c.mac}</td><td>${c.name||"—"}</td><td>${c.vendor||"?"}</td><td class="mono">${c.ip}</td>
+            </tr>`).join("")}</tbody>
+          </table>
+        </div>
+      ` : ""}
+    `;
+  }
+
   _vLocalNet() {
     const ln = this._localnet || {};
     const assignments = ln.assignments || {};
@@ -1281,6 +1444,8 @@ h2{font-size:15px;font-weight:600;margin-bottom:10px}.subtitle{color:var(--secon
 .rec-priority{font-size:11px;font-weight:700}.rec-device{font-size:11px;color:var(--secondary-text-color,#888)}
 .rec-name{font-size:11px;color:var(--secondary-text-color,#aaa)}.rec-title{font-size:13px;font-weight:600;margin-bottom:4px}
 .rec-detail{font-size:11px;line-height:1.6;color:var(--secondary-text-color,#ccc)}.rec-actions{margin-top:6px;display:flex;gap:4px;flex-wrap:wrap}
+.netmap-container{background:var(--card-background-color,#16213e);border-radius:10px;padding:16px;margin-bottom:16px;border:1px solid var(--divider-color,#2a2a4a);overflow-x:auto}
+.netmap-svg{width:100%;max-width:800px;height:auto;display:block;margin:0 auto}
 .onvif-badge{grid-column:1/-1;font-size:11px;margin-top:4px}
 .scan-section{grid-column:1/-1;margin-top:4px}
 .scan-result{background:rgba(255,255,255,.03);border-radius:6px;padding:10px;border:1px solid var(--divider-color,#2a2a4a)}

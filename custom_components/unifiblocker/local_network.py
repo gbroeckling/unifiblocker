@@ -356,44 +356,82 @@ class LocalNetworkManager:
         return {"ok": False, "error": "Subnet rules not supported — using per-device blocking instead"}
 
     async def block_device_internet(self, api: Any, mac: str) -> dict[str, Any]:
-        """Block a specific device from internet using v2 Traffic Rules."""
-        rule_payload = {
-            "action": "BLOCK",
-            "description": f"UB: {mac} local-only",
-            "enabled": True,
-            "matching_target": "INTERNET",
-            "target_devices": [
-                {"client_mac": mac.lower(), "type": "CLIENT"}
-            ],
-            "ip_addresses": [],
-            "ip_ranges": [],
-            "regions": [],
-            "domains": [],
-            "app_category_ids": [],
-            "app_ids": [],
-            "network_ids": [],
-            "schedule": {
-                "mode": "ALWAYS",
-                "repeat_on_days": [],
-                "time_all_day": False,
-                "time_range_end": "00:00",
-                "time_range_start": "00:00",
-            },
-            "bandwidth_limit": {
-                "download_limit_kbps": 0,
-                "enabled": False,
-                "upload_limit_kbps": 0,
-            },
-        }
+        """Block a specific device from internet using v2 Traffic Rules.
 
+        Uses the exact payload format from aiounifi's test fixtures
+        (the official HA UniFi library) — proven to work on real controllers.
+        """
+        # Step 1: Read existing traffic rules to learn what works.
         try:
-            result = await api.create_traffic_rule(rule_payload)
+            existing = await api.get_traffic_rules()
+            _LOGGER.debug("Found %d existing traffic rules", len(existing))
+        except Exception as err:
+            _LOGGER.warning("Could not read traffic rules: %s", err)
+            existing = []
+
+        # Step 2: If we have existing rules, clone one as a template
+        # and modify it. This guarantees the format matches what the
+        # controller expects. If no existing rules, use the aiounifi
+        # fixture format.
+        template = None
+        for rule in existing:
+            if rule.get("action") == "BLOCK" and rule.get("matching_target") == "INTERNET":
+                template = rule
+                break
+
+        if template:
+            # Clone the template, change the target device and description.
+            import copy
+            payload = copy.deepcopy(template)
+            payload.pop("_id", None)
+            payload["description"] = f"UB: {mac.lower()} local-only"
+            payload["enabled"] = True
+            payload["target_devices"] = [
+                {"client_mac": mac.lower(), "type": "CLIENT"}
+            ]
+        else:
+            # No template — use the exact aiounifi fixture format.
+            payload = {
+                "action": "BLOCK",
+                "app_category_ids": [],
+                "app_ids": [],
+                "bandwidth_limit": {
+                    "download_limit_kbps": 1024,
+                    "enabled": False,
+                    "upload_limit_kbps": 1024,
+                },
+                "description": f"UB: {mac.lower()} local-only",
+                "domains": [],
+                "enabled": True,
+                "ip_addresses": [],
+                "ip_ranges": [],
+                "matching_target": "INTERNET",
+                "network_ids": [],
+                "regions": [],
+                "schedule": {
+                    "date_end": "",
+                    "date_start": "",
+                    "mode": "ALWAYS",
+                    "repeat_on_days": [],
+                    "time_all_day": False,
+                    "time_range_end": "12:00",
+                    "time_range_start": "09:00",
+                },
+                "target_devices": [
+                    {"client_mac": mac.lower(), "type": "CLIENT"}
+                ],
+            }
+
+        # Step 3: Create the rule.
+        try:
+            result = await api.create_traffic_rule(payload)
             rule_id = ""
             if isinstance(result, dict):
                 rule_id = result.get("_id", "")
             _LOGGER.info("Blocked internet for %s (rule: %s)", mac, rule_id)
             return {"ok": True, "rule_id": rule_id, "mac": mac}
         except Exception as err:
+            _LOGGER.error("Failed to block %s: %s", mac, err)
             return {"ok": False, "error": str(err)}
 
     async def unblock_device_internet(self, api: Any, mac: str) -> dict[str, Any]:
