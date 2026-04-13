@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.31";
+const VERSION = "0.3.32";
 const SIDEBAR_THRESHOLD = 5;
 
 class UniFiBlockerPanel extends HTMLElement {
@@ -1365,13 +1365,29 @@ class UniFiBlockerPanel extends HTMLElement {
           ${scanHtml || `<button class="btn btn-scan" data-scanmac="${d.mac}">🔍 Scan Ports</button>`}
         </div>
       </div>
-      ${this._actionMode?`<div class="device-actions">${this._actBtns(d.mac, d.category)}</div>`:""}
+      ${this._actionMode?`<div class="device-actions">
+        ${this._actBtns(d.mac, d.category)}
+        <div class="cat-assign">
+          <span style="font-size:10px;color:var(--secondary-text-color);margin-right:4px">Set category:</span>
+          ${this._catBtns(d.mac)}
+        </div>
+      </div>`:""}
     </div>`;
   }
 
   _actBtns(mac, cat) {
     const localBtn = `<button class="btn btn-local" data-localassign="${cat||'iot'}" data-mac="${mac}">🔒Local Only</button>`;
     return `<button class="btn btn-trust" data-action="trust" data-mac="${mac}">✅Trust</button><button class="btn btn-ignore" data-action="ignore" data-mac="${mac}">👁Ignore</button>${localBtn}<button class="btn btn-quarantine" data-action="quarantine" data-mac="${mac}">🚫Block</button>`;
+  }
+
+  _catBtns(mac) {
+    const cats = [
+      ["camera","📹Cam"],["computer","💻PC"],["phone","📱Phone"],["esphome","🔌ESP"],
+      ["led","💡Light"],["ha_device","🏠HA"],["smart_speaker","🔊Spkr"],["streaming","📺Stream"],
+      ["gaming","🎮Game"],["printer","🖨Print"],["networking","🌐Net"],["crypto","⛏Crypto"],
+      ["iot","🔧IoT"],["nas","💾NAS"],["tablet","📱Tab"],
+    ];
+    return cats.map(([k,l]) => `<button class="btn btn-cat" data-setcat="${k}" data-mac="${mac}">${l}</button>`).join("");
   }
   _fmtB(b) { if(!b)return"0"; if(b>1e9)return(b/1e9).toFixed(1)+"GB"; if(b>1e6)return(b/1e6).toFixed(1)+"MB"; if(b>1e3)return(b/1e3).toFixed(1)+"KB"; return b+"B"; }
 }
