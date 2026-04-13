@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.30";
+const VERSION = "0.3.31";
 const SIDEBAR_THRESHOLD = 5;
 
 class UniFiBlockerPanel extends HTMLElement {
@@ -105,7 +105,7 @@ class UniFiBlockerPanel extends HTMLElement {
             ${this._nav("identify", "Identify", "🔍")}
             ${this._nav("nas", "Network Access", "🌐")}
             ${this._nav("localnet", "Local Only", "🔒")}
-            ${this._hasNasDevices() ? this._nav("storage", "Storage / NAS", "💾") : ""}
+            ${this._nav("storage", "Storage / NAS", "💾")}
             ${this._nav("netmap", "Network Map", "🗺")}
             ${catNav ? '<div class="nav-divider">Categories</div>' + catNav : ""}
             ${this._nav("quarantined", "Quarantined", "🚫")}
@@ -787,8 +787,7 @@ class UniFiBlockerPanel extends HTMLElement {
         <table class="info-table">
           <tr><td>Local-Only Rule</td><td>${fw.exists ? (fw.enabled ? '<span class="badge ok">Active — 192.168.2.0/24 blocked from WAN</span>' : '<span class="badge warn">Exists but disabled</span>') : '<span class="badge danger">Not created</span>'}</td></tr>
         </table>
-        ${!fw.exists && this._actionMode ? '<button class="btn btn-trust" data-ensureFw="1" style="margin-top:8px">Create Firewall Rule</button>' : ''}
-        ${!fw.exists && !this._actionMode ? '<p style="margin-top:6px;font-size:11px;color:#f0a500">Enable Action Mode to create the rule</p>' : ''}
+        ${fw.exists ? '' : '<p style="margin-top:6px;font-size:11px;color:var(--secondary-text-color)">Internet blocking is applied per-device automatically when you assign a device to Local Only.</p>'}
       </div>
 
       <div class="card">
@@ -1004,7 +1003,19 @@ class UniFiBlockerPanel extends HTMLElement {
         </div>
       ` : ""}
 
-      ${devices.length === 0 ? '<div class="empty">No NAS devices detected on your network.</div>' : ""}
+      ${devices.length === 0 ? `
+        <div class="card">
+          <h2>No NAS Detected Yet</h2>
+          <p style="font-size:12px;line-height:1.6">No devices have been categorized as NAS yet. If you have a NAS on your network, you can:</p>
+          <ol style="font-size:12px;padding-left:20px;line-height:2;margin-top:6px">
+            <li>Go to <strong>Identify</strong> in the sidebar</li>
+            <li>Find your NAS device in the list</li>
+            <li>Click the <strong>NAS / Storage</strong> category button to categorize it</li>
+            <li>The system will learn the pattern and detect similar devices automatically</li>
+          </ol>
+          <p style="font-size:12px;margin-top:8px"><strong>Supported NAS devices:</strong> UniFi NAS (UNAS), Synology, QNAP, TrueNAS, Unraid, Western Digital MyCloud, Asustor, TerraMaster, Drobo, Buffalo LinkStation</p>
+        </div>
+      ` : ""}
     `;
   }
 
@@ -1256,11 +1267,12 @@ class UniFiBlockerPanel extends HTMLElement {
         Devices assigned here get a DHCP reservation in the 192.168.2.x range and are blocked from WAN access by a firewall rule on the UCG Max.</p>
         <p style="margin-top:8px"><strong>How it works:</strong></p>
         <ol style="font-size:12px;padding-left:20px;margin-top:4px;line-height:1.8">
-          <li>Click <strong>"Create Firewall Rule"</strong> to block 192.168.2.0/24 from internet</li>
-          <li>Find a device in the list above and click <strong>"Assign"</strong></li>
+          <li>Enable <strong>Action Mode</strong> in the sidebar</li>
+          <li>Find a device above and click <strong>"Assign"</strong></li>
           <li>The device gets a reserved IP in its category range (e.g. cameras → .30-.50)</li>
+          <li>A traffic rule is created on the UCG Max blocking that device's internet</li>
           <li>After the device renews its DHCP lease, it moves to the new IP</li>
-          <li>The firewall rule ensures it can only talk locally — no internet</li>
+          <li>The device can still talk locally (RTSP, ONVIF, etc.) but cannot reach the internet</li>
         </ol>
         <p style="margin-top:8px;font-size:11px;color:var(--secondary-text-color)">
           IP ranges are configurable. Default layout: cameras .30-.50, ESPHome .51-.70, lights .71-.90, speakers .91-.100, IoT .101-.120, streaming .121-.130, printers .131-.140, gaming .141-.150, crypto .151-.160, NAS .161-.170, HA .171-.180, networking .181-.190, computers .191-.210, phones .211-.220, tablets .221-.230.
