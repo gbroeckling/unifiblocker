@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.32";
+const VERSION = "0.3.33";
 const SIDEBAR_THRESHOLD = 5;
 
 class UniFiBlockerPanel extends HTMLElement {
@@ -678,7 +678,7 @@ class UniFiBlockerPanel extends HTMLElement {
               <div class="info-row"><span class="info-label">Name</span><span>${d.name||"—"}</span></div>
               <div class="info-row"><span class="info-label">Hostname</span><span>${d.hostname||"—"}</span></div>
               <div class="info-row"><span class="info-label">Vendor</span><span>${d.vendor||"Unknown"}</span></div>
-              <div class="info-row"><span class="info-label">IP</span><span class="mono">${d.ip||"—"}</span></div>
+              <div class="info-row"><span class="info-label">IP</span><span class="mono">${d.ip ? `<a href="http://${d.ip}" target="_blank" rel="noopener" class="ip-link">${d.ip}</a>` : "—"}</span></div>
               <div class="info-row"><span class="info-label">SSID</span><span>${d.essid||"—"}</span></div>
               <div class="info-row"><span class="info-label">Wired</span><span>${d.wired?"Yes":"No"}</span></div>
               <div class="info-row"><span class="info-label">Signal</span><span>${d.rssi!=null?d.rssi+" dBm":"—"}</span></div>
@@ -757,7 +757,7 @@ class UniFiBlockerPanel extends HTMLElement {
 
     // Risk summary.
     const risks = [];
-    if (!fw.exists) risks.push({icon:"🔴", text:"Firewall rule for local-only subnet not created"});
+    if (assignments && Object.keys(assignments).length > 0 && !fw.exists) risks.push({icon:"🟡", text:"Some local-only devices may not have internet blocking rules yet"});
     if (camerasExposed.length) risks.push({icon:"🟠", text:`${camerasExposed.length} camera(s) have unrestricted internet access`});
     if (unreviewed.length > 20) risks.push({icon:"🟡", text:`${unreviewed.length} devices haven't been reviewed yet`});
     const suspCount = clients.filter(c => c.suspicious).length;
@@ -783,11 +783,12 @@ class UniFiBlockerPanel extends HTMLElement {
       </div>
 
       <div class="card">
-        <h2>Firewall Status</h2>
+        <h2>Internet Blocking</h2>
         <table class="info-table">
-          <tr><td>Local-Only Rule</td><td>${fw.exists ? (fw.enabled ? '<span class="badge ok">Active — 192.168.2.0/24 blocked from WAN</span>' : '<span class="badge warn">Exists but disabled</span>') : '<span class="badge danger">Not created</span>'}</td></tr>
+          <tr><td>Method</td><td><span class="badge ok">Per-device traffic rules</span></td></tr>
+          <tr><td>Status</td><td>${fw.blocked_count ? `<span class="badge ok">${fw.blocked_count}/${fw.total_devices} devices blocked</span>` : fw.total_devices ? '<span class="badge warn">Devices assigned but rules pending</span>' : '<span class="badge ok">No devices assigned yet</span>'}</td></tr>
         </table>
-        ${fw.exists ? '' : '<p style="margin-top:6px;font-size:11px;color:var(--secondary-text-color)">Internet blocking is applied per-device automatically when you assign a device to Local Only.</p>'}
+        <p style="margin-top:6px;font-size:11px;color:var(--secondary-text-color)">Internet access is blocked per-device automatically when you assign a device to Local Only. Each device gets its own traffic rule on the UCG Max.</p>
       </div>
 
       <div class="card">
@@ -1199,16 +1200,13 @@ class UniFiBlockerPanel extends HTMLElement {
     return `<h1>🔒 Local-Only Network</h1>
       <p class="subtitle">Devices on 192.168.2.x have no internet access. They work locally only.</p>
 
-      <div class="card ${fw.exists && fw.enabled ? '' : 'danger-card'}">
-        <h2>Firewall Rule</h2>
+      <div class="card">
+        <h2>Internet Blocking</h2>
         <table class="info-table">
-          <tr><td>Status</td><td>${fw.exists ? (fw.enabled ? '<span class="badge ok">Active</span>' : '<span class="badge warn">Disabled</span>') : '<span class="badge danger">Not Created</span>'}</td></tr>
-          <tr><td>Rule</td><td>${fw.name || FIREWALL_RULE_NAME || 'Block 192.168.2.0/24 → WAN'}</td></tr>
-          ${fw.rule_id ? `<tr><td>Rule ID</td><td class="mono">${fw.rule_id}</td></tr>` : ''}
-          ${fw.error ? `<tr><td>Error</td><td>${fw.error}</td></tr>` : ''}
+          <tr><td>Method</td><td>Per-device traffic rules on UCG Max</td></tr>
+          <tr><td>Status</td><td>${fw.blocked_count ? `<span class="badge ok">${fw.blocked_count}/${fw.total_devices} devices blocked</span>` : fw.total_devices ? '<span class="badge warn">Rules pending</span>' : '<span class="badge ok">No devices assigned yet</span>'}</td></tr>
         </table>
-        ${!fw.exists && this._actionMode ? '<button class="btn btn-trust" data-ensureFw="1" style="margin-top:10px">Create Firewall Rule</button>' : ''}
-        ${!fw.exists && !this._actionMode ? '<p style="margin-top:8px;font-size:11px;color:#f0a500">Enable Action Mode to create the firewall rule.</p>' : ''}
+        <p style="margin-top:6px;font-size:11px;color:var(--secondary-text-color)">When you assign a device to Local Only, a traffic rule is automatically created on the UCG Max blocking that device's MAC from the internet. No separate firewall setup needed.</p>
       </div>
 
       <div class="card">
@@ -1264,7 +1262,7 @@ class UniFiBlockerPanel extends HTMLElement {
       <div class="card">
         <h2>Setup Guide</h2>
         <p>This system manages the <strong>192.168.2.0/24</strong> subnet on your flat network.<br/>
-        Devices assigned here get a DHCP reservation in the 192.168.2.x range and are blocked from WAN access by a firewall rule on the UCG Max.</p>
+        Devices assigned here get a DHCP reservation in the 192.168.2.x range and a per-device traffic rule on the UCG Max that blocks their MAC address from reaching the internet.</p>
         <p style="margin-top:8px"><strong>How it works:</strong></p>
         <ol style="font-size:12px;padding-left:20px;margin-top:4px;line-height:1.8">
           <li>Enable <strong>Action Mode</strong> in the sidebar</li>
@@ -1349,7 +1347,7 @@ class UniFiBlockerPanel extends HTMLElement {
         <div class="device-info">
           <div class="info-row"><span class="info-label">Name</span><span>${d.name||"—"}</span></div>
           <div class="info-row"><span class="info-label">Vendor</span><span>${d.vendor||"Unknown"}</span></div>
-          <div class="info-row"><span class="info-label">IP</span><span class="mono">${d.ip||"—"}</span></div>
+          <div class="info-row"><span class="info-label">IP</span><span class="mono">${d.ip ? `<a href="http://${d.ip}" target="_blank" rel="noopener" class="ip-link">${d.ip}</a>` : "—"}</span></div>
           <div class="info-row"><span class="info-label">SSID</span><span>${d.essid||"—"}</span></div>
           <div class="info-row"><span class="info-label">Signal</span><span>${d.rssi!=null?d.rssi+" dBm":"—"}</span></div>
           <div class="info-row"><span class="info-label">TX/RX</span><span>${this._fmtB(d.tx_bytes)} / ${this._fmtB(d.rx_bytes)}</span></div>
@@ -1488,6 +1486,7 @@ h2{font-size:15px;font-weight:600;margin-bottom:10px}.subtitle{color:var(--secon
 .btn-scan:hover{background:rgba(15,155,142,.3)}
 .btn-port-block{background:rgba(233,69,96,.15);color:#e94560;border:1px solid #e9456066;padding:2px 8px;border-radius:3px;cursor:pointer;font-size:10px;transition:background .15s}
 .btn-port-block:hover{background:rgba(233,69,96,.3)}.btn-port-block:disabled{opacity:.5;cursor:default}
+.ip-link{color:var(--primary-color,#0f9b8e);text-decoration:none}.ip-link:hover{text-decoration:underline}
 .mono{font-family:"Consolas","Monaco",monospace;font-size:11px}
 @media(max-width:768px){.shell{flex-direction:column}.sidebar{width:100%;min-width:100%;flex-direction:row;border-right:none;border-bottom:1px solid var(--divider-color,#2a2a4a)}.brand{display:none}.nav-items{display:flex;overflow-x:auto;padding:0}.nav-item{padding:8px 12px;border-left:none;border-bottom:3px solid transparent;white-space:nowrap}.nav-item.active{border-bottom-color:var(--primary-color,#0f9b8e)}.nav-item.sub{padding-left:12px}.nav-divider{display:none}.action-toggle{padding:6px 10px;display:flex;align-items:center;gap:6px}.toggle-hint{display:none}.device-body{grid-template-columns:1fr}.stat-grid{grid-template-columns:repeat(3,1fr)}}
 `;
