@@ -261,7 +261,51 @@ def generate_recommendations(device: dict[str, Any]) -> list[dict[str, Any]]:
             "action_data": {"mac": mac},
         })
 
-    # ── 6. General best practices ────────────────────────────────────
+    # ── 6. Crypto miner recommendations ────────────────────────────
+
+    if category == "crypto":
+        recs.append({
+            "priority": PRIORITY_HIGH,
+            "priority_label": PRIORITY_LABELS[PRIORITY_HIGH],
+            "title": "Crypto miner detected",
+            "detail": "This device appears to be a cryptocurrency miner. Miners use significant "
+                      "electricity and bandwidth. If unauthorized, quarantine immediately.\n\n"
+                      "If this is YOUR miner:\n"
+                      "- Isolate to its own subnet or VLAN\n"
+                      "- Monitor power consumption\n"
+                      "- Ensure firmware is up to date (ASIC miners are frequent hack targets)\n"
+                      "- Change default web UI password (Antminer default: root/root)\n"
+                      "- Disable remote management ports if not needed\n"
+                      "- Check pool settings — unauthorized miners redirect hashrate to attacker pools",
+            "action": "review",
+            "action_data": {"mac": mac},
+        })
+
+    if any(p in open_ports for p in [3333, 3334, 4444, 5555, 7777, 9999, 14433]):
+        recs.append({
+            "priority": PRIORITY_HIGH,
+            "priority_label": PRIORITY_LABELS[PRIORITY_HIGH],
+            "title": "Stratum mining pool port open",
+            "detail": "This device has a Stratum mining protocol port open, indicating active "
+                      "cryptocurrency mining. If you don't own a miner, a device on your network "
+                      "may be compromised and mining crypto for an attacker (cryptojacking).",
+            "action": "review",
+            "action_data": {"mac": mac},
+        })
+
+    if any(p in open_ports for p in [4028, 4029]):
+        recs.append({
+            "priority": PRIORITY_MEDIUM,
+            "priority_label": PRIORITY_LABELS[PRIORITY_MEDIUM],
+            "title": "CGMiner/BFGMiner API exposed",
+            "detail": "The miner management API is accessible from the network. Anyone on your "
+                      "LAN can change pool settings, redirect hashrate, or modify miner config. "
+                      "Restrict access to trusted IPs only.",
+            "action": "block_port",
+            "action_data": {"mac": mac, "ports": [4028, 4029]},
+        })
+
+    # ── 7. General best practices ────────────────────────────────────
 
     if is_camera and 80 in open_ports and 443 not in open_ports:
         recs.append({

@@ -192,7 +192,13 @@ _HOSTNAME_PATTERNS: list[tuple[list[str], str]] = [
     # Crypto miners
     (["miner", "antminer", "asic", "bitmain", "whatsminer", "avalon",
       "innosilicon", "goldshell", "helium", "bobcat", "rak", "sensecap",
-      "nebra", "syncrobit", "crypto", "hashrate"], "crypto"),
+      "nebra", "syncrobit", "crypto", "hashrate", "cgminer", "bfgminer",
+      "nicehash", "ethminer", "xmrig", "t-rex", "lolminer", "nbminer",
+      "gminer", "phoenixminer", "hiveos", "hiveon", "minerstat",
+      "awesome-miner", "braiins", "slushpool", "f2pool", "poolin",
+      "viabtc", "luxor", "foundry", "s19", "s21", "l7", "ks3", "ks5",
+      "ka3", "d9", "z15", "iceriver", "jasminer", "ibelink",
+      "strongu", "canaan", "ebang", "microbt", "blockdag"], "crypto"),
     # Printers
     (["printer", "print", "epson", "canon-", "brother", "hp-printer",
       "laserjet", "officejet", "deskjet", "pixma", "mfc-"], "printer"),

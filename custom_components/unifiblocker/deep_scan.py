@@ -491,6 +491,12 @@ _KEYWORD_MAP: list[tuple[list[str], str, str]] = [
     (["sonos"], "smart_speaker", "Sonos speaker"),
     (["echo", "alexa"], "smart_speaker", "Amazon Echo"),
     (["google cast", "chromecast", "google home"], "smart_speaker", "Google/Nest device"),
+    # Crypto miners
+    (["antminer", "bitmain", "whatsminer", "microbt", "avalon", "canaan",
+      "goldshell", "innosilicon", "iceriver", "jasminer", "ibelink",
+      "cgminer", "bfgminer", "hiveos", "minerstat", "nicehash",
+      "stratum", "miner", "hashrate", "helium", "bobcat", "sensecap",
+      "nebra", "xmrig"], "crypto", "Crypto mining device"),
     # Printers
     (["printer", "laserjet", "officejet", "deskjet", "epson", "canon",
       "brother", "cups", "ipp"], "printer", "Network printer"),
@@ -692,6 +698,14 @@ _VENDOR_HOSTNAME_MAP: list[tuple[list[str], str, str]] = [
     (["lg", "lg electronics"], "streaming", "LG device"),
     (["vmware", "proxmox", "esxi"], "computer", "Virtual machine host"),
     (["raspberry", "raspberrypi"], "computer", "Raspberry Pi"),
+    (["antminer", "bitmain"], "crypto", "Antminer ASIC"),
+    (["whatsminer", "microbt"], "crypto", "Whatsminer ASIC"),
+    (["goldshell"], "crypto", "Goldshell miner"),
+    (["iceriver"], "crypto", "IceRiver miner"),
+    (["jasminer"], "crypto", "Jasminer miner"),
+    (["avalon", "canaan"], "crypto", "Avalon/Canaan miner"),
+    (["bobcat", "helium", "sensecap", "nebra", "rak"], "crypto", "Helium miner"),
+    (["hiveos", "minerstat", "nicehash"], "crypto", "Mining management"),
 ]
 
 

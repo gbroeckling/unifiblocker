@@ -155,12 +155,35 @@ SCAN_PORTS: dict[int, dict[str, str]] = {
     3074:  {"name": "Xbox Live", "group": "gaming"},
     3478:  {"name": "PlayStation/STUN", "group": "gaming"},
     27015: {"name": "Steam", "group": "gaming"},
-    # Crypto mining
-    3333:  {"name": "Stratum Mining", "group": "crypto"},
-    4444:  {"name": "Stratum-alt", "group": "crypto"},
+    # Crypto mining — Stratum protocol (pool connections)
+    3333:  {"name": "Stratum v1 (mining pool)", "group": "crypto"},
+    3334:  {"name": "Stratum v1-alt", "group": "crypto"},
+    3335:  {"name": "Stratum v1-TLS", "group": "crypto"},
+    4444:  {"name": "Stratum v1-alt2", "group": "crypto"},
+    5555:  {"name": "Stratum (Monero common)", "group": "crypto"},
+    7777:  {"name": "Stratum (ETC pool)", "group": "crypto"},
+    8888:  {"name": "Stratum (multi-algo)", "group": "web"},
+    9999:  {"name": "Stratum (NiceHash/alt)", "group": "crypto"},
+    14433: {"name": "Stratum v2 (TLS)", "group": "crypto"},
+    # Crypto mining — blockchain P2P
     8333:  {"name": "Bitcoin P2P", "group": "crypto"},
+    8332:  {"name": "Bitcoin RPC", "group": "crypto"},
+    18333: {"name": "Bitcoin Testnet", "group": "crypto"},
     9333:  {"name": "Litecoin P2P", "group": "crypto"},
-    30303: {"name": "Ethereum P2P", "group": "crypto"},
+    9332:  {"name": "Litecoin RPC", "group": "crypto"},
+    30303: {"name": "Ethereum P2P (geth)", "group": "crypto"},
+    30304: {"name": "Ethereum P2P-alt", "group": "crypto"},
+    8545:  {"name": "Ethereum JSON-RPC", "group": "crypto"},
+    8546:  {"name": "Ethereum WebSocket", "group": "crypto"},
+    18080: {"name": "Monero P2P", "group": "crypto"},
+    18081: {"name": "Monero RPC", "group": "crypto"},
+    # Crypto mining — ASIC management
+    4028:  {"name": "CGMiner/BFGMiner API", "group": "crypto"},
+    4029:  {"name": "CGMiner API-alt", "group": "crypto"},
+    8081:  {"name": "Antminer web UI", "group": "crypto"},
+    # Crypto — Helium/IoT mining
+    44158: {"name": "Helium Miner P2P", "group": "crypto"},
+    4467:  {"name": "Helium gRPC", "group": "crypto"},
     # VPN
     1194:  {"name": "OpenVPN", "group": "vpn"},
     51820: {"name": "WireGuard", "group": "vpn"},
@@ -353,6 +376,20 @@ NO_PORTS_RESULT = {
     "confidence": "low",
     "risk": "unknown",
 }
+
+# Add crypto port vulnerability recommendations.
+_PORT_VULN_RECS.update({
+    3333: "Stratum (3333): Mining pool connection. If you don't own a miner, a device may be cryptojacking — mining for an attacker. Investigate immediately.",
+    4444: "Stratum-alt (4444): Alternative mining pool port. Same risk as 3333.",
+    4028: "CGMiner API (4028): Miner management API with NO authentication by default. Anyone on your network can change pool settings and steal hashrate.",
+    8332: "Bitcoin RPC (8332): Bitcoin node RPC interface. Should be password-protected and bound to localhost.",
+    8333: "Bitcoin P2P (8333): This device is running a Bitcoin node. High bandwidth usage expected.",
+    8545: "Ethereum RPC (8545): Ethereum node JSON-RPC. If exposed without auth, attackers can drain wallets. Bind to localhost only.",
+    18080: "Monero P2P (18080): Monero node. Monero is the preferred cryptocurrency for cryptojacking due to CPU-friendly mining.",
+    18081: "Monero RPC (18081): Monero RPC interface. Restrict access.",
+    30303: "Ethereum P2P (30303): Ethereum node peer-to-peer. High bandwidth and storage usage.",
+    44158: "Helium P2P (44158): Helium IoT miner. Legitimate if you own it, but verify it's earning to YOUR wallet.",
+})
 
 
 SCAN_CACHE_FILE = "unifiblocker_scan_cache.json"
