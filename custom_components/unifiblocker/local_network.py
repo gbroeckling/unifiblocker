@@ -221,17 +221,19 @@ class LocalNetworkManager:
         mac: str,
         category: str,
         name: str = "",
+        store: Any = None,
     ) -> dict[str, Any]:
         """Assign a local-only IP to a device.
 
-        1. Pick next available IP in the category range
-        2. Find the UniFi user record for the MAC
+        1. Check for existing reservation and record the change
+        2. Pick next available IP in the category range
         3. Set a DHCP reservation via the API
-        4. Store the assignment locally
+        4. Block internet via traffic rule
+        5. Store the assignment locally
         """
         mac = mac.lower()
 
-        # Check if already assigned.
+        # Check if already assigned to local-only.
         existing = self._assignments.get(mac)
         if existing:
             return {"ok": True, "ip": existing["ip"], "already_assigned": True}
@@ -249,7 +251,26 @@ class LocalNetworkManager:
         if not user_id:
             return {"ok": False, "error": "User record has no ID"}
 
-        # Set the DHCP reservation.
+        # Check for existing reservation and record the change.
+        old_ip = ""
+        had_reservation = user.get("use_fixedip", False)
+        if had_reservation:
+            old_ip = user.get("fixed_ip", "")
+            _LOGGER.info(
+                "Device %s already has reservation at %s, moving to %s",
+                mac, old_ip, ip,
+            )
+
+        # Record IP change in the device store.
+        if store and old_ip:
+            await store.record_ip_change(mac, old_ip, ip, "local_only_assignment")
+        elif store:
+            # Record current DHCP IP before the change.
+            current_ip = user.get("last_ip", "") or user.get("ip", "")
+            if current_ip:
+                await store.record_ip_change(mac, current_ip, ip, "local_only_assignment")
+
+        # Set the DHCP reservation (overwrites any existing one).
         try:
             await api.set_fixed_ip(user_id, ip)
         except Exception as err:
@@ -266,12 +287,16 @@ class LocalNetworkManager:
             "name": name,
             "user_id": user_id,
             "traffic_rule_id": rule_id,
+            "previous_ip": old_ip,
+            "had_reservation": had_reservation,
         }
         await self.async_save()
 
-        _LOGGER.info("Assigned %s → %s (category: %s, internet blocked: %s)",
-                      mac, ip, category, block_result.get("ok", False))
+        _LOGGER.info("Assigned %s → %s (was: %s, category: %s, internet blocked: %s)",
+                      mac, ip, old_ip or "dhcp", category, block_result.get("ok", False))
         return {"ok": True, "ip": ip, "mac": mac, "category": category,
+                "previous_ip": old_ip,
+                "had_reservation": had_reservation,
                 "internet_blocked": block_result.get("ok", False),
                 "block_error": block_result.get("error", "")}
 

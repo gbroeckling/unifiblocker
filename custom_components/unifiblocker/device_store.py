@@ -100,11 +100,13 @@ class DeviceStore:
         await self.async_save()
 
     async def upsert_from_unifi(
-        self, mac: str, *, name: str | None = None, first_seen: str | None = None, last_seen: str | None = None
+        self, mac: str, *, name: str | None = None, ip: str | None = None,
+        first_seen: str | None = None, last_seen: str | None = None
     ) -> None:
         """Update metadata from a UniFi poll without changing the state.
 
         If the device has never been seen before it gets state ``new``.
+        Tracks IP changes in ip_history.
         """
         mac = mac.lower()
         entry = self._devices.get(mac)
@@ -112,6 +114,8 @@ class DeviceStore:
             self._devices[mac] = {
                 "state": STATE_NEW,
                 "name": name or "",
+                "current_ip": ip or "",
+                "ip_history": [],
                 "first_seen": first_seen or "",
                 "last_seen": last_seen or "",
             }
@@ -120,7 +124,48 @@ class DeviceStore:
                 entry["name"] = name
             if last_seen:
                 entry["last_seen"] = last_seen
+            # Track IP changes.
+            if ip and ip != entry.get("current_ip", ""):
+                old_ip = entry.get("current_ip", "")
+                if old_ip:
+                    history = entry.setdefault("ip_history", [])
+                    history.append({
+                        "ip": old_ip,
+                        "until": last_seen or "",
+                        "type": "observed",
+                    })
+                    # Keep last 20 entries.
+                    if len(history) > 20:
+                        entry["ip_history"] = history[-20:]
+                entry["current_ip"] = ip
         # Batch-save happens in the coordinator after a full poll.
+
+    def get_ip_history(self, mac: str) -> list[dict[str, Any]]:
+        """Return IP history for a device."""
+        entry = self._devices.get(mac.lower())
+        if not entry:
+            return []
+        history = list(entry.get("ip_history", []))
+        current = entry.get("current_ip", "")
+        if current:
+            history.append({"ip": current, "until": "now", "type": "current"})
+        return history
+
+    async def record_ip_change(
+        self, mac: str, old_ip: str, new_ip: str, change_type: str = "reassignment"
+    ) -> None:
+        """Record a deliberate IP change (e.g. moving to local-only)."""
+        mac = mac.lower()
+        entry = self._devices.setdefault(mac, {"state": STATE_NEW})
+        history = entry.setdefault("ip_history", [])
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        if old_ip:
+            history.append({"ip": old_ip, "until": now, "type": change_type})
+        entry["current_ip"] = new_ip
+        if len(history) > 20:
+            entry["ip_history"] = history[-20:]
+        await self.async_save()
 
     def get_manual_category(self, mac: str) -> str | None:
         """Return the manual category override for *mac*, or None."""

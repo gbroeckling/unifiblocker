@@ -107,6 +107,7 @@ async def ws_get_clients(
                 "suspicion_score": 0,
                 "suspicion_flags": [],
                 "is_camera": cat_data.get("category") == "camera",
+                "ip_history": data.store.get_ip_history(mac),
             })
     connection.send_result(msg["id"], {"clients": clients})
 
@@ -706,7 +707,8 @@ async def ws_localnet_assign(
         return
 
     result = await entry["local_net"].assign_local_ip(
-        entry["api"], msg["mac"], msg["category"], msg.get("name", "")
+        entry["api"], msg["mac"], msg["category"], msg.get("name", ""),
+        store=entry.get("store"),
     )
     if result.get("ok"):
         await entry["coordinator"].async_request_refresh()

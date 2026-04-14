@@ -273,7 +273,8 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             if first_seen and isinstance(first_seen, (int, float)):
                 first_seen = datetime.fromtimestamp(first_seen, tz=timezone.utc).isoformat()
             await self.store.upsert_from_unifi(
-                mac, name=name, first_seen=first_seen, last_seen=now_iso
+                mac, name=name, ip=client.get("ip", ""),
+                first_seen=first_seen, last_seen=now_iso,
             )
 
         # Persist once after the full batch.

@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.39";
+const VERSION = "0.3.40";
 const SIDEBAR_THRESHOLD = 5;
 
 class UniFiBlockerPanel extends HTMLElement {
@@ -1379,6 +1379,12 @@ class UniFiBlockerPanel extends HTMLElement {
           ${d.onvif_serial?`<div class="info-row"><span class="info-label">Serial</span><span class="mono">${d.onvif_serial}</span></div>`:""}
         </div>
         ${d.onvif && d.onvif.onvif ? `<div class="onvif-badge"><span class="badge ok">ONVIF Confirmed</span> ${d.onvif.manufacturer||""} ${d.onvif.model||""}</div>` : ""}
+        ${d.ip_history && d.ip_history.length > 1 ? `
+          <div class="ip-history">
+            <div style="font-size:10px;font-weight:600;color:var(--secondary-text-color);margin-bottom:3px">IP History:</div>
+            ${d.ip_history.map(h => `<div style="font-size:10px" class="mono">${h.ip} ${h.type === "current" ? '<span class="badge ok">current</span>' : `→ ${h.until || "?"} (${h.type})`}</div>`).join("")}
+          </div>
+        ` : ""}
         ${flags.length?`<div class="flags"><div class="flags-title">Flags:</div>${flags.map(f=>`<div class="flag-item">⚠ ${f}</div>`).join("")}</div>`:""}
         ${cats.length?`<div class="dpi"><div class="dpi-title">Traffic (DPI):</div><table class="dpi-table"><tr><th>Category</th><th>↓</th><th>↑</th></tr>${cats.map(c=>`<tr><td>${c.category}</td><td>${c.rx_mb}MB</td><td>${c.tx_mb}MB</td></tr>`).join("")}</table></div>`:""}
         <div id="scan-${mid}" class="scan-section">
@@ -1495,6 +1501,7 @@ h2{font-size:15px;font-weight:600;margin-bottom:10px}.subtitle{color:var(--secon
 .rec-detail{font-size:11px;line-height:1.6;color:var(--secondary-text-color,#ccc)}.rec-actions{margin-top:6px;display:flex;gap:4px;flex-wrap:wrap}
 .netmap-container{background:var(--card-background-color,#16213e);border-radius:10px;padding:16px;margin-bottom:16px;border:1px solid var(--divider-color,#2a2a4a);overflow-x:auto}
 .netmap-svg{width:100%;max-width:800px;height:auto;display:block;margin:0 auto}
+.ip-history{grid-column:1/-1;margin-top:4px;padding:4px 6px;background:rgba(255,255,255,.02);border-radius:4px}
 .onvif-badge{grid-column:1/-1;font-size:11px;margin-top:4px}
 .scan-section{grid-column:1/-1;margin-top:4px}
 .scan-result{background:rgba(255,255,255,.03);border-radius:6px;padding:10px;border:1px solid var(--divider-color,#2a2a4a)}
