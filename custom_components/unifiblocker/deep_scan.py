@@ -31,11 +31,14 @@ _LOGGER = logging.getLogger(__name__)
 PROBE_TIMEOUT = 3  # seconds per technique
 
 
-async def deep_scan_device(ip: str, mac: str) -> dict[str, Any]:
+async def deep_scan_device(
+    ip: str, mac: str,
+    vendor: str = "", hostname: str = "",
+    is_wired: bool = False, open_ports: list[int] | None = None,
+) -> dict[str, Any]:
     """Run all fingerprinting techniques on a single device.
 
-    Returns a dict with findings from each technique and a best-guess
-    device identification.
+    Also uses vendor/hostname from UniFi for additional context.
     """
     mac = mac.lower()
     result: dict[str, Any] = {
@@ -66,6 +69,23 @@ async def deep_scan_device(ip: str, mac: str) -> dict[str, Any]:
         if probe:
             result["techniques"][label] = probe
 
+    # Include UniFi data as a technique so the analyzer can use it.
+    if vendor or hostname:
+        result["techniques"]["unifi"] = {
+            "vendor": vendor,
+            "hostname": hostname,
+            "is_wired": is_wired,
+        }
+
+    # Include port scan data if available.
+    if open_ports:
+        result["techniques"]["ports"] = {"open_ports": open_ports}
+
+    _LOGGER.info(
+        "Deep scan %s: %d techniques returned data (of 8 probed)",
+        ip, len(result["techniques"]),
+    )
+
     # Analyze all findings and produce guesses.
     result["guesses"] = _analyze_findings(result["techniques"])
 
@@ -77,8 +97,29 @@ async def deep_scan_device(ip: str, mac: str) -> dict[str, Any]:
         result["best_confidence"] = best.get("confidence", "low")
     else:
         result["best_guess"] = "unknown"
-        result["best_description"] = "Could not identify device with any technique."
+        result["best_description"] = "No identifying information found from any technique."
         result["best_confidence"] = "low"
+
+    # Build notes from all findings — everything useful the scan found.
+    notes = []
+    for tech, data in result["techniques"].items():
+        if tech == "unifi":
+            continue  # Already known
+        for field in ["title", "server", "www_authenticate", "banner", "hostname", "primary"]:
+            val = data.get(field, "")
+            if val:
+                notes.append(f"{tech}.{field}: {val}")
+        cert = data.get("cert", {})
+        if cert.get("cn"):
+            notes.append(f"{tech}.cert_cn: {cert['cn']}")
+        if cert.get("org"):
+            notes.append(f"{tech}.cert_org: {cert['org']}")
+        if data.get("ttl"):
+            notes.append(f"ttl: {data['ttl']} ({data.get('os_guess', '?')})")
+        names = data.get("names", [])
+        if names:
+            notes.append(f"netbios: {', '.join(names)}")
+    result["notes"] = notes
 
     return result
 
@@ -432,6 +473,61 @@ def _analyze_findings(techniques: dict[str, Any]) -> list[dict[str, Any]]:
         guesses.append({"category": "iot", "description": "Embedded Linux device (dropbear SSH)",
                         "confidence": "medium", "keyword": "dropbear", "sources": ["ssh"]})
 
+    # UniFi vendor/hostname analysis (if no better guess found yet).
+    unifi = techniques.get("unifi", {})
+    uf_vendor = (unifi.get("vendor") or "").lower()
+    uf_hostname = (unifi.get("hostname") or "").lower()
+    uf_wired = unifi.get("is_wired", False)
+
+    if uf_vendor or uf_hostname:
+        combined = f"{uf_vendor} {uf_hostname}"
+        for keywords, category, description in _VENDOR_HOSTNAME_MAP:
+            for kw in keywords:
+                if kw in combined:
+                    guesses.append({
+                        "category": category,
+                        "description": f"{description} (from UniFi: vendor='{uf_vendor}', hostname='{uf_hostname}')",
+                        "confidence": "medium",
+                        "keyword": kw,
+                        "sources": ["unifi"],
+                    })
+                    break
+            else:
+                continue
+            break
+
+    # Port-based classification from existing port scan.
+    ports_data = techniques.get("ports", {})
+    op = ports_data.get("open_ports", [])
+    if 554 in op or 8554 in op:
+        guesses.append({"category": "camera", "description": "RTSP port open — likely camera",
+                        "confidence": "high", "keyword": "rtsp", "sources": ["ports"]})
+    if 9100 in op or 631 in op:
+        guesses.append({"category": "printer", "description": "Print service port open",
+                        "confidence": "high", "keyword": "print", "sources": ["ports"]})
+    if 5000 in op or 5001 in op:
+        guesses.append({"category": "nas", "description": "Synology/NAS web port open",
+                        "confidence": "medium", "keyword": "nas_port", "sources": ["ports"]})
+    if 6053 in op:
+        guesses.append({"category": "esphome", "description": "ESPHome API port open",
+                        "confidence": "high", "keyword": "esphome", "sources": ["ports"]})
+    if 8123 in op:
+        guesses.append({"category": "ha_device", "description": "Home Assistant port open",
+                        "confidence": "high", "keyword": "ha", "sources": ["ports"]})
+    if 32400 in op:
+        guesses.append({"category": "streaming", "description": "Plex server port open",
+                        "confidence": "high", "keyword": "plex", "sources": ["ports"]})
+
+    # If nothing else matched but device is wireless with no ports, likely a phone/tablet.
+    if not guesses and not uf_wired and not op:
+        if uf_vendor:
+            if any(kw in uf_vendor for kw in ["apple", "samsung", "google", "oneplus", "xiaomi", "huawei", "motorola", "oppo", "vivo"]):
+                guesses.append({"category": "phone", "description": f"Wireless device from phone vendor ({uf_vendor})",
+                                "confidence": "medium", "keyword": "phone_vendor", "sources": ["unifi"]})
+            elif any(kw in uf_vendor for kw in ["intel", "realtek", "qualcomm", "mediatek", "broadcom"]):
+                guesses.append({"category": "computer", "description": f"Wireless device with PC chipset ({uf_vendor})",
+                                "confidence": "low", "keyword": "pc_chip", "sources": ["unifi"]})
+
     # Sort by confidence.
     conf_order = {"high": 0, "medium": 1, "low": 2}
     guesses.sort(key=lambda g: conf_order.get(g.get("confidence", "low"), 3))
@@ -439,7 +535,46 @@ def _analyze_findings(techniques: dict[str, Any]) -> list[dict[str, Any]]:
     return guesses
 
 
-async def deep_scan_multiple(targets: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
+# Extended vendor/hostname keyword map for UniFi data.
+_VENDOR_HOSTNAME_MAP: list[tuple[list[str], str, str]] = [
+    (["iphone", "ipad", "macbook", "imac", "mac-pro", "apple"], "phone", "Apple device"),
+    (["galaxy", "samsung"], "phone", "Samsung device"),
+    (["pixel", "nexus", "chromecast", "google home", "google nest"], "smart_speaker", "Google device"),
+    (["oneplus"], "phone", "OnePlus phone"),
+    (["huawei", "honor"], "phone", "Huawei device"),
+    (["xiaomi", "redmi", "poco"], "phone", "Xiaomi device"),
+    (["motorola", "moto"], "phone", "Motorola phone"),
+    (["oppo", "realme", "vivo"], "phone", "Phone"),
+    (["echo", "amazon", "fire-tv", "kindle"], "smart_speaker", "Amazon device"),
+    (["roku"], "streaming", "Roku"),
+    (["sonos"], "smart_speaker", "Sonos speaker"),
+    (["playstation", "ps4", "ps5", "sony"], "gaming", "PlayStation"),
+    (["xbox", "microsoft"], "gaming", "Xbox/Microsoft"),
+    (["nintendo", "switch"], "gaming", "Nintendo"),
+    (["dell", "hp ", "lenovo", "thinkpad", "asus", "acer"], "computer", "Computer"),
+    (["synology", "diskstation"], "nas", "Synology NAS"),
+    (["qnap"], "nas", "QNAP NAS"),
+    (["netgear"], "networking", "Netgear device"),
+    (["ubiquiti", "ubnt", "unifi"], "networking", "Ubiquiti device"),
+    (["tp-link", "tplink", "tapo", "kasa"], "iot", "TP-Link device"),
+    (["hikvision", "dahua", "reolink", "amcrest", "foscam"], "camera", "IP camera"),
+    (["espressif", "esp32", "esp8266", "esphome"], "esphome", "ESP device"),
+    (["shelly"], "iot", "Shelly device"),
+    (["tuya", "smart life"], "iot", "Tuya IoT device"),
+    (["ring"], "camera", "Ring camera"),
+    (["wyze"], "camera", "Wyze camera"),
+    (["ecobee", "nest thermostat"], "iot", "Smart thermostat"),
+    (["hue", "philips"], "led", "Philips Hue"),
+    (["wled", "govee", "yeelight", "nanoleaf", "lifx"], "led", "Smart light"),
+    (["brother", "canon", "epson", "hp laserjet", "hp officejet"], "printer", "Printer"),
+    (["tesla"], "iot", "Tesla vehicle"),
+    (["lg", "lg electronics"], "streaming", "LG device"),
+    (["vmware", "proxmox", "esxi"], "computer", "Virtual machine host"),
+    (["raspberry", "raspberrypi"], "computer", "Raspberry Pi"),
+]
+
+
+async def deep_scan_multiple(targets: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """Deep-scan multiple devices sequentially."""
     results: dict[str, dict[str, Any]] = {}
     for t in targets:
@@ -447,7 +582,13 @@ async def deep_scan_multiple(targets: list[dict[str, str]]) -> dict[str, dict[st
         mac = t.get("mac", "")
         if ip and mac:
             try:
-                results[mac.lower()] = await deep_scan_device(ip, mac)
+                results[mac.lower()] = await deep_scan_device(
+                    ip, mac,
+                    vendor=t.get("vendor", ""),
+                    hostname=t.get("hostname", ""),
+                    is_wired=t.get("is_wired", False),
+                    open_ports=t.get("open_ports"),
+                )
             except Exception as err:
                 _LOGGER.debug("Deep scan failed for %s: %s", ip, err)
     return results

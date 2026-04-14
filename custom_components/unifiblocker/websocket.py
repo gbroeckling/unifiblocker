@@ -488,12 +488,22 @@ async def ws_deep_scan_unknowns(
 
     # Find all unknown devices with IPs.
     targets = []
+    scanner = entry.get("scanner")
+
     for c in data.clients:
         mac = c.get("mac", "").lower()
         ip = c.get("ip", "")
         cat = data.categories.get(mac, {}).get("category", "unknown")
         if ip and cat == "unknown":
-            targets.append({"ip": ip, "mac": mac})
+            # Pass all available UniFi data to give the scanner more context.
+            scan_result = scanner.get_result(mac) if scanner else None
+            targets.append({
+                "ip": ip, "mac": mac,
+                "vendor": c.get("oui") or lookup_vendor_safe(mac),
+                "hostname": c.get("hostname") or c.get("name") or "",
+                "is_wired": c.get("is_wired", False),
+                "open_ports": scan_result.get("open_ports", []) if scan_result else [],
+            })
 
     _LOGGER.info("Quantify: deep-scanning %d unknown devices", len(targets))
 
