@@ -31,6 +31,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_onvif_probe)
     websocket_api.async_register_command(hass, ws_onvif_results)
     websocket_api.async_register_command(hass, ws_get_recommendations)
+    websocket_api.async_register_command(hass, ws_deep_scan_unknowns)
     websocket_api.async_register_command(hass, ws_scan_device)
     websocket_api.async_register_command(hass, ws_scan_results)
     websocket_api.async_register_command(hass, ws_block_port)
@@ -459,6 +460,74 @@ async def ws_get_recommendations(
         "total_device_recs": sum(len(r) for r in device_recs.values()),
         "critical_count": sum(1 for recs in device_recs.values() for r in recs if r["priority"] == "critical"),
         "high_count": sum(1 for recs in device_recs.values() for r in recs if r["priority"] == "high"),
+    })
+
+
+# ── Deep scan (Quantify) ─────────────────────────────────────────────
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "unifiblocker/deep_scan_unknowns"}
+)
+@websocket_api.async_response
+async def ws_deep_scan_unknowns(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Deep-scan all unknown/uncategorized devices using multiple techniques."""
+    entry = _get_coordinator(hass)
+    if not entry or not entry["coordinator"].data:
+        connection.send_result(msg["id"], {"scanned": 0, "identified": 0})
+        return
+
+    from .deep_scan import deep_scan_multiple
+    from .vendor_lookup import lookup_vendor_safe
+
+    data = entry["coordinator"].data
+    store = entry["store"]
+    learned = entry.get("learned")
+
+    # Find all unknown devices with IPs.
+    targets = []
+    for c in data.clients:
+        mac = c.get("mac", "").lower()
+        ip = c.get("ip", "")
+        cat = data.categories.get(mac, {}).get("category", "unknown")
+        if ip and cat == "unknown":
+            targets.append({"ip": ip, "mac": mac})
+
+    _LOGGER.info("Quantify: deep-scanning %d unknown devices", len(targets))
+
+    # Run deep scan.
+    results = await deep_scan_multiple(targets)
+
+    # Apply results — set categories for identified devices.
+    identified = 0
+    for mac, result in results.items():
+        best = result.get("best_guess", "unknown")
+        if best != "unknown":
+            await store.set_manual_category(mac, best)
+            identified += 1
+
+            # Also teach the learning engine.
+            if learned:
+                client = data.client_by_mac(mac)
+                vendor = client.get("oui") or lookup_vendor_safe(mac) if client else ""
+                hostname = client.get("hostname", "") if client else ""
+                await learned.learn_from_device(
+                    best, mac=mac, vendor=vendor, hostname=hostname,
+                )
+
+    if identified:
+        await entry["coordinator"].async_request_refresh()
+
+    connection.send_result(msg["id"], {
+        "scanned": len(results),
+        "identified": identified,
+        "results": {mac: {
+            "best_guess": r.get("best_guess", "unknown"),
+            "best_description": r.get("best_description", ""),
+            "techniques_used": list(r.get("techniques", {}).keys()),
+        } for mac, r in results.items()},
     })
 
 

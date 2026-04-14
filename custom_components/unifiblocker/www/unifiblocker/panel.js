@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.33";
+const VERSION = "0.3.34";
 const SIDEBAR_THRESHOLD = 5;
 
 class UniFiBlockerPanel extends HTMLElement {
@@ -62,6 +62,17 @@ class UniFiBlockerPanel extends HTMLElement {
 
   async _action(type, mac) { if (!this._actionMode) return; const r = await this._ws(type, { mac }); if (r && r.ok) setTimeout(() => this._fetchAll(), 800); }
   async _setCategory(mac, category, name) { const r = await this._ws("unifiblocker/set_category", { mac, category, name: name || undefined }); if (r && r.ok) setTimeout(() => this._fetchAll(), 800); }
+  async _quantify() {
+    const btn = this.shadowRoot.querySelector("[data-quantify]");
+    if (btn) { btn.textContent = "🔬 Scanning... this takes a while"; btn.disabled = true; }
+    const r = await this._ws("unifiblocker/deep_scan_unknowns");
+    if (r) {
+      alert(`Deep scan complete: ${r.scanned || 0} devices scanned, ${r.identified || 0} identified`);
+      setTimeout(() => this._fetchAll(), 1000);
+    }
+    if (btn) { btn.textContent = "🔬 Quantify Unknown Devices"; btn.disabled = false; }
+  }
+
   async _scanDevice(mac) {
     const el = this.shadowRoot.getElementById(`scan-${mac.replace(/:/g,"")}`);
     if (el) el.innerHTML = '<div class="scan-loading">Scanning ~90 ports... this takes a few seconds</div>';
@@ -187,6 +198,9 @@ class UniFiBlockerPanel extends HTMLElement {
         if (confirm(`${btn.dataset.action} device ${btn.dataset.mac}?`)) this._action(`unifiblocker/${btn.dataset.action}`, btn.dataset.mac);
       });
     });
+    mc.querySelectorAll("[data-quantify]").forEach(btn => {
+      btn.addEventListener("click", () => this._quantify());
+    });
     mc.querySelectorAll("[data-scanmac]").forEach(btn => {
       btn.addEventListener("click", () => this._scanDevice(btn.dataset.scanmac));
     });
@@ -264,7 +278,11 @@ class UniFiBlockerPanel extends HTMLElement {
           <tr><td>Uptime</td><td>${h.uptime?(h.uptime/3600).toFixed(1)+" hrs":"—"}</td></tr>
         </table>
       </div>
-      ${this._actionMode?"":"<div class=\"ro-banner\">Read-only mode — enable Action Mode in the sidebar</div>"}`;
+      ${this._actionMode?"":"<div class=\"ro-banner\">Read-only mode — enable Action Mode in the sidebar</div>"}
+      <div style="margin-top:16px;text-align:center">
+        <button class="btn btn-quantify" data-quantify="1">🔬 Quantify Unknown Devices</button>
+        <p style="font-size:10px;color:var(--secondary-text-color);margin-top:4px">Deep-scans all unknown devices using HTTP banners, TLS certs, SSH, DNS, NetBIOS, and TTL analysis</p>
+      </div>`;
   }
 
   // ── Detail views (stat card click-through) ────────────────────────
@@ -1451,6 +1469,7 @@ h2{font-size:15px;font-weight:600;margin-bottom:10px}.subtitle{color:var(--secon
 .id-buttons{display:flex;flex-wrap:wrap;gap:4px}
 .btn{padding:5px 10px;border-radius:5px;border:none;cursor:pointer;font-size:11px;font-weight:600;transition:opacity .15s}.btn:hover{opacity:.85}
 .btn-trust{background:#4caf50;color:#fff}.btn-ignore{background:#607d8b;color:#fff}.btn-local{background:#0f9b8e;color:#fff}.btn-quarantine{background:#e94560;color:#fff}
+.cat-assign{display:flex;flex-wrap:wrap;gap:3px;margin-top:6px;padding-top:6px;border-top:1px solid var(--divider-color,#2a2a4a);align-items:center}
 .btn-cat{background:rgba(255,255,255,.1);color:var(--primary-text-color,#e0e0e0);font-size:10px;padding:4px 8px}
 .btn-cat:hover{background:rgba(15,155,142,.3)}
 .conf{font-size:10px;color:var(--secondary-text-color,#888);font-style:italic}
@@ -1484,6 +1503,8 @@ h2{font-size:15px;font-weight:600;margin-bottom:10px}.subtitle{color:var(--secon
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 .btn-scan{background:rgba(15,155,142,.15);color:var(--primary-color,#0f9b8e);border:1px solid var(--primary-color,#0f9b8e);padding:5px 12px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;transition:background .15s}
 .btn-scan:hover{background:rgba(15,155,142,.3)}
+.btn-quantify{background:linear-gradient(135deg,#0f9b8e,#42a5f5);color:#fff;padding:10px 24px;border-radius:8px;border:none;cursor:pointer;font-size:14px;font-weight:600;transition:opacity .15s}
+.btn-quantify:hover{opacity:.85}.btn-quantify:disabled{opacity:.5;cursor:default}
 .btn-port-block{background:rgba(233,69,96,.15);color:#e94560;border:1px solid #e9456066;padding:2px 8px;border-radius:3px;cursor:pointer;font-size:10px;transition:background .15s}
 .btn-port-block:hover{background:rgba(233,69,96,.3)}.btn-port-block:disabled{opacity:.5;cursor:default}
 .ip-link{color:var(--primary-color,#0f9b8e);text-decoration:none}.ip-link:hover{text-decoration:underline}
