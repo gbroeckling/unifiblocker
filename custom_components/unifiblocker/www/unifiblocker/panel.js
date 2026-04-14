@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.34";
+const VERSION = "0.3.35";
 const SIDEBAR_THRESHOLD = 5;
 
 class UniFiBlockerPanel extends HTMLElement {
@@ -63,6 +63,10 @@ class UniFiBlockerPanel extends HTMLElement {
   async _action(type, mac) { if (!this._actionMode) return; const r = await this._ws(type, { mac }); if (r && r.ok) setTimeout(() => this._fetchAll(), 800); }
   async _setCategory(mac, category, name) { const r = await this._ws("unifiblocker/set_category", { mac, category, name: name || undefined }); if (r && r.ok) setTimeout(() => this._fetchAll(), 800); }
   async _quantify() {
+    if (!this._actionMode) {
+      alert("Action Mode must be enabled to run Quantify.\n\nThis scan identifies unknown devices and automatically categorizes them, which changes device data. Enable Action Mode in the sidebar first.");
+      return;
+    }
     const btn = this.shadowRoot.querySelector("[data-quantify]");
     if (btn) { btn.textContent = "🔬 Scanning... this takes a while"; btn.disabled = true; }
     const r = await this._ws("unifiblocker/deep_scan_unknowns");
