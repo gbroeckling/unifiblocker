@@ -57,11 +57,12 @@ async def deep_scan_device(
         _probe_dns_reverse(ip),
         _probe_ttl(ip),
         _probe_netbios(ip),
+        _probe_mdns(ip),
         return_exceptions=True,
     )
 
     labels = ["http_80", "http_8080", "https_443", "https_8443",
-              "ssh", "dns_reverse", "ttl", "netbios"]
+              "ssh", "dns_reverse", "ttl", "netbios", "mdns"]
 
     for label, probe in zip(labels, probes):
         if isinstance(probe, Exception):
@@ -119,6 +120,12 @@ async def deep_scan_device(
         names = data.get("names", [])
         if names:
             notes.append(f"netbios: {', '.join(names)}")
+        services = data.get("services", [])
+        for svc in services:
+            notes.append(f"mdns: {svc.get('service','')} → {svc.get('description','')}")
+            txt = svc.get("txt", {})
+            for k, v in list(txt.items())[:5]:
+                notes.append(f"  mdns.{k}: {v}")
     result["notes"] = notes
 
     return result
@@ -346,6 +353,104 @@ async def _probe_netbios(ip: str) -> dict[str, Any] | None:
     return None
 
 
+# ── mDNS Service Discovery ───────────────────────────────────────────
+
+# mDNS service types and what they indicate.
+_MDNS_SERVICE_MAP: dict[str, tuple[str, str]] = {
+    "_airplay._tcp": ("streaming", "AirPlay device (Apple TV, HomePod, speaker)"),
+    "_raop._tcp": ("streaming", "AirPlay audio (Apple/compatible speaker)"),
+    "_googlecast._tcp": ("smart_speaker", "Google Cast (Chromecast, Nest, Google Home)"),
+    "_spotify-connect._tcp": ("smart_speaker", "Spotify Connect device"),
+    "_ipp._tcp": ("printer", "IPP printer"),
+    "_printer._tcp": ("printer", "Network printer"),
+    "_pdl-datastream._tcp": ("printer", "Printer (raw data stream)"),
+    "_scanner._tcp": ("printer", "Network scanner"),
+    "_hue._tcp": ("led", "Philips Hue bridge"),
+    "_homekit._tcp": ("iot", "HomeKit accessory"),
+    "_companion-link._tcp": ("phone", "Apple device (iPhone/iPad/Mac)"),
+    "_sleep-proxy._udp": ("streaming", "Apple TV (sleep proxy)"),
+    "_esphomelib._tcp": ("esphome", "ESPHome device"),
+    "_http._tcp": ("iot", "Device with web interface"),
+    "_smb._tcp": ("nas", "SMB file share (NAS or computer)"),
+    "_afpovertcp._tcp": ("nas", "AFP file share (Mac/NAS)"),
+    "_nfs._tcp": ("nas", "NFS file share"),
+    "_sonos._tcp": ("smart_speaker", "Sonos speaker"),
+    "_daap._tcp": ("streaming", "iTunes/DAAP music server"),
+    "_roku._tcp": ("streaming", "Roku device"),
+    "_mqtt._tcp": ("iot", "MQTT broker"),
+}
+
+
+async def _probe_mdns(ip: str) -> dict[str, Any] | None:
+    """Discover mDNS services advertised by this IP."""
+    try:
+        from zeroconf import Zeroconf, ServiceBrowser, IPVersion
+        import ipaddress
+
+        found_services: list[dict[str, str]] = []
+
+        class Listener:
+            def add_service(self, zc, stype, name):
+                try:
+                    info = zc.get_service_info(stype, name, timeout=2000)
+                    if info and info.parsed_addresses():
+                        for addr in info.parsed_addresses():
+                            if addr == ip:
+                                txt = {}
+                                if info.properties:
+                                    txt = {k.decode("utf-8", errors="ignore"): v.decode("utf-8", errors="ignore")
+                                           for k, v in info.properties.items() if isinstance(k, bytes)}
+                                cat_info = _MDNS_SERVICE_MAP.get(stype, ("unknown", stype))
+                                found_services.append({
+                                    "service": stype,
+                                    "name": name,
+                                    "category": cat_info[0],
+                                    "description": cat_info[1],
+                                    "txt": txt,
+                                })
+                except Exception:
+                    pass
+            def remove_service(self, zc, stype, name): pass
+            def update_service(self, zc, stype, name): pass
+
+        zc = Zeroconf(ip_version=IPVersion.V4Only)
+        listener = Listener()
+
+        # Browse the most identifying service types.
+        browsers = []
+        for stype in _MDNS_SERVICE_MAP:
+            try:
+                browsers.append(ServiceBrowser(zc, f"{stype}.local.", listener))
+            except Exception:
+                pass
+
+        # Wait for responses.
+        await asyncio.sleep(3)
+
+        for b in browsers:
+            b.cancel()
+        zc.close()
+
+        if found_services:
+            # Pick the most specific category.
+            best = found_services[0]
+            for s in found_services:
+                if s["category"] != "iot" and s["category"] != "unknown":
+                    best = s
+                    break
+            return {
+                "services": found_services,
+                "best_category": best["category"],
+                "best_description": best["description"],
+                "service_count": len(found_services),
+            }
+    except ImportError:
+        _LOGGER.debug("zeroconf not available for mDNS probe")
+    except Exception as err:
+        _LOGGER.debug("mDNS probe failed: %s", err)
+    return None
+
+
 # ── Analyze all findings ─────────────────────────────────────────────
 
 # Maps keywords found in banners/titles/certs to categories.
@@ -465,6 +570,22 @@ def _analyze_findings(techniques: dict[str, Any]) -> list[dict[str, Any]]:
     elif os_guess == "network_equipment":
         guesses.append({"category": "networking", "description": "Network equipment (TTL ~255)",
                         "confidence": "low", "keyword": "ttl", "sources": ["ttl"]})
+
+    # mDNS service analysis — highest yield for consumer devices.
+    mdns_data = techniques.get("mdns", {})
+    if mdns_data:
+        mdns_cat = mdns_data.get("best_category", "unknown")
+        mdns_desc = mdns_data.get("best_description", "")
+        if mdns_cat != "unknown":
+            services = mdns_data.get("services", [])
+            svc_names = [s.get("service", "") for s in services]
+            guesses.append({
+                "category": mdns_cat,
+                "description": f"{mdns_desc} (mDNS: {', '.join(svc_names[:3])})",
+                "confidence": "high",
+                "keyword": "mdns",
+                "sources": ["mdns"],
+            })
 
     # SSH banner analysis.
     ssh_data = techniques.get("ssh", {})
