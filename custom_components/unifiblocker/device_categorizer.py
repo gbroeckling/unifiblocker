@@ -124,6 +124,18 @@ _VENDOR_CATEGORY: dict[str, str] = {
     "Wyze": "camera",
     # Printers
     # NAS
+    # Crypto miners
+    "Bitmain": "crypto",
+    "MicroBT/Whatsminer": "crypto",
+    "Canaan/Avalon": "crypto",
+    "Goldshell": "crypto",
+    "Innosilicon": "crypto",
+    "IceRiver": "crypto",
+    "Bobcat (Helium)": "crypto",
+    "RAK (Helium)": "crypto",
+    "SenseCAP (Helium)": "crypto",
+    "Nebra (Helium)": "crypto",
+    # NAS
     "Synology": "nas",
     "QNAP": "nas",
     "Western Digital": "nas",
@@ -351,7 +363,12 @@ def categorize_device(
         if scan_cat != "unknown" and scan_conf in ("high", "medium"):
             return _result(scan_cat, scan_conf, "port_scan")
 
-    # 3. Known camera vendor OUI — fuzzy match
+    # 3a. Known crypto miner vendor — check BEFORE camera
+    from .vendor_lookup import is_crypto_vendor as _is_crypto_vendor
+    if _is_crypto_vendor(vendor):
+        return _result("crypto", "high", "vendor")
+
+    # 3b. Known camera vendor OUI — fuzzy match
     from .vendor_lookup import is_camera_vendor as _is_cam_vendor, CAMERA_CHIP_VENDORS
     if _is_cam_vendor(vendor):
         return _result("camera", "high", "vendor")

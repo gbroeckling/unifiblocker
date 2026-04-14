@@ -622,6 +622,42 @@ _OUI_TABLE: dict[str, str] = {
     # ── Zosi ─────────────────────────────────────────────────────────
     "38:D5:47": "Zosi",
     # ══════════════════════════════════════════════════════════════════
+    #  CRYPTO MINING HARDWARE
+    # ══════════════════════════════════════════════════════════════════
+    # ── Bitmain (Antminer S19, S21, L7, KS3, Z15, etc.) ────────────
+    "B4:A2:EB": "Bitmain",
+    "C4:11:04": "Bitmain",
+    "D4:AD:20": "Bitmain",
+    "E0:B6:F5": "Bitmain",
+    "38:2C:4A": "Bitmain",
+    "50:76:AF": "Bitmain",
+    "78:A5:04": "Bitmain",
+    "80:3F:5D": "Bitmain",
+    "84:C2:E4": "Bitmain",
+    "C8:EB:C3": "Bitmain",
+    "CC:B2:55": "Bitmain",
+    "DC:A6:32": "Bitmain",
+    # ── MicroBT (Whatsminer M30S, M50, M60, etc.) ──────────────────
+    "00:E0:4C": "MicroBT/Whatsminer",
+    "2C:F0:5D": "MicroBT/Whatsminer",
+    "30:A1:FA": "MicroBT/Whatsminer",
+    "70:B3:D5": "MicroBT/Whatsminer",
+    "F4:4D:30": "MicroBT/Whatsminer",
+    # ── Canaan (Avalon miners) ─────────────────────────────────────
+    "00:19:D2": "Canaan/Avalon",
+    "40:B0:34": "Canaan/Avalon",
+    # ── Goldshell (KD-BOX, LB1, HS-BOX, etc.) ─────────────────────
+    "1C:69:7A": "Goldshell",
+    # ── Innosilicon (T3+, A10, etc.) ───────────────────────────────
+    "00:E0:6F": "Innosilicon",
+    # ── IceRiver (KS0, KS1, KS2, KS3, KS5) ───────────────────────
+    "B0:A4:60": "IceRiver",
+    # ── Helium / IoT miners ────────────────────────────────────────
+    "60:81:F9": "Bobcat (Helium)",
+    "E4:5F:01": "RAK (Helium)",
+    "DC:A6:32": "SenseCAP (Helium)",
+    "B8:27:EB": "Nebra (Helium)",
+    # ══════════════════════════════════════════════════════════════════
     #  CAMERA CHIP MANUFACTURERS & WHITE-LABEL ODMs
     #  These make the SoC/board inside most cheap cameras.
     #  A device with these OUIs that has no hostname is very likely
@@ -837,6 +873,22 @@ CAMERA_VENDOR_KEYWORDS: list[str] = [
     "sigmastar", "novatek", "grainmedia", "vigi", "ring",
     "camera", "ipcam", "ip cam", "nvr", "dvr", "surveillance",
 ]
+
+
+CRYPTO_VENDOR_KEYWORDS: list[str] = [
+    "bitmain", "antminer", "microbt", "whatsminer", "canaan", "avalon",
+    "goldshell", "innosilicon", "iceriver", "jasminer", "ibelink",
+    "strongu", "ebang", "bobcat", "sensecap", "nebra", "helium",
+    "miner", "mining",
+]
+
+
+def is_crypto_vendor(vendor: str) -> bool:
+    """Return True if vendor matches a known crypto miner manufacturer."""
+    if not vendor or vendor == "Unknown":
+        return False
+    vendor_lower = vendor.lower()
+    return any(kw in vendor_lower for kw in CRYPTO_VENDOR_KEYWORDS)
 
 
 def is_camera_vendor(vendor: str) -> bool:
