@@ -31,6 +31,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_onvif_probe)
     websocket_api.async_register_command(hass, ws_onvif_results)
     websocket_api.async_register_command(hass, ws_get_recommendations)
+    websocket_api.async_register_command(hass, ws_check_ip_free)
     websocket_api.async_register_command(hass, ws_deep_scan_unknowns)
     websocket_api.async_register_command(hass, ws_scan_device)
     websocket_api.async_register_command(hass, ws_scan_results)
@@ -461,6 +462,166 @@ async def ws_get_recommendations(
         "total_device_recs": sum(len(r) for r in device_recs.values()),
         "critical_count": sum(1 for recs in device_recs.values() for r in recs if r["priority"] == "critical"),
         "high_count": sum(1 for recs in device_recs.values() for r in recs if r["priority"] == "high"),
+    })
+
+
+# ── IP availability check ────────────────────────────────────────────
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "unifiblocker/check_ip",
+        vol.Required("ip"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_check_ip_free(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Check if an IP address is truly free — ping, reservations, clients, history."""
+    import asyncio
+
+    entry = _get_coordinator(hass)
+    ip = msg["ip"]
+    checks: list[dict] = []
+    is_free = True
+
+    # 1. Ping test.
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ping", "-c", "1", "-W", "2", ip,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+        ping_ok = proc.returncode == 0
+        checks.append({
+            "check": "Ping",
+            "result": "Responds" if ping_ok else "No response",
+            "free": not ping_ok,
+            "icon": "🔴" if ping_ok else "✅",
+        })
+        if ping_ok:
+            is_free = False
+    except Exception:
+        checks.append({"check": "Ping", "result": "Could not ping", "free": True, "icon": "⚠"})
+
+    if entry and entry["coordinator"].data:
+        data = entry["coordinator"].data
+
+        # 2. Check active clients — is any device currently using this IP?
+        current_user = None
+        for c in data.clients:
+            if c.get("ip") == ip:
+                current_user = {
+                    "mac": c.get("mac", ""),
+                    "name": c.get("name") or c.get("hostname") or "",
+                    "vendor": c.get("oui", ""),
+                }
+                break
+        if current_user:
+            checks.append({
+                "check": "Active client",
+                "result": f"In use by {current_user['name'] or current_user['mac']} ({current_user['vendor']})",
+                "free": False,
+                "icon": "🔴",
+            })
+            is_free = False
+        else:
+            checks.append({"check": "Active client", "result": "No device using this IP", "free": True, "icon": "✅"})
+
+        # 3. Check UniFi DHCP reservations.
+        try:
+            users = await entry["api"].get_all_users()
+            reserved_by = None
+            for u in users:
+                if u.get("use_fixedip") and u.get("fixed_ip") == ip:
+                    reserved_by = {
+                        "mac": u.get("mac", ""),
+                        "name": u.get("name") or u.get("hostname") or "",
+                    }
+                    break
+            if reserved_by:
+                checks.append({
+                    "check": "DHCP reservation",
+                    "result": f"Reserved for {reserved_by['name'] or reserved_by['mac']}",
+                    "free": False,
+                    "icon": "🔴",
+                })
+                is_free = False
+            else:
+                checks.append({"check": "DHCP reservation", "result": "No reservation", "free": True, "icon": "✅"})
+        except Exception as err:
+            checks.append({"check": "DHCP reservation", "result": f"Could not check: {err}", "free": True, "icon": "⚠"})
+
+        # 4. Check our local-only assignments.
+        local_net = entry.get("local_net")
+        if local_net:
+            assigned = None
+            for mac, info in local_net.assignments.items():
+                if info.get("ip") == ip:
+                    assigned = {"mac": mac, "name": info.get("name", "")}
+                    break
+            if assigned:
+                checks.append({
+                    "check": "Local-only assignment",
+                    "result": f"Assigned to {assigned['name'] or assigned['mac']}",
+                    "free": False,
+                    "icon": "🔴",
+                })
+                is_free = False
+            else:
+                checks.append({"check": "Local-only assignment", "result": "Not assigned", "free": True, "icon": "✅"})
+
+        # 5. Check IP history — has any device previously used this IP?
+        store = entry.get("store")
+        if store:
+            history_hits = []
+            for mac, dev_data in store.devices.items():
+                for h in dev_data.get("ip_history", []):
+                    if h.get("ip") == ip:
+                        history_hits.append({
+                            "mac": mac,
+                            "name": dev_data.get("name", ""),
+                            "until": h.get("until", "?"),
+                        })
+                if dev_data.get("current_ip") == ip:
+                    history_hits.append({
+                        "mac": mac,
+                        "name": dev_data.get("name", ""),
+                        "until": "current in store",
+                    })
+            if history_hits:
+                desc = "; ".join(f"{h['name'] or h['mac']} (until {h['until']})" for h in history_hits[:3])
+                checks.append({
+                    "check": "IP history",
+                    "result": f"Previously used by: {desc}",
+                    "free": True,  # History doesn't block, just informational.
+                    "icon": "ℹ️",
+                })
+            else:
+                checks.append({"check": "IP history", "result": "No previous usage recorded", "free": True, "icon": "✅"})
+
+    # 6. Check if IP is in a reserved range (gateway, broadcast, etc.)
+    parts = ip.split(".")
+    if len(parts) == 4:
+        last = int(parts[3])
+        if last in (0, 1, 255):
+            checks.append({
+                "check": "Reserved address",
+                "result": f".{last} is reserved (gateway/broadcast)",
+                "free": False,
+                "icon": "🔴",
+            })
+            is_free = False
+        else:
+            checks.append({"check": "Reserved address", "result": "Not a reserved address", "free": True, "icon": "✅"})
+
+    connection.send_result(msg["id"], {
+        "ip": ip,
+        "is_free": is_free,
+        "checks": checks,
+        "summary": "✅ IP is free" if is_free else "🔴 IP is NOT free",
     })
 
 

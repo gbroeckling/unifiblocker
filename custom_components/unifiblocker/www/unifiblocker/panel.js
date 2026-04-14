@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.40";
+const VERSION = "0.3.41";
 const SIDEBAR_THRESHOLD = 5;
 
 class UniFiBlockerPanel extends HTMLElement {
@@ -202,6 +202,32 @@ class UniFiBlockerPanel extends HTMLElement {
         if (confirm(`${btn.dataset.action} device ${btn.dataset.mac}?`)) this._action(`unifiblocker/${btn.dataset.action}`, btn.dataset.mac);
       });
     });
+    const checkBtn = mc.querySelector("#checkIpBtn");
+    if (checkBtn) {
+      checkBtn.addEventListener("click", async () => {
+        const input = mc.querySelector("#checkIpInput");
+        const resultDiv = mc.querySelector("#checkIpResult");
+        if (!input || !resultDiv) return;
+        const ip = input.value.trim();
+        if (!ip) { resultDiv.innerHTML = '<p style="color:#f0a500">Enter an IP address</p>'; return; }
+        resultDiv.innerHTML = '<p>Checking...</p>';
+        const r = await this._ws("unifiblocker/check_ip", { ip });
+        if (r) {
+          resultDiv.innerHTML = `
+            <div style="font-size:14px;font-weight:700;margin-bottom:8px">${r.summary}</div>
+            <table class="data-table">
+              <thead><tr><th></th><th>Check</th><th>Result</th></tr></thead>
+              <tbody>
+                ${r.checks.map(c => `<tr>
+                  <td>${c.icon}</td>
+                  <td>${c.check}</td>
+                  <td>${c.result}</td>
+                </tr>`).join("")}
+              </tbody>
+            </table>`;
+        }
+      });
+    }
     mc.querySelectorAll("[data-quantify]").forEach(btn => {
       btn.addEventListener("click", () => this._quantify());
     });
@@ -1279,6 +1305,15 @@ class UniFiBlockerPanel extends HTMLElement {
             </div>`;
           }).join('')}
         `}
+      </div>
+
+      <div class="card">
+        <h2>Check IP Availability</h2>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+          <input type="text" id="checkIpInput" class="filter-input" placeholder="e.g. 192.168.2.35" style="width:200px;margin:0" />
+          <button class="btn btn-scan" id="checkIpBtn">🔍 Check</button>
+        </div>
+        <div id="checkIpResult"></div>
       </div>
 
       <div class="card">
