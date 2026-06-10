@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.41";
+const VERSION = "0.3.42";
 const SIDEBAR_THRESHOLD = 5;
 
 class UniFiBlockerPanel extends HTMLElement {
@@ -27,6 +27,7 @@ class UniFiBlockerPanel extends HTMLElement {
     this._localnet = {};
     this._scanCache = {};
     this._recs = {};
+    this._miners = { rigs: [], summary: {} };
     this._initialized = false;
   }
 
@@ -42,18 +43,20 @@ class UniFiBlockerPanel extends HTMLElement {
   async _ws(type, extra = {}) { if (!this._hass) return null; try { return await this._hass.callWS({ type, ...extra }); } catch (e) { console.warn("[UB]", type, e); return null; } }
 
   async _fetchAll() {
-    const [ov, cl, cats, ln, recs] = await Promise.all([
+    const [ov, cl, cats, ln, recs, mn] = await Promise.all([
       this._ws("unifiblocker/overview"),
       this._ws("unifiblocker/clients"),
       this._ws("unifiblocker/categories"),
       this._ws("unifiblocker/localnet_status"),
       this._ws("unifiblocker/recommendations"),
+      this._ws("unifiblocker/miners"),
     ]);
     if (ov) this._overview = ov;
     if (cl) this._data = cl;
     if (cats) this._categories = cats.categories || {};
     if (ln) this._localnet = ln;
     if (recs) this._recs = recs;
+    if (mn) this._miners = mn;
     this._render();
   }
 
@@ -121,6 +124,7 @@ class UniFiBlockerPanel extends HTMLElement {
             ${this._nav("nas", "Network Access", "🌐")}
             ${this._nav("localnet", "Local Only", "🔒")}
             ${this._nav("storage", "Storage / NAS", "💾")}
+            ${this._nav("mining", "Mining", "⛏")}
             ${this._nav("netmap", "Network Map", "🗺")}
             ${catNav ? '<div class="nav-divider">Categories</div>' + catNav : ""}
             ${this._nav("quarantined", "Quarantined", "🚫")}
@@ -180,6 +184,7 @@ class UniFiBlockerPanel extends HTMLElement {
       case "nas": mc.innerHTML = this._vNAS(); break;
       case "localnet": mc.innerHTML = this._vLocalNet(); break;
       case "storage": mc.innerHTML = this._vStorage(); break;
+      case "mining": mc.innerHTML = this._vMining(); break;
       case "netmap": mc.innerHTML = this._vNetMap(); break;
       case "category": mc.innerHTML = this._vCategory(); break;
       case "quarantined": mc.innerHTML = this._vDeviceList((this._data.clients||[]).filter(c=>c.state==="quarantined"||c.blocked), "Quarantined / Blocked", "Devices blocked on the controller."); break;
@@ -1333,6 +1338,80 @@ class UniFiBlockerPanel extends HTMLElement {
           IP ranges are configurable. Default layout: cameras .30-.50, ESPHome .51-.70, lights .71-.90, speakers .91-.100, IoT .101-.120, streaming .121-.130, printers .131-.140, gaming .141-.150, crypto .151-.160, NAS .161-.170, HA .171-.180, networking .181-.190, computers .191-.210, phones .211-.220, tablets .221-.230.
         </p>
       </div>`;
+  }
+
+  _vMining() {
+    const rigs = (this._miners && this._miners.rigs) || [];
+    const s = (this._miners && this._miners.summary) || {};
+    const fmtHr = hs => {
+      if (!hs) return "—";
+      if (hs >= 1e12) return (hs/1e12).toFixed(2) + " TH/s";
+      if (hs >= 1e9)  return (hs/1e9).toFixed(2) + " GH/s";
+      if (hs >= 1e6)  return (hs/1e6).toFixed(2) + " MH/s";
+      if (hs >= 1e3)  return (hs/1e3).toFixed(2) + " kH/s";
+      return Math.round(hs) + " H/s";
+    };
+    const profit = s.profit_usd_day || 0;
+    const profitClass = profit > 0 ? "ok" : profit < 0 ? "danger" : "medium";
+
+    let body;
+    if (!rigs.length) {
+      body = `<div class="card"><h2>No miners discovered</h2>
+        <p>Detection runs on every coordinator poll and triggers when:</p>
+        <ul>
+          <li>The port scanner tags a device as <strong>crypto</strong> (cgminer 4028, Antminer web 8081, Stratum, blockchain P2P)</li>
+          <li>The vendor OUI matches a known ASIC brand (<strong>Goldshell</strong>, Bitmain, MicroBT, Canaan, Innosilicon, IceRiver)</li>
+        </ul>
+        <p>If a rig is missing, run <strong>Quantify Unknown Devices</strong> from the Overview tab to populate the port-scan cache.</p>
+      </div>`;
+    } else {
+      body = `
+        <div class="stat-grid">
+          ${this._stat("Rigs", s.rig_count || 0, "⛏")}
+          ${this._stat("Reachable", `${s.reachable || 0} / ${s.rig_count || 0}`, "📡")}
+          ${this._stat("Hashrate", fmtHr(s.total_hashrate_hs), "⚡")}
+          ${this._stat("Power", `${s.total_power_w || 0} W`, "🔌")}
+          ${this._stat("Revenue/day", `$${(s.revenue_usd_day || 0).toFixed(2)}`, "💵")}
+          ${this._stat("Cost/day", `$${(s.cost_usd_day || 0).toFixed(2)}`, "💸")}
+          ${this._stat("Net profit/day", `$${profit.toFixed(2)}`, profit >= 0 ? "📈" : "📉", profitClass)}
+        </div>
+
+        <div class="card">
+          <h2>Discovered Rigs</h2>
+          <p class="subtitle">Electricity priced at <strong>$${(s.electricity_usd_per_kwh || 0.08).toFixed(2)}/kWh</strong>. Live profitability uses minerstat.com prices (10-min cache). Power marked <em>(rated)</em> is the manufacturer spec — Goldshell rigs don't report wall power.</p>
+          <div class="table-wrap"><table class="data-table">
+            <thead><tr>
+              <th>IP</th><th>Model</th><th>API</th><th>Coin</th><th>Hashrate</th><th>Temp</th><th>Power</th>
+              <th>Rev/day</th><th>Cost/day</th><th>Profit/day</th>
+            </tr></thead>
+            <tbody>
+              ${rigs.map(r => {
+                const reach = r.reachable ? "" : ' <span class="badge danger">no API</span>';
+                const temp = (r.extras && r.extras.temp_c) ? r.extras.temp_c + "°C" : "—";
+                const powerSrc = r.power_source === "rated" ? ' <span class="conf">(rated)</span>' : "";
+                const apiBadge = r.source === "goldshell" ? '<span class="badge ok">goldshell</span>'
+                              : r.source === "cgminer" ? '<span class="badge ok">cgminer</span>'
+                              : "—";
+                const pc = (r.profit_usd_day || 0) >= 0 ? "" : "row-warn";
+                return `<tr class="${pc}">
+                  <td class="mono">${r.ip ? `<a href="http://${r.ip}" target="_blank" rel="noopener" class="ip-link">${r.ip}</a>` : "—"}</td>
+                  <td>${r.model || "—"}${reach}</td>
+                  <td>${apiBadge}</td>
+                  <td>${r.coin || "—"}</td>
+                  <td>${r.hashrate_display || "—"}</td>
+                  <td>${temp}</td>
+                  <td>${r.power_w || 0} W${powerSrc}</td>
+                  <td>$${(r.revenue_usd_day || 0).toFixed(2)}</td>
+                  <td>$${(r.cost_usd_day || 0).toFixed(2)}</td>
+                  <td><strong>$${(r.profit_usd_day || 0).toFixed(2)}</strong></td>
+                </tr>`;
+              }).join("")}
+            </tbody>
+          </table></div>
+        </div>`;
+    }
+
+    return `<h1>⛏ Crypto Miner Profitability</h1>${body}`;
   }
 
   _vPorts() {

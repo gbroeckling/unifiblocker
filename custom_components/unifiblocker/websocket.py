@@ -45,6 +45,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_block_device)
     websocket_api.async_register_command(hass, ws_unblock_device)
     websocket_api.async_register_command(hass, ws_reconnect_device)
+    websocket_api.async_register_command(hass, ws_get_miners)
     _LOGGER.debug("WebSocket commands registered")
 
 
@@ -1104,3 +1105,32 @@ async def ws_reconnect_device(
     await entry["api"].reconnect_client(mac)
     await entry["coordinator"].async_request_refresh()
     connection.send_result(msg["id"], {"ok": True, "mac": mac})
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "unifiblocker/miners"}
+)
+@websocket_api.async_response
+async def ws_get_miners(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Return discovered crypto miners + profitability summary."""
+    entry = _get_coordinator(hass)
+    if not entry or not entry["coordinator"].data:
+        connection.send_result(msg["id"], {"rigs": [], "summary": {}})
+        return
+
+    from .miners import ELECTRICITY_COST_USD_PER_KWH
+
+    rigs = entry["coordinator"].data.miners or []
+    summary = {
+        "rig_count": len(rigs),
+        "reachable": sum(1 for r in rigs if r.get("reachable")),
+        "total_hashrate_hs": sum(r.get("hashrate_hs", 0) for r in rigs),
+        "total_power_w": round(sum(r.get("power_w", 0) for r in rigs), 1),
+        "revenue_usd_day": round(sum(r.get("revenue_usd_day", 0) for r in rigs), 2),
+        "cost_usd_day": round(sum(r.get("cost_usd_day", 0) for r in rigs), 2),
+        "profit_usd_day": round(sum(r.get("profit_usd_day", 0) for r in rigs), 2),
+        "electricity_usd_per_kwh": ELECTRICITY_COST_USD_PER_KWH,
+    }
+    connection.send_result(msg["id"], {"rigs": rigs, "summary": summary})
