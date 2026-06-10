@@ -471,7 +471,61 @@ views:
           All services take a single field: `mac` (e.g. `"aa:bb:cc:dd:ee:ff"`)
 
   # ════════════════════════════════════════════════════════════════════
-  #  VIEW 8 – Port & Protocol Reference
+  #  VIEW 8 – Crypto Miner Profitability
+  # ════════════════════════════════════════════════════════════════════
+  - title: Mining
+    path: mining
+    icon: mdi:pickaxe
+    cards:
+
+      - type: horizontal-stack
+        cards:
+          - type: entity
+            entity: sensor.unifiblocker_miner_profit_day
+            name: Profit / day
+            icon: mdi:cash
+          - type: entity
+            entity: sensor.unifiblocker_miner_profit_day
+            name: Rigs
+            icon: mdi:server
+            attribute: rig_count
+
+      - type: markdown
+        title: Summary
+        content: >
+          {% set m = state_attr('sensor.unifiblocker_miner_profit_day', 'rigs') %}
+          {% set rev = state_attr('sensor.unifiblocker_miner_profit_day', 'revenue_usd_day') or 0 %}
+          {% set cost = state_attr('sensor.unifiblocker_miner_profit_day', 'cost_usd_day') or 0 %}
+          {% set hr = state_attr('sensor.unifiblocker_miner_profit_day', 'total_hashrate_hs') or 0 %}
+          {% set pw = state_attr('sensor.unifiblocker_miner_profit_day', 'total_power_w') or 0 %}
+          {% set rate = state_attr('sensor.unifiblocker_miner_profit_day', 'electricity_usd_per_kwh') or 0.08 %}
+          | Metric | Value |
+          |--------|-------|
+          | Electricity cost | ${{ rate }} / kWh |
+          | Total power | {{ pw }} W |
+          | Total hashrate | {% if hr >= 1e12 %}{{ (hr / 1e12) | round(2) }} TH/s{% elif hr >= 1e9 %}{{ (hr / 1e9) | round(2) }} GH/s{% elif hr >= 1e6 %}{{ (hr / 1e6) | round(2) }} MH/s{% else %}{{ hr | round(0) }} H/s{% endif %} |
+          | Gross revenue / day | ${{ rev | round(2) }} |
+          | Power cost / day | ${{ cost | round(2) }} |
+          | **Net profit / day** | **${{ (rev - cost) | round(2) }}** |
+
+      - type: markdown
+        title: Discovered Rigs
+        content: >
+          {% set rigs = state_attr('sensor.unifiblocker_miner_profit_day', 'rigs') %}
+          {% if rigs and rigs | length > 0 %}
+          | IP | Model | API | Coin | Hashrate | Temp | Power | Rev/day | Cost/day | Profit/day |
+          |----|-------|-----|------|----------|------|-------|---------|----------|------------|
+          {% for r in rigs %}
+          | {{ r.ip }} | {{ r.model or '—' }}{% if not r.reachable %} ⚠ no API{% endif %} | {{ r.source or '—' }} | {{ r.coin or '—' }} | {{ r.hashrate_display }} | {% if r.extras and r.extras.temp_c %}{{ r.extras.temp_c }}°C{% else %}—{% endif %} | {{ r.power_w }} W{% if r.power_source == 'rated' %} *{% endif %} | ${{ r.revenue_usd_day }} | ${{ r.cost_usd_day }} | **${{ r.profit_usd_day }}** |
+          {% endfor %}
+
+          \* = manufacturer rated power (not metered — Goldshell rigs don't report wall power). Live profitability uses minerstat.com prices, refreshed every 10 minutes.
+          {% else %}
+          **No miners discovered.** Detection triggers on (a) the port scanner tagging a device as crypto (cgminer 4028, Antminer 8081, Stratum, blockchain P2P) or (b) the vendor OUI matching a known ASIC brand (Goldshell, Bitmain, MicroBT, Canaan, Innosilicon, IceRiver). Run a deep scan from the Actions tab if a rig is missing.
+          {% endif %}
+
+  # ════════════════════════════════════════════════════════════════════
+  #  VIEW 9 – Port & Protocol Reference
   # ════════════════════════════════════════════════════════════════════
   - title: Port Guide
     path: port-guide

@@ -34,6 +34,7 @@ async def async_setup_entry(
             SuspiciousDevicesSensor(coordinator, entry),
             ConnectionHealthSensor(coordinator, entry),
             ThreatEventsSensor(coordinator, entry),
+            MinerProfitabilitySensor(coordinator, entry),
         ]
     )
 
@@ -246,6 +247,38 @@ class ConnectionHealthSensor(_BaseSensor):
         if h.get("error"):
             attrs["last_error"] = h["error"]
         return attrs
+
+
+class MinerProfitabilitySensor(_BaseSensor):
+    """Crypto miner discovery + daily profitability at fixed electricity cost."""
+
+    _attr_state_class = None  # USD/day, not a measurement in HA's sense
+    _attr_native_unit_of_measurement = "USD/day"
+
+    def __init__(self, coordinator: UniFiBlockerCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "miner_profit_day", "Miner profit day", "mdi:pickaxe")
+
+    @property
+    def native_value(self) -> float | None:
+        if not self._data:
+            return None
+        return round(sum(r.get("profit_usd_day", 0) for r in self._data.miners), 2)
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        if not self._data:
+            return None
+        rigs = self._data.miners
+        return {
+            "rig_count": len(rigs),
+            "reachable": sum(1 for r in rigs if r.get("reachable")),
+            "total_hashrate_hs": sum(r.get("hashrate_hs", 0) for r in rigs),
+            "total_power_w": round(sum(r.get("power_w", 0) for r in rigs), 1),
+            "revenue_usd_day": round(sum(r.get("revenue_usd_day", 0) for r in rigs), 2),
+            "cost_usd_day": round(sum(r.get("cost_usd_day", 0) for r in rigs), 2),
+            "electricity_usd_per_kwh": 0.08,
+            "rigs": rigs,
+        }
 
 
 class ThreatEventsSensor(_BaseSensor):

@@ -6,11 +6,13 @@ import logging
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN, STATE_NEW, STATE_QUARANTINED, STATE_TRUSTED, STATE_IGNORED
 from .device_categorizer import categorize_all_clients as categorize_devices, get_category_counts
 from .device_store import DeviceStore
+from .miners import MinerTracker
 from .port_identify import analyze_dpi_entry
 from .suspicious_traffic import analyze_all_clients
 from .unifi_api import UniFiApi, UniFiApiError
@@ -32,6 +34,7 @@ class UniFiBlockerData:
         health: dict[str, Any],
         dpi: dict[str, dict[str, Any]],
         categories: dict[str, dict[str, Any]],
+        miners: list[dict[str, Any]] | None = None,
     ) -> None:
         self.clients = clients
         self.devices = devices
@@ -41,6 +44,7 @@ class UniFiBlockerData:
         self.health = health                # connection + subsystem health
         self.dpi = dpi                      # mac → DPI analysis result
         self.categories = categories        # mac → category result
+        self.miners = miners or []          # list of rig dicts (see miners.py)
 
     @property
     def category_counts(self) -> dict[str, int]:
@@ -249,6 +253,7 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         self.scanner = scanner
         self.onvif = onvif
         self.learned = learned
+        self.miners = MinerTracker(scanner)
         self._auto_scanned: set[str] = set()  # MACs already auto-scanned
 
     async def _async_update_data(self) -> UniFiBlockerData:
@@ -349,6 +354,16 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             learned_patterns=self.learned,
         )
 
+        # Probe any miners flagged by the port scan or vendor OUI and pull
+        # live profitability. Goldshell rigs are detected by vendor since
+        # they don't always expose port 4028.
+        miners: list[dict[str, Any]] = []
+        try:
+            session = async_get_clientsession(self.hass)
+            miners = await self.miners.async_update(session, clients)
+        except Exception:
+            _LOGGER.debug("Miner tracker update failed", exc_info=True)
+
         return UniFiBlockerData(
             clients=clients,
             devices=devices,
@@ -358,4 +373,5 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             health=health,
             dpi=dpi,
             categories=categories,
+            miners=miners,
         )
