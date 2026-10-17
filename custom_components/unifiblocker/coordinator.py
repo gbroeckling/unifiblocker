@@ -16,7 +16,7 @@ from .miners import MinerTracker
 from .port_identify import analyze_dpi_entry
 from .suspicious_traffic import analyze_all_clients
 from .unifi_api import UniFiApi, UniFiApiError
-from .vendor_lookup import is_camera_like, lookup_vendor_safe
+from .vendor_lookup import CAMERA_CHIP_VENDORS, is_camera_like, lookup_vendor_safe
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ class UniFiBlockerData:
         dpi: dict[str, dict[str, Any]],
         categories: dict[str, dict[str, Any]],
         miners: list[dict[str, Any]] | None = None,
+        onvif: Any = None,
     ) -> None:
         self.clients = clients
         self.devices = devices
@@ -45,6 +46,7 @@ class UniFiBlockerData:
         self.dpi = dpi                      # mac → DPI analysis result
         self.categories = categories        # mac → category result
         self.miners = miners or []          # list of rig dicts (see miners.py)
+        self.onvif = onvif                  # OnvifProbe, used for enrichment
 
     @property
     def category_counts(self) -> dict[str, int]:
@@ -220,13 +222,7 @@ class UniFiBlockerData:
 
     def all_clients_enriched(self) -> list[dict[str, Any]]:
         """Return enriched dicts for every connected client."""
-        result = [self.enrich_client(c) for c in self.clients]
-        _LOGGER.info(
-            "Enriched %d clients, categories: %s",
-            len(result),
-            {c.get("category", "?"): 0 for c in result[:3]},  # sample
-        )
-        return result
+        return [self.enrich_client(c) for c in self.clients]
 
 
 class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
@@ -282,8 +278,9 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
                 first_seen=first_seen, last_seen=now_iso,
             )
 
-        # Persist once after the full batch.
-        await self.store.async_save()
+        # Persist once after the full batch, debounced so we don't hit the
+        # disk on every poll.
+        self.store.schedule_save()
 
         # Run suspicious-traffic analysis on every client.
         suspicion = analyze_all_clients(
@@ -331,16 +328,17 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
                 vendor = client.get("oui") or lookup_vendor_safe(mac)
                 hostname = client.get("hostname") or client.get("name") or ""
                 # Auto-scan if: new state, or unknown vendor, or camera chip vendor, or no hostname
-                from .vendor_lookup import CAMERA_CHIP_VENDORS
                 if state == "new" or vendor == "Unknown" or vendor in CAMERA_CHIP_VENDORS or not hostname.strip():
                     scan_targets.append({"ip": ip, "mac": mac})
-                    self._auto_scanned.add(mac)
 
             # Scan up to 5 devices per poll cycle to avoid overwhelming the network.
+            # Only mark the ones we actually scan, the rest get picked up next poll.
             if scan_targets:
-                _LOGGER.info("Auto-scanning %d new/unknown devices", min(len(scan_targets), 5))
+                batch = scan_targets[:5]
+                self._auto_scanned.update(t["mac"] for t in batch)
+                _LOGGER.debug("Auto-scanning %d new/unknown devices", len(batch))
                 try:
-                    await self.scanner.scan_multiple(scan_targets[:5])
+                    await self.scanner.scan_multiple(batch)
                 except Exception:
                     _LOGGER.debug("Auto-scan error", exc_info=True)
 
@@ -374,4 +372,5 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             dpi=dpi,
             categories=categories,
             miners=miners,
+            onvif=self.onvif,
         )

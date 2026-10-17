@@ -18,6 +18,13 @@ from homeassistant.helpers.storage import Store
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def _has_rule_for(descriptions: list[str], mac: str) -> bool:
+    """True if one of our "UB: <mac> local-only" rules exists for this MAC."""
+    prefix = f"ub: {mac.lower()}"
+    return any(d.startswith(prefix) for d in descriptions)
+
+
 STORAGE_KEY = "unifiblocker_localnet"
 STORAGE_VERSION = 1
 
@@ -343,9 +350,9 @@ class LocalNetworkManager:
         missing = []
         try:
             rules = await api.get_traffic_rules()
-            rule_descs = {r.get("description", "").lower() for r in rules}
+            rule_descs = [r.get("description", "").lower() for r in rules]
             for mac in self._assignments:
-                if f"ub: {mac}" in rule_descs:
+                if _has_rule_for(rule_descs, mac):
                     blocked += 1
                 else:
                     missing.append(mac)
@@ -393,6 +400,11 @@ class LocalNetworkManager:
         except Exception as err:
             _LOGGER.warning("Could not read traffic rules: %s", err)
             existing = []
+
+        # Don't stack up duplicates if this device already has its rule.
+        for rule in existing:
+            if _has_rule_for([rule.get("description", "").lower()], mac):
+                return {"ok": True, "rule_id": rule.get("_id", ""), "mac": mac, "existing": True}
 
         # Step 2: If we have existing rules, clone one as a template
         # and modify it. This guarantees the format matches what the
@@ -486,9 +498,9 @@ class LocalNetworkManager:
         total = len(self._assignments)
         try:
             rules = await api.get_traffic_rules()
-            rule_descs = {r.get("description", "").lower() for r in rules}
+            rule_descs = [r.get("description", "").lower() for r in rules]
             for mac in self._assignments:
-                if f"ub: {mac}" in rule_descs:
+                if _has_rule_for(rule_descs, mac):
                     blocked_count += 1
         except Exception:
             pass

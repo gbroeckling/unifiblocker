@@ -22,9 +22,14 @@ async def _get_saved_config(hass) -> dict[str, Any]:
     """Load previously used config from disk (async-safe)."""
     path = os.path.join(hass.config.config_dir, _SAVED_CONFIG_FILE)
     try:
-        return await hass.async_add_executor_job(_read_json, path)
+        saved = await hass.async_add_executor_job(_read_json, path)
     except Exception:
         return {}
+    # Older versions wrote the password here in plain text. Scrub it.
+    if "password" in saved:
+        saved.pop("password")
+        await _save_config_async(hass, saved)
+    return saved
 
 
 async def _save_config_async(hass, data: dict[str, Any]) -> None:
@@ -50,12 +55,11 @@ def _write_json(path: str, data: dict) -> None:
 
 def _build_schema(saved: dict[str, Any]) -> vol.Schema:
     """Build the form schema, pre-filling from saved config."""
-    pw = saved.get("password", "")
     return vol.Schema(
         {
             vol.Required("host", default=saved.get("host", "")): str,
             vol.Required("username", default=saved.get("username", "")): str,
-            vol.Required("password", default=pw): str,
+            vol.Required("password"): str,
             vol.Optional("site", default=saved.get("site", "default")): str,
             vol.Optional("verify_ssl", default=saved.get("verify_ssl", False)): bool,
             vol.Optional("scan_interval", default=saved.get("scan_interval", 60)): int,
@@ -103,8 +107,10 @@ class UniFiBlockerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await api.close()
 
             if not errors:
-                # Save config for future re-adds.
-                await _save_config_async(self.hass, user_input)
+                # Save config for future re-adds, minus the password.
+                await _save_config_async(
+                    self.hass, {k: v for k, v in user_input.items() if k != "password"}
+                )
                 return self.async_create_entry(
                     title=f"UniFi Blocker ({user_input['host']})",
                     data=user_input,

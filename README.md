@@ -250,7 +250,7 @@ UCG Max (UniFi OS)                Home Assistant
 
 ## Requirements
 
-- Home Assistant 2024.1.0 or later
+- Home Assistant 2024.7.0 or later
 - UniFi OS controller (UCG Max, UDM, UDM Pro, UDM SE, or similar)
 - A local admin account on the controller
 - Network access from Home Assistant to the controller over HTTPS

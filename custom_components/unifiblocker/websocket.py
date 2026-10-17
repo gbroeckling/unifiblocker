@@ -60,6 +60,7 @@ def _get_coordinator(hass: HomeAssistant):
 # ── Read-only commands ───────────────────────────────────────────────
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {vol.Required("type"): "unifiblocker/clients"}
 )
@@ -114,6 +115,7 @@ async def ws_get_clients(
     connection.send_result(msg["id"], {"clients": clients})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {vol.Required("type"): "unifiblocker/overview"}
 )
@@ -151,6 +153,7 @@ async def ws_get_overview(
     })
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {vol.Required("type"): "unifiblocker/categories"}
 )
@@ -178,6 +181,7 @@ async def ws_get_categories(
     connection.send_result(msg["id"], {"categories": result})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "unifiblocker/category_clients",
@@ -234,6 +238,7 @@ async def ws_get_category_clients(
     connection.send_result(msg["id"], {"clients": clients, "category": msg["category"]})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "unifiblocker/set_category",
@@ -276,7 +281,7 @@ async def ws_set_category(
             cat,
             mac=mac,
             vendor=client.get("oui", "") if client else "",
-            hostname=client.get("hostname") or (client.get("name", "") if client else ""),
+            hostname=(client.get("hostname") or client.get("name", "")) if client else "",
             open_ports=scan_result.get("open_ports") if scan_result else None,
         )
 
@@ -290,6 +295,7 @@ async def ws_set_category(
 # ── Learning engine ──────────────────────────────────────────────────
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {vol.Required("type"): "unifiblocker/learned_rules"}
 )
@@ -306,6 +312,7 @@ async def ws_get_learned(
     connection.send_result(msg["id"], learned.rules_summary)
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {vol.Required("type"): "unifiblocker/suggestions"}
 )
@@ -349,6 +356,7 @@ async def ws_get_suggestions(
 # ── ONVIF discovery & probe ───────────────────────────────────────────
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {vol.Required("type"): "unifiblocker/onvif_discover"}
 )
@@ -368,6 +376,7 @@ async def ws_onvif_discover(
     })
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "unifiblocker/onvif_probe",
@@ -387,6 +396,7 @@ async def ws_onvif_probe(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {vol.Required("type"): "unifiblocker/onvif_results"}
 )
@@ -409,6 +419,7 @@ async def ws_onvif_results(
 # ── Recommendations ──────────────────────────────────────────────────
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {vol.Required("type"): "unifiblocker/recommendations"}
 )
@@ -469,6 +480,7 @@ async def ws_get_recommendations(
 # ── IP availability check ────────────────────────────────────────────
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "unifiblocker/check_ip",
@@ -482,8 +494,15 @@ async def ws_check_ip_free(
     """Check if an IP address is truly free — ping, reservations, clients, history."""
     import asyncio
 
+    import ipaddress
+
+    try:
+        ip = str(ipaddress.IPv4Address(msg["ip"].strip()))
+    except ValueError:
+        connection.send_error(msg["id"], "invalid_ip", f"Not a valid IPv4 address: {msg['ip']}")
+        return
+
     entry = _get_coordinator(hass)
-    ip = msg["ip"]
     checks: list[dict] = []
     is_free = True
 
@@ -629,6 +648,7 @@ async def ws_check_ip_free(
 # ── Deep scan (Quantify) ─────────────────────────────────────────────
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {vol.Required("type"): "unifiblocker/deep_scan_unknowns"}
 )
@@ -707,6 +727,7 @@ async def ws_deep_scan_unknowns(
 # ── Port scanner commands ─────────────────────────────────────────────
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "unifiblocker/scan_device",
@@ -748,6 +769,7 @@ async def ws_scan_device(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {vol.Required("type"): "unifiblocker/scan_results"}
 )
@@ -767,6 +789,7 @@ async def ws_scan_results(
 # ── Per-MAC port blocking ─────────────────────────────────────────────
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "unifiblocker/block_port",
@@ -793,6 +816,7 @@ async def ws_block_port(
         connection.send_error(msg["id"], "failed", str(err))
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "unifiblocker/block_ports",
@@ -822,6 +846,7 @@ async def ws_block_ports(
 # ── Local network commands ────────────────────────────────────────────
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {vol.Required("type"): "unifiblocker/localnet_status"}
 )
@@ -850,6 +875,7 @@ async def ws_localnet_status(
     })
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "unifiblocker/localnet_assign",
@@ -877,6 +903,7 @@ async def ws_localnet_assign(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "unifiblocker/localnet_remove",
@@ -899,6 +926,7 @@ async def ws_localnet_remove(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {vol.Required("type"): "unifiblocker/localnet_ensure_rule"}
 )
@@ -919,6 +947,7 @@ async def ws_localnet_ensure_rule(
 # ── Firewall debug ───────────────────────────────────────────────────
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {vol.Required("type"): "unifiblocker/firewall_rules_debug"}
 )
@@ -956,6 +985,7 @@ async def ws_firewall_rules_debug(
         connection.send_result(msg["id"], {"rules": [], "error": str(err)})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {vol.Required("type"): "unifiblocker/traffic_rules_debug"}
 )
@@ -979,6 +1009,7 @@ async def ws_traffic_rules_debug(
 # ── Write commands (require action mode) ─────────────────────────────
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "unifiblocker/trust",
@@ -1001,6 +1032,7 @@ async def ws_trust_device(
     connection.send_result(msg["id"], {"ok": True, "mac": mac, "state": "trusted"})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "unifiblocker/ignore",
@@ -1022,6 +1054,7 @@ async def ws_ignore_device(
     connection.send_result(msg["id"], {"ok": True, "mac": mac, "state": "ignored"})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "unifiblocker/quarantine",
@@ -1044,6 +1077,7 @@ async def ws_quarantine_device(
     connection.send_result(msg["id"], {"ok": True, "mac": mac, "state": "quarantined"})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "unifiblocker/block",
@@ -1065,6 +1099,7 @@ async def ws_block_device(
     connection.send_result(msg["id"], {"ok": True, "mac": mac})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "unifiblocker/unblock",
@@ -1086,6 +1121,7 @@ async def ws_unblock_device(
     connection.send_result(msg["id"], {"ok": True, "mac": mac})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "unifiblocker/reconnect",
@@ -1107,6 +1143,7 @@ async def ws_reconnect_device(
     connection.send_result(msg["id"], {"ok": True, "mac": mac})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {vol.Required("type"): "unifiblocker/miners"}
 )

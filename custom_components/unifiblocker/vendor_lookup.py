@@ -469,8 +469,6 @@ _OUI_TABLE: dict[str, str] = {
     # ── Yale / August ────────────────────────────────────────────────
     "00:1A:22": "Yale / August",
     # ── Shelly ───────────────────────────────────────────────────────
-    "3C:61:05": "Shelly / Espressif",
-    "E8:DB:84": "Shelly / Espressif",
     # ── Lutron ───────────────────────────────────────────────────────
     "00:0C:C1": "Lutron",
     "00:17:9A": "Lutron",
@@ -610,8 +608,6 @@ _OUI_TABLE: dict[str, str] = {
     "98:8B:0A": "Eufy",
     "FC:D7:49": "Eufy",
     # ── Wyze Cam (already partial above, add more) ───────────────────
-    "2C:AA:8E": "Wyze",
-    "7C:78:B2": "Wyze",
     "A4:DA:22": "Wyze",
     # ── YI Technology ────────────────────────────────────────────────
     "78:A5:04": "YI Technology",
@@ -631,17 +627,13 @@ _OUI_TABLE: dict[str, str] = {
     "E0:B6:F5": "Bitmain",
     "38:2C:4A": "Bitmain",
     "50:76:AF": "Bitmain",
-    "78:A5:04": "Bitmain",
     "80:3F:5D": "Bitmain",
     "84:C2:E4": "Bitmain",
     "C8:EB:C3": "Bitmain",
     "CC:B2:55": "Bitmain",
-    "DC:A6:32": "Bitmain",
     # ── MicroBT (Whatsminer M30S, M50, M60, etc.) ──────────────────
-    "00:E0:4C": "MicroBT/Whatsminer",
     "2C:F0:5D": "MicroBT/Whatsminer",
     "30:A1:FA": "MicroBT/Whatsminer",
-    "70:B3:D5": "MicroBT/Whatsminer",
     "F4:4D:30": "MicroBT/Whatsminer",
     # ── Canaan (Avalon miners) ─────────────────────────────────────
     "00:19:D2": "Canaan/Avalon",
@@ -654,9 +646,6 @@ _OUI_TABLE: dict[str, str] = {
     "B0:A4:60": "IceRiver",
     # ── Helium / IoT miners ────────────────────────────────────────
     "60:81:F9": "Bobcat (Helium)",
-    "E4:5F:01": "RAK (Helium)",
-    "DC:A6:32": "SenseCAP (Helium)",
-    "B8:27:EB": "Nebra (Helium)",
     # ══════════════════════════════════════════════════════════════════
     #  CAMERA CHIP MANUFACTURERS & WHITE-LABEL ODMs
     #  These make the SoC/board inside most cheap cameras.
@@ -665,7 +654,6 @@ _OUI_TABLE: dict[str, str] = {
     # ══════════════════════════════════════════════════════════════════
     # ── HiSilicon (Huawei chip subsidiary — in MOST cheap cameras) ──
     "00:0A:DB": "HiSilicon",
-    "00:18:82": "HiSilicon",
     "00:1E:73": "HiSilicon",
     "00:22:A0": "HiSilicon",
     "00:46:4B": "HiSilicon",
@@ -681,7 +669,6 @@ _OUI_TABLE: dict[str, str] = {
     "54:A6:19": "HiSilicon",
     "5C:FA:FB": "HiSilicon",
     "60:DE:44": "HiSilicon",
-    "70:B3:D5": "HiSilicon",
     "74:69:4A": "HiSilicon",
     "78:32:1B": "HiSilicon",
     "80:9F:AB": "HiSilicon",
@@ -699,7 +686,6 @@ _OUI_TABLE: dict[str, str] = {
     "D4:67:E7": "HiSilicon",
     "E0:24:7F": "HiSilicon",
     "E8:6F:38": "HiSilicon",
-    "F4:C7:14": "HiSilicon",
     # ── Ingenic (T-series SoC in budget cameras) ────────────────────
     "00:13:EF": "Ingenic",
     "54:B8:0A": "Ingenic",
@@ -749,10 +735,8 @@ _OUI_TABLE: dict[str, str] = {
     "98:DF:82": "Hikvision",
     "A0:5C:B6": "Hikvision",
     "A4:56:30": "Hikvision",
-    "B4:A3:82": "Hikvision",
     "C0:5B:2B": "Hikvision",
     "D4:B1:08": "Hikvision",
-    "E0:50:8B": "Hikvision",
     "EC:94:D5": "Hikvision",
     "F0:C4:2F": "Hikvision",
     # ── Additional Dahua OUIs ────────────────────────────────────────

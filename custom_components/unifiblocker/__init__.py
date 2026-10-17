@@ -68,6 +68,11 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
         await api.close()
         raise
 
+    # Reading the saved form defaults scrubs the plaintext password that
+    # older versions left in the config dir.
+    from .config_flow import _get_saved_config
+    await _get_saved_config(hass)
+
     store = DeviceStore(hass)
     await store.async_load()
 
@@ -75,6 +80,7 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
     try:
         from .port_scanner import PortScanner
         scanner = PortScanner(hass)
+        await scanner.async_load()
     except Exception:
         _LOGGER.warning("Port scanner failed to load", exc_info=True)
         scanner = None
@@ -173,4 +179,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         api = entry_data.get("api")
         if api:
             await api.close()
+        from .panel import async_unregister_panel
+        async_unregister_panel(hass)
     return unload_ok

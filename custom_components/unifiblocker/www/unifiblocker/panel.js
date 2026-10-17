@@ -1,13 +1,30 @@
 /**
- * UniFi Blocker – Sidebar Panel v0.2.5
+ * UniFi Blocker – Sidebar Panel
  *
  * Read-only by default. Action Mode toggle enables write operations.
  * Dynamic category sub-navigation when a category has 5+ devices.
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.42";
+const VERSION = "0.3.43";
 const SIDEBAR_THRESHOLD = 5;
+
+// Everything the panel renders goes through innerHTML, and a lot of it comes
+// straight off the network (DHCP hostnames, ONVIF replies, miner APIs). A
+// device on the LAN controls those strings, so escape every string in every
+// WS response before it gets anywhere near a template.
+const _ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "`": "&#96;" };
+const _esc = (s) => String(s).replace(/[&<>"'`]/g, (c) => _ESC[c]);
+function _sanitize(v) {
+  if (typeof v === "string") return _esc(v);
+  if (Array.isArray(v)) return v.map(_sanitize);
+  if (v && typeof v === "object") {
+    const o = {};
+    for (const [k, x] of Object.entries(v)) o[_esc(k)] = _sanitize(x);
+    return o;
+  }
+  return v;
+}
 
 class UniFiBlockerPanel extends HTMLElement {
   constructor() {
@@ -40,7 +57,7 @@ class UniFiBlockerPanel extends HTMLElement {
   disconnectedCallback() { this._stopPolling(); }
 
   // ── Data ──────────────────────────────────────────────────────────
-  async _ws(type, extra = {}) { if (!this._hass) return null; try { return await this._hass.callWS({ type, ...extra }); } catch (e) { console.warn("[UB]", type, e); return null; } }
+  async _ws(type, extra = {}) { if (!this._hass) return null; try { return _sanitize(await this._hass.callWS({ type, ...extra })); } catch (e) { console.warn("[UB]", type, e); return null; } }
 
   async _fetchAll() {
     const [ov, cl, cats, ln, recs, mn] = await Promise.all([
@@ -230,6 +247,8 @@ class UniFiBlockerPanel extends HTMLElement {
                 </tr>`).join("")}
               </tbody>
             </table>`;
+        } else {
+          resultDiv.innerHTML = '<p style="color:#f0a500">Check failed. Is that a valid IPv4 address?</p>';
         }
       });
     }

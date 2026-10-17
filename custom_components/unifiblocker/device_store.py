@@ -57,6 +57,10 @@ class DeviceStore:
         """Persist current state to disk."""
         await self._store.async_save({"devices": self._devices})
 
+    def schedule_save(self) -> None:
+        """Debounced save for poll updates (last_seen changes every poll)."""
+        self._store.async_delay_save(lambda: {"devices": self._devices}, 60)
+
     # ── queries ──────────────────────────────────────────────────────
 
     @property

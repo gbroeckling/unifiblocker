@@ -44,10 +44,8 @@ SCAN_PORTS: dict[int, dict[str, str]] = {
     80:    {"name": "HTTP (ONVIF default)", "group": "web"},
     8080:  {"name": "HTTP-alt (ONVIF common alt)", "group": "web"},
     8899:  {"name": "ONVIF HTTP (some cameras)", "group": "onvif"},
-    2020:  {"name": "ONVIF (Axis default)", "group": "onvif"},
     3702:  {"name": "WS-Discovery (ONVIF probe)", "group": "onvif"},
     6000:  {"name": "ONVIF media service", "group": "onvif"},
-    8081:  {"name": "ONVIF alt / camera snapshot", "group": "onvif"},
     8082:  {"name": "ONVIF alt / secondary stream", "group": "onvif"},
     #
     # Hikvision-specific ports
@@ -55,7 +53,6 @@ SCAN_PORTS: dict[int, dict[str, str]] = {
     8200:  {"name": "Hikvision ISAPI", "group": "camera_hik"},
     9527:  {"name": "Hikvision SDK debug", "group": "camera_hik"},
     8009:  {"name": "Hikvision alarm push", "group": "camera_hik"},
-    7681:  {"name": "Hikvision websocket stream", "group": "camera_hik"},
     443:   {"name": "HTTPS (Hik ISAPI/web)", "group": "web"},
     #
     # Dahua-specific ports
@@ -63,7 +60,6 @@ SCAN_PORTS: dict[int, dict[str, str]] = {
     37778: {"name": "Dahua UDP/media", "group": "camera_dahua"},
     37780: {"name": "Dahua HTTP API", "group": "camera_dahua"},
     37781: {"name": "Dahua HTTPS API", "group": "camera_dahua"},
-    5000:  {"name": "Dahua/Synology web (ambiguous)", "group": "camera_dahua"},
     9530:  {"name": "Dahua debug BACKDOOR", "group": "camera_dahua_backdoor"},
     38888: {"name": "Dahua NVR config backup", "group": "camera_dahua"},
     #
@@ -116,7 +112,6 @@ SCAN_PORTS: dict[int, dict[str, str]] = {
     6053:  {"name": "ESPHome native API", "group": "esphome"},
     # WLED
     21324: {"name": "WLED E1.31/sACN UDP", "group": "wled"},
-    80:    {"name": "HTTP (WLED web UI)", "group": "web"},
     # Home Assistant
     8123:  {"name": "Home Assistant", "group": "ha"},
     # DNS
@@ -140,12 +135,9 @@ SCAN_PORTS: dict[int, dict[str, str]] = {
     5000:  {"name": "Synology DSM / NAS web", "group": "nas"},
     5001:  {"name": "Synology DSM-TLS", "group": "nas"},
     8384:  {"name": "Syncthing", "group": "nas"},
-    8080:  {"name": "QNAP QTS / HTTP-alt", "group": "web"},
-    443:   {"name": "HTTPS / NAS-TLS", "group": "web"},
     6690:  {"name": "Synology Drive", "group": "nas"},
     5005:  {"name": "Synology WebDAV", "group": "nas"},
     5006:  {"name": "Synology WebDAV-TLS", "group": "nas"},
-    8443:  {"name": "QNAP QTS-TLS / HTTPS-alt", "group": "web"},
     9090:  {"name": "TrueNAS / Cockpit", "group": "nas"},
     # Media servers
     32400: {"name": "Plex", "group": "media"},
@@ -162,7 +154,6 @@ SCAN_PORTS: dict[int, dict[str, str]] = {
     4444:  {"name": "Stratum v1-alt2", "group": "crypto"},
     5555:  {"name": "Stratum (Monero common)", "group": "crypto"},
     7777:  {"name": "Stratum (ETC pool)", "group": "crypto"},
-    8888:  {"name": "Stratum (multi-algo)", "group": "web"},
     9999:  {"name": "Stratum (NiceHash/alt)", "group": "crypto"},
     14433: {"name": "Stratum v2 (TLS)", "group": "crypto"},
     # Crypto mining — blockchain P2P
@@ -199,6 +190,10 @@ SCAN_PORTS: dict[int, dict[str, str]] = {
     123:   {"name": "NTP", "group": "network"},
     161:   {"name": "SNMP", "group": "network"},
 }
+
+# These are UDP services. A TCP connect scan can never see them open, so
+# skip them instead of wasting a timeout on each one.
+UDP_ONLY_PORTS = {67, 123, 161, 1900, 3478, 3702, 5353, 21324, 37778}
 
 # ── Fingerprint rules ────────────────────────────────────────────────
 # Each rule is: (required_groups, optional_groups, result_category,
@@ -406,7 +401,11 @@ class PortScanner:
         if hass:
             import os
             self._cache_path = os.path.join(hass.config.config_dir, SCAN_CACHE_FILE)
-            self._load_cache()
+
+    async def async_load(self) -> None:
+        """Load the cache without blocking the event loop."""
+        if self._hass:
+            await self._hass.async_add_executor_job(self._load_cache)
 
     def _load_cache(self) -> None:
         """Load cached scan results from disk."""
@@ -499,7 +498,7 @@ class PortScanner:
 
     async def _tcp_scan(self, ip: str) -> list[int]:
         """Return list of open TCP ports on *ip*."""
-        ports = list(SCAN_PORTS.keys())
+        ports = [p for p in SCAN_PORTS if p not in UDP_ONLY_PORTS]
         open_ports: list[int] = []
         sem = asyncio.Semaphore(MAX_CONCURRENT)
 

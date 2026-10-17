@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Home Assistant 2024.1.0 or later
+- Home Assistant 2024.7.0 or later
 - A UniFi OS controller (UCG Max, UDM, UDM Pro, UDM SE, or Cloud Key Gen2+)
 - A **local admin account** on the controller (see below)
 - Network access from HA to the controller on TCP port 443
