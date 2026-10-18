@@ -21,6 +21,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_get_categories)
     websocket_api.async_register_command(hass, ws_get_category_clients)
     websocket_api.async_register_command(hass, ws_set_category)
+    websocket_api.async_register_command(hass, ws_clear_category)
     websocket_api.async_register_command(hass, ws_get_learned)
     websocket_api.async_register_command(hass, ws_get_suggestions)
     websocket_api.async_register_command(hass, ws_localnet_status)
@@ -457,7 +458,9 @@ async def ws_get_recommendations(
     fw_exists = False
     if local_net:
         fw_status = await local_net.get_firewall_status(entry["api"])
-        fw_exists = fw_status.get("exists", False)
+        # "enabled" is only present once devices are assigned; it means every
+        # assigned device has its block rule.
+        fw_exists = fw_status.get("enabled", True)
 
     all_enriched = data.all_clients_enriched()
     if scanner:
@@ -667,7 +670,6 @@ async def ws_deep_scan_unknowns(
 
     data = entry["coordinator"].data
     store = entry["store"]
-    learned = entry.get("learned")
 
     # Find all unknown devices with IPs.
     targets = []
@@ -693,35 +695,65 @@ async def ws_deep_scan_unknowns(
     # Run deep scan.
     results = await deep_scan_multiple(targets)
 
-    # Apply results — set categories for identified devices.
+    # Only high-confidence guesses are applied, and none of them train the
+    # learner. Anything weaker is kept as a suggestion the user can accept.
     identified = 0
+    suggested = 0
     for mac, result in results.items():
         best = result.get("best_guess", "unknown")
-        if best != "unknown":
+        if best == "unknown":
+            continue
+        confidence = result.get("best_confidence", "low")
+        if confidence == "high":
             await store.set_manual_category(mac, best)
             identified += 1
+        else:
+            await store.set_suggestion(
+                mac, best, confidence=confidence,
+                description=result.get("best_description", ""),
+            )
+            suggested += 1
 
-            # Also teach the learning engine.
-            if learned:
-                client = data.client_by_mac(mac)
-                vendor = client.get("oui") or lookup_vendor_safe(mac) if client else ""
-                hostname = client.get("hostname", "") if client else ""
-                await learned.learn_from_device(
-                    best, mac=mac, vendor=vendor, hostname=hostname,
-                )
-
-    if identified:
+    if identified or suggested:
         await entry["coordinator"].async_request_refresh()
 
+    names = {c.get("mac", "").lower(): c.get("name") or c.get("hostname") or "" for c in data.clients}
+    ips = {t["mac"]: t["ip"] for t in targets}
     connection.send_result(msg["id"], {
         "scanned": len(results),
         "identified": identified,
+        "suggested": suggested,
         "results": {mac: {
+            "name": names.get(mac, ""),
+            "ip": ips.get(mac, ""),
             "best_guess": r.get("best_guess", "unknown"),
+            "best_confidence": r.get("best_confidence", "low"),
             "best_description": r.get("best_description", ""),
+            "applied": r.get("best_guess") != "unknown" and r.get("best_confidence") == "high",
             "techniques_used": list(r.get("techniques", {}).keys()),
         } for mac, r in results.items()},
     })
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "unifiblocker/clear_category",
+        vol.Required("mac"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_clear_category(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Drop a manual category override so automatic detection takes over again."""
+    entry = _get_coordinator(hass)
+    if not entry:
+        connection.send_error(msg["id"], "not_ready", "Integration not loaded")
+        return
+    await entry["store"].clear_manual_category(msg["mac"])
+    await entry["coordinator"].async_request_refresh()
+    connection.send_result(msg["id"], {"ok": True, "mac": msg["mac"]})
 
 
 # ── Port scanner commands ─────────────────────────────────────────────

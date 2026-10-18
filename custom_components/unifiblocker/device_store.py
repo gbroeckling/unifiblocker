@@ -191,8 +191,33 @@ class DeviceStore:
         mac = mac.lower()
         entry = self._devices.setdefault(mac, {"state": STATE_NEW})
         entry["manual_category"] = category
-        if name is not None:
-            entry["name"] = name
+        entry.pop("suggested_category", None)
+        if name:
+            # Kept separate from "name" so the next poll doesn't overwrite it.
+            entry["custom_name"] = name
+        await self.async_save()
+
+    def get_custom_name(self, mac: str) -> str:
+        """Return the name set from the panel, or ""."""
+        entry = self._devices.get(mac.lower())
+        return entry.get("custom_name", "") if entry else ""
+
+    def get_suggestion(self, mac: str) -> dict[str, Any] | None:
+        """Return the Quantify suggestion for *mac*, or None."""
+        entry = self._devices.get(mac.lower())
+        return entry.get("suggested_category") if entry else None
+
+    async def set_suggestion(
+        self, mac: str, category: str, *, confidence: str, description: str = ""
+    ) -> None:
+        """Remember a deep-scan guess without treating it as a user decision."""
+        mac = mac.lower()
+        entry = self._devices.setdefault(mac, {"state": STATE_NEW})
+        entry["suggested_category"] = {
+            "category": category,
+            "confidence": confidence,
+            "description": description,
+        }
         await self.async_save()
 
     async def clear_manual_category(self, mac: str) -> None:

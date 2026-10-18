@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.44 — 2026-10-18
+
+More fixes, mostly to the scan and recommendation tools.
+
+- Critical recommendations were sorted to the bottom of the list. They're at the top now.
+- Cameras found by ONVIF, a port scan or set by hand weren't counted as cameras, so they were missing from the exposed-camera warnings and recommendations.
+- The Hikvision, Dahua, XMEye, EZVIZ, Imou, Reolink and Foscam advisories only fired when UniFi's vendor string matched exactly, which it almost never does. They match on the vendor name now, and on the ONVIF manufacturer too.
+- Quantify no longer saves every guess as a permanent manual category. High-confidence results are applied, everything else is shown as a suggestion you can accept, and you can see what it found for each device. Its guesses no longer train the learned rules either; only categories you set yourself do.
+- You can clear a manual category from the device card so automatic detection takes over again.
+- Renaming a device from the panel stuck until the next poll, then got overwritten. It sticks now. Your UniFi alias also wins over the device's hostname.
+- Port scan results survive a panel reload, and Scan Ports on the recommendations page shows its results instead of doing nothing visible.
+- The "local-only firewall rule" warning pointed at a button that didn't exist and showed up even with no devices assigned. It only shows when an assigned device is missing its rule, and the Local Only page has a "Create Missing Rules" button.
+- IP history shows on device cards again.
+
 ## 0.3.43 — 2026-10-17
 
 Bug fix and security release. Everything here was broken in 0.3.42 and earlier.

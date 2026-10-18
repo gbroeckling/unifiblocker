@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.43";
+const VERSION = "0.3.44";
 const SIDEBAR_THRESHOLD = 5;
 
 // Everything the panel renders goes through innerHTML, and a lot of it comes
@@ -43,6 +43,8 @@ class UniFiBlockerPanel extends HTMLElement {
     this._filter = "";
     this._localnet = {};
     this._scanCache = {};
+    this._scanning = new Set();
+    this._quantifyResults = null;
     this._recs = {};
     this._miners = { rigs: [], summary: {} };
     this._initialized = false;
@@ -60,13 +62,14 @@ class UniFiBlockerPanel extends HTMLElement {
   async _ws(type, extra = {}) { if (!this._hass) return null; try { return _sanitize(await this._hass.callWS({ type, ...extra })); } catch (e) { console.warn("[UB]", type, e); return null; } }
 
   async _fetchAll() {
-    const [ov, cl, cats, ln, recs, mn] = await Promise.all([
+    const [ov, cl, cats, ln, recs, mn, sr] = await Promise.all([
       this._ws("unifiblocker/overview"),
       this._ws("unifiblocker/clients"),
       this._ws("unifiblocker/categories"),
       this._ws("unifiblocker/localnet_status"),
       this._ws("unifiblocker/recommendations"),
       this._ws("unifiblocker/miners"),
+      this._ws("unifiblocker/scan_results"),
     ]);
     if (ov) this._overview = ov;
     if (cl) this._data = cl;
@@ -74,6 +77,7 @@ class UniFiBlockerPanel extends HTMLElement {
     if (ln) this._localnet = ln;
     if (recs) this._recs = recs;
     if (mn) this._miners = mn;
+    if (sr && sr.results) this._scanCache = { ...sr.results, ...this._scanCache };
     this._render();
   }
 
@@ -91,7 +95,7 @@ class UniFiBlockerPanel extends HTMLElement {
     if (btn) { btn.textContent = "🔬 Scanning... this takes a while"; btn.disabled = true; }
     const r = await this._ws("unifiblocker/deep_scan_unknowns");
     if (r) {
-      alert(`Deep scan complete: ${r.scanned || 0} devices scanned, ${r.identified || 0} identified`);
+      this._quantifyResults = r;
       setTimeout(() => this._fetchAll(), 1000);
     }
     if (btn) { btn.textContent = "🔬 Quantify Unknown Devices"; btn.disabled = false; }
@@ -100,8 +104,12 @@ class UniFiBlockerPanel extends HTMLElement {
   async _scanDevice(mac) {
     const el = this.shadowRoot.getElementById(`scan-${mac.replace(/:/g,"")}`);
     if (el) el.innerHTML = '<div class="scan-loading">Scanning ~90 ports... this takes a few seconds</div>';
+    this._scanning.add(mac.toLowerCase());
+    if (!el) this._updateMain();
     const r = await this._ws("unifiblocker/scan_device", { mac });
-    if (r) { this._scanCache[mac.toLowerCase()] = r; this._updateMain(); }
+    this._scanning.delete(mac.toLowerCase());
+    if (r) this._scanCache[mac.toLowerCase()] = r;
+    this._updateMain();
   }
 
   async _assignLocal(mac, category, name) { if (!this._actionMode) { alert("Enable Action Mode first."); return; } const r = await this._ws("unifiblocker/localnet_assign", { mac, category, name: name||undefined }); if (r) { alert(r.ok ? `Assigned ${r.ip} to ${mac}` : `Error: ${r.error}`); setTimeout(() => this._fetchAll(), 800); } }
@@ -283,6 +291,13 @@ class UniFiBlockerPanel extends HTMLElement {
     mc.querySelectorAll("[data-ensureFw]").forEach(btn => {
       btn.addEventListener("click", () => this._ensureRule());
     });
+    mc.querySelectorAll("[data-clearcat]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        if (!this._actionMode) { alert("Enable Action Mode first."); return; }
+        const r = await this._ws("unifiblocker/clear_category", { mac: btn.dataset.clearcat });
+        if (r && r.ok) { btn.disabled = true; setTimeout(() => this._fetchAll(), 800); }
+      });
+    });
     mc.querySelectorAll("[data-setcat]").forEach(btn => {
       btn.addEventListener("click", () => {
         const mac = btn.dataset.mac;
@@ -336,7 +351,30 @@ class UniFiBlockerPanel extends HTMLElement {
       <div style="margin-top:16px;text-align:center">
         <button class="btn btn-quantify" data-quantify="1">🔬 Quantify Unknown Devices</button>
         <p style="font-size:10px;color:var(--secondary-text-color);margin-top:4px">Deep-scans all unknown devices using HTTP banners, TLS certs, SSH, DNS, NetBIOS, and TTL analysis</p>
-      </div>`;
+      </div>
+      ${this._vQuantifyResults()}`;
+  }
+
+  _vQuantifyResults() {
+    const q = this._quantifyResults;
+    if (!q) return "";
+    const rows = Object.entries(q.results || {});
+    return `<div class="card"><h2>Quantify Results</h2>
+      <p class="subtitle">${q.scanned || 0} scanned · ${q.identified || 0} applied (high confidence) · ${q.suggested || 0} suggested. Suggestions only change anything when you accept them.</p>
+      ${rows.length ? `<table class="data-table">
+        <thead><tr><th>Device</th><th>IP</th><th>Best guess</th><th>Confidence</th><th>Based on</th><th></th></tr></thead>
+        <tbody>${rows.map(([mac, r]) => `<tr>
+          <td>${r.name || `<span class="mono">${mac}</span>`}</td>
+          <td class="mono">${r.ip || "—"}</td>
+          <td>${r.best_guess === "unknown" ? "Still unknown" : `<strong>${r.best_guess}</strong>${r.best_description ? `<div style="font-size:10px">${r.best_description}</div>` : ""}`}</td>
+          <td>${r.best_guess === "unknown" ? "—" : r.best_confidence}</td>
+          <td style="font-size:10px">${(r.techniques_used || []).join(", ") || "—"}</td>
+          <td>${r.best_guess === "unknown" ? "" : r.applied
+            ? `<span class="badge ok">Applied</span> <button class="btn" data-clearcat="${mac}">Undo</button>`
+            : `<button class="btn btn-trust" data-setcat="${r.best_guess}" data-mac="${mac}">Accept</button>`}</td>
+        </tr>`).join("")}</tbody>
+      </table>` : '<div class="empty">No unknown devices with an IP to scan.</div>'}
+    </div>`;
   }
 
   // ── Detail views (stat card click-through) ────────────────────────
@@ -357,7 +395,7 @@ class UniFiBlockerPanel extends HTMLElement {
       }
     }
     const priOrder = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
-    allDevRecs.sort((a, b) => (priOrder[a.priority] || 5) - (priOrder[b.priority] || 5));
+    allDevRecs.sort((a, b) => (priOrder[a.priority] ?? 5) - (priOrder[b.priority] ?? 5));
 
     // Find the device name for each MAC.
     const clients = this._data.clients || [];
@@ -397,7 +435,7 @@ class UniFiBlockerPanel extends HTMLElement {
                 ${r.action === "quarantine" ? `<button class="btn btn-quarantine" data-action="quarantine" data-mac="${r.mac}">🚫 Quarantine</button>` : ""}
                 ${r.action === "local_only" ? `<button class="btn btn-trust" data-localassign="${r.action_data?.category || "iot"}" data-mac="${r.mac}">🔒 Move to Local-Only</button>` : ""}
                 ${r.action === "block_port" && r.action_data?.ports ? r.action_data.ports.map(p => `<button class="btn-port-block" data-blockport="${p}" data-blockmac="${r.mac}">Block port ${p}</button>`).join(" ") : ""}
-                ${r.action === "review" ? `<button class="btn btn-scan" data-scanmac="${r.mac}">🔍 Scan Ports</button>` : ""}
+                ${r.action === "review" ? this._scanSummary(r.mac) : ""}
               </div>
             ` : ""}
           </div>
@@ -415,6 +453,15 @@ class UniFiBlockerPanel extends HTMLElement {
         </ul>
         <p style="margin-top:8px">Run <strong>port scans</strong> on unknown devices to get the most detailed recommendations.</p>
       </div>`;
+  }
+
+  _scanSummary(mac) {
+    const key = mac.toLowerCase();
+    if (this._scanning.has(key)) return '<span class="scan-loading">Scanning…</span>';
+    const scan = this._scanCache[key];
+    if (!scan || scan.status !== "complete") return `<button class="btn btn-scan" data-scanmac="${mac}">🔍 Scan Ports</button>`;
+    const op = scan.open_ports || [];
+    return `<span style="font-size:11px">${op.length ? `Open: <span class="mono">${op.join(", ")}</span>` : "No open ports"} · looks like <strong>${scan.guess_category}</strong> (${scan.guess_confidence})</span> <button class="btn btn-scan" data-scanmac="${mac}">Rescan</button>`;
   }
 
   _recCard(r) {
@@ -1278,6 +1325,7 @@ class UniFiBlockerPanel extends HTMLElement {
           <tr><td>Method</td><td>Per-device traffic rules on UCG Max</td></tr>
           <tr><td>Status</td><td>${fw.blocked_count ? `<span class="badge ok">${fw.blocked_count}/${fw.total_devices} devices blocked</span>` : fw.total_devices ? '<span class="badge warn">Rules pending</span>' : '<span class="badge ok">No devices assigned yet</span>'}</td></tr>
         </table>
+        ${fw.total_devices && fw.blocked_count < fw.total_devices ? '<button class="btn" data-ensureFw="1">Create Missing Rules</button>' : ""}
         <p style="margin-top:6px;font-size:11px;color:var(--secondary-text-color)">When you assign a device to Local Only, a traffic rule is automatically created on the UCG Max blocking that device's MAC from the internet. No separate firewall setup needed.</p>
       </div>
 
@@ -1511,6 +1559,8 @@ class UniFiBlockerPanel extends HTMLElement {
           ${d.onvif_firmware?`<div class="info-row"><span class="info-label">Firmware</span><span>${d.onvif_firmware}</span></div>`:""}
           ${d.onvif_serial?`<div class="info-row"><span class="info-label">Serial</span><span class="mono">${d.onvif_serial}</span></div>`:""}
         </div>
+        ${d.manual_category && this._actionMode ? `<div style="font-size:11px;margin:4px 0">Category set by hand. <button class="btn" data-clearcat="${d.mac}">Clear override</button></div>` : ""}
+        ${d.suggested_category && !d.manual_category ? `<div style="font-size:11px;margin:4px 0">Quantify suggests <strong>${d.suggested_category.category}</strong> (${d.suggested_category.confidence})${this._actionMode ? ` <button class="btn btn-trust" data-setcat="${d.suggested_category.category}" data-mac="${d.mac}">Accept</button>` : ""}</div>` : ""}
         ${d.onvif && d.onvif.onvif ? `<div class="onvif-badge"><span class="badge ok">ONVIF Confirmed</span> ${d.onvif.manufacturer||""} ${d.onvif.model||""}</div>` : ""}
         ${d.ip_history && d.ip_history.length > 1 ? `
           <div class="ip-history">

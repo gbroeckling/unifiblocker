@@ -131,7 +131,7 @@ class UniFiBlockerData:
             _LOGGER.error("Enrich failed for %s: %s", client.get("mac", "?"), err, exc_info=True)
             return {
                 "mac": client.get("mac", ""),
-                "name": client.get("name") or client.get("hostname") or "",
+                "name": self.store.get_custom_name(client.get("mac", "")) or client.get("name") or client.get("hostname") or "",
                 "ip": client.get("ip", ""),
                 "vendor": client.get("oui", "Unknown"),
                 "category": "unknown", "category_label": "Unknown",
@@ -152,10 +152,17 @@ class UniFiBlockerData:
             camera = is_camera_like(mac, hostname, vendor)
         except Exception:
             camera = False
+        # ONVIF, port scans and manual overrides all land in the category.
+        camera = camera or cat_data.get("category") == "camera"
+
+        # Panel rename, then the UniFi alias, then whatever the device calls itself.
+        display_name = (
+            self.store.get_custom_name(mac) or client.get("name") or client.get("hostname") or ""
+        )
 
         return {
             "mac": mac,
-            "name": hostname,
+            "name": display_name,
             "hostname": client.get("hostname", ""),
             "ip": client.get("ip", ""),
             "vendor": vendor,
@@ -190,6 +197,9 @@ class UniFiBlockerData:
             "onvif_firmware": cat_data.get("onvif_firmware", ""),
             "onvif_serial": cat_data.get("onvif_serial", ""),
             "onvif": self._get_onvif_for_ip(client.get("ip", "")),
+            "ip_history": self.store.get_ip_history(mac),
+            "manual_category": self.store.get_manual_category(mac),
+            "suggested_category": self.store.get_suggestion(mac),
         }
 
     def _slim_dpi(self, mac_lower: str) -> dict[str, Any]:

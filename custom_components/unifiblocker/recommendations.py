@@ -58,6 +58,28 @@ VENDOR_ADVISORIES: dict[str, dict[str, Any]] = {
     },
 }
 
+# UniFi reports the full IEEE owner ("Hangzhou Hikvision Digital Technology
+# Co.,Ltd."), so match on keywords. EZVIZ/Imou come before their parents.
+_ADVISORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
+    ("EZVIZ", ("ezviz",)),
+    ("Imou", ("imou",)),
+    ("Hikvision", ("hikvision",)),
+    ("Dahua", ("dahua",)),
+    ("XMEye/Xiongmai", ("xiongmai", "xmeye", "hangzhou xiongmai")),
+    ("Reolink", ("reolink",)),
+    ("Foscam", ("foscam", "shenzhen foscam")),
+]
+
+
+def find_advisory(*texts: str) -> tuple[str, dict[str, Any]] | None:
+    """Return (vendor, advisory) for the first keyword found in *texts*."""
+    haystack = " ".join(t for t in texts if t).lower()
+    for name, keywords in _ADVISORY_KEYWORDS:
+        if any(k in haystack for k in keywords):
+            return name, VENDOR_ADVISORIES[name]
+    return None
+
+
 # ── Recommendation categories ───────────────────────────────────────
 
 PRIORITY_CRITICAL = "critical"
@@ -107,8 +129,9 @@ def generate_recommendations(device: dict[str, Any]) -> list[dict[str, Any]]:
 
     # ── 1. Vendor-specific advisories ────────────────────────────────
 
-    advisory = VENDOR_ADVISORIES.get(vendor)
-    if advisory:
+    found = find_advisory(vendor, device.get("onvif_manufacturer", ""))
+    if found:
+        vendor, advisory = found
         risk = advisory["risk"]
         pri = PRIORITY_CRITICAL if risk == "critical" else PRIORITY_HIGH
         cve_text = ", ".join(advisory["cves"]) if advisory["cves"] else "Check vendor CVE history"
@@ -368,10 +391,10 @@ def generate_network_recommendations(
         recs.append({
             "priority": PRIORITY_HIGH,
             "priority_label": PRIORITY_LABELS[PRIORITY_HIGH],
-            "title": "Local-only firewall rule not created",
-            "detail": "The firewall rule blocking 192.168.2.0/24 from WAN hasn't been created yet. "
-                      "Go to the Local Only view and click 'Create Firewall Rule'. Without this, "
-                      "devices on the local-only subnet can still reach the internet.",
+            "title": "Local-only devices missing their internet block",
+            "detail": "Some devices assigned to Local Only don't have their traffic rule on the UCG Max yet, "
+                      "so they can still reach the internet. Go to the Local Only view and click "
+                      "'Create Missing Rules'.",
             "action": "info",
             "action_data": {},
         })
