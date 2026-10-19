@@ -91,7 +91,7 @@ if (!empty($_SESSION['ok'])) {
           'per_day' => [], 'version' => [], 'ha' => [], 'controller' => [], 'usage' => [], 'views' => [],
           'api' => [], 'log' => [], 'cats' => [], 'adv' => [], 'polls' => 0, 'poll_fail' => 0,
           'poll_ms_sum' => 0, 'poll_ms_max' => 0, 'slow' => 0, 'oversize' => 0, 'slow_inst' => 0,
-          'oversize_inst' => 0, 'api_inst' => [], 'log_inst' => [], 'sizes' => [], 'settings' => []];
+          'oversize_inst' => 0, 'api_inst' => [], 'log_inst' => [], 'sizes' => [], 'settings' => [], 'vuln' => []];
     $bump = function (&$a, $k, $n = 1) { $a[$k] = ($a[$k] ?? 0) + $n; };
 
     foreach ($reports as $id => $byDay) {
@@ -107,6 +107,7 @@ if (!empty($_SESSION['ok'])) {
         $S['sizes'][] = ['clients' => (int)($c['clients'] ?? 0), 'cameras' => (int)($c['cameras'] ?? 0)];
         foreach (($c['categories'] ?? []) as $k => $n) $bump($S['cats'], $k, (int)$n);
         foreach (($c['advisories'] ?? []) as $k => $n) $bump($S['adv'], $k, (int)$n);
+        foreach (($c['vulnerable'] ?? []) as $k => $n) $bump($S['vuln'], $k, (int)$n);
         $e = $last['env'] ?? [];
         $bump($S['settings'], 'auto-scan ' . ($e['auto_scan_count'] ?? '?'));
         $bump($S['settings'], 'poll every ' . ($e['scan_interval'] ?? '?') . ' s');
@@ -235,6 +236,10 @@ function median($xs) { if (!$xs) return 0; sort($xs); $m = intdiv(count($xs), 2)
     <div class="card"><h2>Panel views opened</h2><?= pairs($S['views'], 'View', 'Opens') ?></div>
     <div class="card"><h2>Devices by category (all installs)</h2><?= pairs($S['cats'], 'Category', 'Devices') ?></div>
     <div class="card"><h2>Devices matching a vendor advisory</h2><?= pairs($S['adv'], 'Vendor', 'Devices') ?></div>
+    <div class="card"><h2>Firmware check (devices)</h2><?= table([
+        ['Known-exploited bug, firmware old enough', $S['vuln']['affected'] ?? 0],
+        ["Maker has exploited bugs, couldn't check", $S['vuln']['check'] ?? 0],
+        ['Firmware 5+ years old', $S['vuln']['old_firmware'] ?? 0]], ['Result', 'Devices']) ?></div>
     <div class="card"><h2>Settings</h2><?= pairs($S['settings'], 'Setting', 'Installs') ?></div>
   </div>
   <p class="muted">Counts only. The integration refuses to send MACs, IPs, names, vendor strings or entity ids, and the receiver checks again.</p>

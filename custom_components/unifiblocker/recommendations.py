@@ -22,7 +22,7 @@ VENDOR_ADVISORIES: dict[str, dict[str, Any]] = {
     },
     "Dahua": {
         "risk": "high",
-        "cves": ["CVE-2021-33044 (auth bypass)", "CVE-2021-33045 (auth bypass)", "CVE-2021-36260 (RCE)"],
+        "cves": ["CVE-2021-33044 (auth bypass)", "CVE-2021-33045 (auth bypass)"],
         "phone_home": ["easy4ip.com", "cloud-service.dahuatech.com", "dahuasecurity.com", "imoulife.com"],
         "advice": "Known authentication bypass vulnerabilities. Isolate completely. Disable P2P/cloud in Network settings. Check for port 9530 (debug backdoor).",
     },
@@ -131,7 +131,9 @@ def generate_recommendations(
 
     # ── 1. Vendor-specific advisories ────────────────────────────────
 
-    found = find_advisory(vendor, device.get("onvif_manufacturer", ""))
+    vulns = device.get("vulns") or {}
+    # The firmware family catches XMEye cameras that call themselves "H264".
+    found = find_advisory(vendor, device.get("onvif_manufacturer", ""), vulns.get("family") or "")
     if found:
         vendor, advisory = found
         risk = advisory["risk"]
@@ -145,6 +147,45 @@ def generate_recommendations(
             "detail": f"{advisory['advice']}\n\nKnown CVEs: {cve_text}\nPhones home to: {domains}",
             "action": "local_only" if risk != "critical" else "quarantine",
             "action_data": {"mac": mac},
+        })
+
+    # ── 1b. Firmware vulnerability check (vuln.py) ──────────────────
+
+    # Already on the local-only subnet: the advice stands, the button doesn't.
+    isolated = bool(ip) and ip.startswith(f"{local_prefix}.")
+    contain = {"action": "info", "action_data": {}} if isolated else {
+        "action": "local_only", "action_data": {"mac": mac, "category": "camera"}}
+    hits = [f for f in vulns.get("findings", []) if f["status"] in ("affected", "likely")]
+    if hits:
+        likely = all(f["status"] == "likely" for f in hits)
+        recs.append({
+            "priority": PRIORITY_CRITICAL,
+            "priority_label": PRIORITY_LABELS[PRIORITY_CRITICAL],
+            "title": ("Firmware probably has an actively exploited bug: " if likely
+                      else "Firmware has an actively exploited bug: ") + ", ".join(f["cve"] for f in hits),
+            "detail": "\n".join(f"{f['cve']}: {f['detail']} ({f['source']})" for f in hits)
+                      + "\n\nUpdate the firmware from the maker's site if you can, and keep it on local-only "
+                        "either way so it can't be reached from the internet.",
+            **contain,
+        })
+    checks = [f for f in vulns.get("findings", []) if f["status"] == "check"]
+    if checks and not hits:
+        recs.append({
+            "priority": PRIORITY_HIGH,
+            "priority_label": PRIORITY_LABELS[PRIORITY_HIGH],
+            "title": f"{vulns.get('family')} cameras have actively exploited bugs; couldn't check this one",
+            "detail": "\n".join(f"{f['cve']}: {f['detail']}" for f in checks),
+            **contain,
+        })
+    age = vulns.get("firmware_age_years")
+    if age is not None and age >= 5:
+        recs.append({
+            "priority": PRIORITY_MEDIUM,
+            "priority_label": PRIORITY_LABELS[PRIORITY_MEDIUM],
+            "title": f"Firmware is {age} years old",
+            "detail": f"This camera's firmware was built {vulns.get('firmware_date')}. Cheap cameras rarely get "
+                      "updates, so anything found since then is still in it. Keep it on local-only.",
+            **contain,
         })
 
     # ── 2. Camera on main network ────────────────────────────────────
@@ -192,9 +233,9 @@ def generate_recommendations(
             "priority": PRIORITY_CRITICAL,
             "priority_label": PRIORITY_LABELS[PRIORITY_CRITICAL],
             "title": "Dahua debug port 9530 OPEN — known backdoor",
-            "detail": "CVE-2017-7921 / CVE-2021-36260. This port allows unauthenticated remote access. "
-                      "Attackers can view camera feeds, extract credentials, and execute commands. "
-                      "Block this port AND quarantine the device until firmware is updated.",
+            "detail": "Port 9530 is Dahua's debug service, which older firmware leaves open and which can be used "
+                      "to turn on a root shell. Attackers who reach it can view feeds, pull credentials and run "
+                      "commands. Quarantine the device until its firmware is updated.",
             "action": "quarantine",
             "action_data": {"mac": mac},
         })

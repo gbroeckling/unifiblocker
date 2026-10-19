@@ -146,6 +146,14 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
     report.start()
     entry.async_on_unload(report.stop)
 
+    # CISA's known-exploited list for the firmware check: saved copy now,
+    # download a couple of minutes after startup and then daily.
+    from .vuln import KevFeed
+    kev = KevFeed(hass)
+    await kev.async_load()
+    kev.start()
+    entry.async_on_unload(kev.stop)
+
     # Sidebar panel
     try:
         from .panel import async_register_panel

@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.53";
+const VERSION = "0.3.54";
 const SIDEBAR_THRESHOLD = 5;
 
 // Everything the panel renders goes through innerHTML, and a lot of it comes
@@ -1647,7 +1647,8 @@ class UniFiBlockerPanel extends HTMLElement {
         </div>
         ${d.manual_category && this._actionMode ? `<div style="font-size:11px;margin:4px 0">Category set by hand. <button class="btn" data-clearcat="${d.mac}">Clear override</button></div>` : ""}
         ${d.suggested_category && !d.manual_category ? `<div style="font-size:11px;margin:4px 0">Quantify suggests <strong>${d.suggested_category.category}</strong> (${d.suggested_category.confidence})${this._actionMode ? ` <button class="btn btn-trust" data-setcat="${d.suggested_category.category}" data-mac="${d.mac}">Accept</button>` : ""}</div>` : ""}
-        ${d.onvif && d.onvif.onvif ? `<div class="onvif-badge"><span class="badge ok">ONVIF Confirmed</span> ${d.onvif.manufacturer||""} ${d.onvif.model||""}</div>` : ""}
+        ${d.onvif && d.onvif.onvif ? `<div class="onvif-badge"><span class="badge ok">ONVIF Confirmed</span> ${d.onvif.manufacturer||""} ${d.onvif.model||""}${d.onvif.auth_required ? ' <span class="badge">login needed</span>' : ""}</div>` : ""}
+        ${this._vulnBlock(d.vulns)}
         ${d.ip_history && d.ip_history.length > 1 ? `
           <div class="ip-history">
             <div style="font-size:10px;font-weight:600;color:var(--secondary-text-color);margin-bottom:3px">IP History:</div>
@@ -1673,6 +1674,16 @@ class UniFiBlockerPanel extends HTMLElement {
   // Local-only subnet from the integration options (defaults to 192.168.2.0/24).
   _lp() { return (this._localnet && this._localnet.prefix) || "192.168.2"; }
   _lcidr() { return (this._localnet && this._localnet.subnet) || "192.168.2.0/24"; }
+
+  _vulnBlock(v) {
+    if (!v) return "";
+    const label = { affected: ["danger", "affected"], likely: ["danger", "probably affected"], check: ["warn", "couldn't check"] };
+    const fw = v.firmware_date ? `firmware built ${v.firmware_date}${v.firmware_age_years != null ? ` (${v.firmware_age_years} years old)` : ""}` : "firmware date unknown";
+    return `<div class="flags"><div class="flags-title">Firmware check${v.family ? ` · ${v.family}` : ""}:</div>
+      <div class="flag-item">${fw}</div>
+      ${(v.findings || []).map(f => `<div class="flag-item"><span class="badge ${label[f.status][0]}">${label[f.status][1]}</span> <strong>${f.cve}</strong>${f.kev ? " (exploited, CISA KEV)" : ""}: ${f.detail}</div>`).join("")}
+    </div>`;
+  }
 
   _actBtns(mac, cat) {
     const localBtn = `<button class="btn btn-local" data-localassign="${cat||'iot'}" data-mac="${mac}">🔒Local Only</button>`;

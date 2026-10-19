@@ -257,14 +257,22 @@ def build_payload(hass: HomeAssistant, install_id: str, taken: dict[str, Any] | 
             cats: dict[str, int] = {}
             advisories: dict[str, int] = {}
             cameras = 0
+            vuln = {"affected": 0, "check": 0, "old_firmware": 0}
             for c in data.clients:
                 cat = data.categories.get(c.get("mac", "").lower(), {}).get("category", "unknown")
                 cats[cat] = cats.get(cat, 0) + 1
                 e = data.enrich_client(c)
                 cameras += bool(e.get("is_camera"))
-                found = find_advisory(e.get("vendor", ""), e.get("onvif_manufacturer", ""))
+                v = e.get("vulns") or {}
+                found = find_advisory(e.get("vendor", ""), e.get("onvif_manufacturer", ""), v.get("family") or "")
                 if found:
                     advisories[found[0]] = advisories.get(found[0], 0) + 1
+                if v.get("worst") in ("affected", "likely"):
+                    vuln["affected"] += 1
+                elif v.get("worst") == "check":
+                    vuln["check"] += 1
+                if (v.get("firmware_age_years") or 0) >= 5:
+                    vuln["old_firmware"] += 1
             local_net = entry_data.get("local_net")
             scanner = entry_data.get("scanner")
             learned = entry_data.get("learned")
@@ -286,6 +294,7 @@ def build_payload(hass: HomeAssistant, install_id: str, taken: dict[str, Any] | 
                     "_vendor_rules", "_hostname_rules", "_mac_rules", "_port_rules")) if learned else 0,
                 "categories": cats,
                 "advisories": advisories,
+                "vulnerable": vuln,
             }
 
     polls = taken["polls"]

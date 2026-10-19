@@ -279,7 +279,12 @@ UCG Max (UniFi OS)                Home Assistant
 
 ## Privacy and the opt-in usage report
 
-UniFi Blocker talks to your controller and to devices on your LAN. The only other outside call is to minerstat.com for coin prices, and only if you have miners. It sends nothing about you or your network anywhere unless you turn on the usage report.
+UniFi Blocker talks to your controller and to devices on your LAN. It makes two other outside requests, and neither sends anything about your network:
+
+- Once a day it downloads CISA's public [Known Exploited Vulnerabilities](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) list from cisa.gov for the camera firmware check (a plain download; only the camera makers' entries are kept).
+- If you have miners, it fetches coin prices from minerstat.com.
+
+It sends nothing about you or your network anywhere unless you turn on the usage report.
 
 ### Help improve UniFi Blocker (opt-in)
 

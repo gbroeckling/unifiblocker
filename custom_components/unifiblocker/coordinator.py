@@ -220,6 +220,7 @@ class UniFiBlockerData:
             "onvif_firmware": cat_data.get("onvif_firmware", ""),
             "onvif_serial": cat_data.get("onvif_serial", ""),
             "onvif": self._get_onvif_for(mac, client.get("ip", "")),
+            "vulns": self._vulns(client, camera, vendor, cat_data),
             "ip_history": self.store.get_ip_history(mac),
             "manual_category": self.store.get_manual_category(mac),
             "suggested_category": self.store.get_suggestion(mac),
@@ -236,6 +237,22 @@ class UniFiBlockerData:
             "top_categories": (dpi.get("top_categories") or [])[:5],
             "flags": dpi.get("flags", []),
         }
+
+    def _vulns(self, client: dict[str, Any], camera: bool, vendor: str,
+               cat_data: dict[str, Any]) -> dict[str, Any] | None:
+        """Firmware vulnerability check (vuln.py) for cameras and anything
+        from a camera maker."""
+        from .vuln import assess
+
+        onvif = self.onvif.result_for(client.get("mac", ""), client.get("ip", "")) if self.onvif else None
+        onvif = onvif if onvif and onvif.get("onvif") else {}
+        manufacturer = onvif.get("manufacturer") or cat_data.get("onvif_manufacturer", "")
+        model = onvif.get("model") or cat_data.get("onvif_model", "")
+        firmware = onvif.get("firmware_version") or cat_data.get("onvif_firmware", "")
+        result = assess(vendor, manufacturer, model, firmware)
+        if result and not camera and not result["findings"]:
+            return None   # an old firmware date on a non-camera isn't our business
+        return result
 
     def _get_onvif_for(self, mac: str, ip: str) -> dict[str, Any] | None:
         """Look up the ONVIF result for a client. Returns only key fields."""

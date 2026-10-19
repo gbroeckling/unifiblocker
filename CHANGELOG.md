@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.54 — 2026-10-19
+
+Camera firmware check.
+
+- Cameras' firmware is checked against known-exploited bugs. For Hikvision (CVE-2021-36260, CVE-2017-7921) and Dahua (CVE-2021-33044, CVE-2021-33045), firmware built before the vendor's fix date is flagged as affected, with a critical recommendation to move the camera to local-only. If a camera won't say what firmware it runs, you're told it couldn't be checked rather than that it's fine.
+- Makers on CISA's Known Exploited Vulnerabilities list without a version cut-off (Reolink, Amcrest, TVT, GeoVision, Edimax) get a warning to check the model by hand. The list is downloaded from cisa.gov once a day, and a copy is built in for when that isn't possible.
+- Firmware build dates are shown on device cards, and cameras on firmware five or more years old get a recommendation. Cheap cameras rarely get updates.
+- Xiongmai (XMEye) cameras are recognised from their firmware even when they report "H264" as the maker and UniFi doesn't know the vendor, so the XMEye advisory now reaches them.
+- Fixed the Dahua advisory and the port 9530 recommendation, which listed two Hikvision CVEs as Dahua's.
+
 ## 0.3.53 — 2026-10-19
 
 - New services: `unifiblocker.scan_device`, `unifiblocker.run_quantify` and `unifiblocker.onvif_discover`, so automations can run the tools.
