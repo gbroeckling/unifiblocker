@@ -37,6 +37,8 @@ class NewDevicesPendingBinarySensor(
     _attr_name = "Devices pending review"
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
     _attr_icon = "mdi:account-question"
+    # Too big for the recorder; still available to dashboards and templates.
+    _unrecorded_attributes = frozenset({"devices"})
 
     def __init__(
         self,
@@ -78,6 +80,7 @@ class SuspiciousTrafficBinarySensor(
     _attr_name = "Suspicious traffic detected"
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
     _attr_icon = "mdi:alert-octagon"
+    _unrecorded_attributes = frozenset({"devices"})
 
     def __init__(
         self,

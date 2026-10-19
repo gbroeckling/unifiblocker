@@ -43,6 +43,9 @@ class DeviceStore:
         self._hass = hass
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self._devices: dict[str, dict[str, Any]] = {}
+        # Bumped on every user-driven change (they all end in async_save) so
+        # cached enrichment knows to rebuild before the next poll.
+        self.rev = 0
 
     # ── lifecycle ────────────────────────────────────────────────────
 
@@ -55,6 +58,7 @@ class DeviceStore:
 
     async def async_save(self) -> None:
         """Persist current state to disk."""
+        self.rev += 1
         await self._store.async_save({"devices": self._devices})
 
     def schedule_save(self) -> None:

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.47 — 2026-10-19
+
+- The device lists on New devices, Quarantined devices, Suspicious devices, All clients detail and the two review binary sensors are far bigger than the recorder's 16 KB limit, so Home Assistant logged five warnings every poll. Those lists are now kept out of history. They're still on the entities, so dashboards and templates work as before.
+- Each poll enriched every client once per entity. It's done once per poll now, which fixes Home Assistant's "Updating state ... took 0.95 seconds" warning.
+
 ## 0.3.46 — 2026-10-19
 
 Quieter logs.

@@ -78,6 +78,10 @@ class TotalClientsSensor(_BaseSensor):
 class NewDevicesSensor(_BaseSensor):
     """Number of unreviewed (new) devices."""
 
+    # The device list stays on the entity for dashboards and templates, but
+    # it's well over the recorder's 16 KB cap, so keep it out of history.
+    _unrecorded_attributes = frozenset({"devices"})
+
     def __init__(self, coordinator: UniFiBlockerCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, "new_devices", "New devices", "mdi:alert-decagram")
 
@@ -107,6 +111,8 @@ class BlockedDevicesSensor(_BaseSensor):
 
 class QuarantinedDevicesSensor(_BaseSensor):
     """Number of devices marked quarantined in the local store."""
+
+    _unrecorded_attributes = frozenset({"devices"})
 
     def __init__(self, coordinator: UniFiBlockerCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, "quarantined_devices", "Quarantined devices", "mdi:shield-alert")
@@ -176,6 +182,7 @@ class AllClientDetailsSensor(_BaseSensor):
     """
 
     _attr_state_class = None  # Not a measurement
+    _unrecorded_attributes = frozenset({"clients"})
 
     def __init__(self, coordinator: UniFiBlockerCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, "all_clients", "All clients detail", "mdi:format-list-bulleted")
@@ -193,6 +200,8 @@ class AllClientDetailsSensor(_BaseSensor):
 
 class SuspiciousDevicesSensor(_BaseSensor):
     """Number of clients flagged as suspicious by traffic analysis."""
+
+    _unrecorded_attributes = frozenset({"devices"})
 
     def __init__(self, coordinator: UniFiBlockerCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, "suspicious_devices", "Suspicious devices", "mdi:alert-octagon")

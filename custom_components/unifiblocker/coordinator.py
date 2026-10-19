@@ -47,6 +47,11 @@ class UniFiBlockerData:
         self.categories = categories        # mac → category result
         self.miners = miners or []          # list of rig dicts (see miners.py)
         self.onvif = onvif                  # OnvifProbe, used for enrichment
+        # Several entities enrich the same clients on every update; do it once
+        # per poll. Each poll builds a new UniFiBlockerData, so this never
+        # outlives the data it was built from.
+        self._enriched: dict[str, dict[str, Any]] = {}
+        self._enriched_rev = store.rev
 
     @property
     def category_counts(self) -> dict[str, int]:
@@ -125,8 +130,18 @@ class UniFiBlockerData:
 
     def enrich_client(self, client: dict[str, Any]) -> dict[str, Any]:
         """Return a display-friendly dict for a single client."""
+        key = client.get("mac", "").lower()
+        if self._enriched_rev != self.store.rev:
+            # Trust/category/etc. changed since we cached; HA debounces the
+            # refresh that follows, so don't wait for it.
+            self._enriched.clear()
+            self._enriched_rev = self.store.rev
+        if key in self._enriched:
+            # Copy: some callers add keys (scan_result) to what they get back.
+            return dict(self._enriched[key])
         try:
-            return self._do_enrich(client)
+            self._enriched[key] = self._do_enrich(client)
+            return dict(self._enriched[key])
         except Exception as err:
             _LOGGER.error("Enrich failed for %s: %s", client.get("mac", "?"), err, exc_info=True)
             return {
