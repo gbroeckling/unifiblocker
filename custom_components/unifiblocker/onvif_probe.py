@@ -101,6 +101,17 @@ def is_video_device(types: str) -> bool:
     return "networkvideotransmitter" in (types or "").lower()
 
 
+def has_onvif_evidence(r: dict[str, Any]) -> bool:
+    """A positive result we can stand behind: the device named itself, asked
+    for an ONVIF login, or announced itself as a video transmitter."""
+    if not r.get("onvif"):
+        return False
+    if r.get("source") == "ws-discovery" and not is_video_device(r.get("types", "")):
+        return False   # a NAS/PC answering WS-Discovery (saved by 0.3.51-0.3.54)
+    return bool(r.get("manufacturer") or r.get("model") or r.get("firmware_version")
+                or r.get("auth_required") or is_video_device(r.get("types", "")))
+
+
 class OnvifProbe:
     """Discover and probe ONVIF cameras on the network."""
 
@@ -123,11 +134,12 @@ class OnvifProbe:
         if self._store:
             data = await self._store.async_load()
             if isinstance(data, dict):
-                # 0.3.52-0.3.54 saved NAS/Windows WS-Discovery replies as
-                # cameras; drop those.
+                # 0.3.52-0.3.55 could save NAS/PC WS-Discovery replies and
+                # web servers that redirect /onvif/... as cameras. Keep only
+                # records with real evidence; real cameras get re-found by
+                # discovery anyway.
                 self._by_mac = {
-                    mac: r for mac, r in data.get("by_mac", {}).items()
-                    if r.get("source") != "ws-discovery" or is_video_device(r.get("types", ""))
+                    mac: r for mac, r in data.get("by_mac", {}).items() if has_onvif_evidence(r)
                 }
                 self._probed = data.get("probed", {})
 
@@ -146,7 +158,7 @@ class OnvifProbe:
         """Remember a positive result for *ip* under *mac*. True if it changed."""
         r = self._cache.get(ip)
         mac = mac.lower()
-        if not r or not r.get("onvif"):
+        if not r or not has_onvif_evidence(r):
             return False
         old = self._by_mac.get(mac)
         if old and old.get("probe_time", 0) >= r.get("probe_time", 0) and old.get("ip") == ip:
@@ -398,11 +410,14 @@ class OnvifProbe:
 
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
+                # No redirects: plenty of web servers bounce /onvif/... to a
+                # login page, and that 200 HTML isn't an ONVIF answer.
                 async with session.post(
-                    url, data=body, headers=headers, ssl=ctx
+                    url, data=body, headers=headers, ssl=ctx, allow_redirects=False
                 ) as resp:
                     if resp.status == 200:
-                        return await resp.text()
+                        text = await resp.text()
+                        return text if "envelope" in text[:4000].lower() else None
                     # Some cameras return 401 for unauthenticated GetDeviceInformation
                     # but still give useful data in the error response.
                     if resp.status in (400, 401, 403, 500):
@@ -413,7 +428,7 @@ class OnvifProbe:
                         # service is there and wants a login. A plain 401 page
                         # doesn't: routers and NAS boxes answer every path that way.
                         low = text[:4000].lower()
-                        if "envelope" in low and ("onvif" in low or "notauthorized" in low or "fault" in low):
+                        if "envelope" in low and ("onvif" in low or "notauthorized" in low):
                             self._fault_urls.add(url)
         except Exception:
             pass

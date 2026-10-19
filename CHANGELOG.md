@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.56 — 2026-10-19
+
+- The ONVIF probe followed redirects, so any web server that bounces /onvif/device_service to its login page (a UniFi NAS, for one) looked like an ONVIF camera. It doesn't follow redirects now, and only a real SOAP reply counts. This was always there, but the new background probes in 0.3.52 started hitting it.
+- Saved ONVIF results without real evidence (no maker, model, firmware, ONVIF login prompt or video-device announcement) are dropped on startup. Real cameras get re-found by discovery within minutes.
+
 ## 0.3.55 — 2026-10-19
 
 - NAS boxes and Windows PCs answer ONVIF discovery too ("I'm a computer"), and 0.3.51-0.3.54 counted any answer as a camera. Only devices that say they're a video transmitter count now, and the wrong results saved by those versions are dropped on startup.
