@@ -96,6 +96,11 @@ NS = {
 }
 
 
+def is_video_device(types: str) -> bool:
+    """True if a WS-Discovery Types list says ONVIF video device."""
+    return "networkvideotransmitter" in (types or "").lower()
+
+
 class OnvifProbe:
     """Discover and probe ONVIF cameras on the network."""
 
@@ -118,7 +123,12 @@ class OnvifProbe:
         if self._store:
             data = await self._store.async_load()
             if isinstance(data, dict):
-                self._by_mac = data.get("by_mac", {})
+                # 0.3.52-0.3.54 saved NAS/Windows WS-Discovery replies as
+                # cameras; drop those.
+                self._by_mac = {
+                    mac: r for mac, r in data.get("by_mac", {}).items()
+                    if r.get("source") != "ws-discovery" or is_video_device(r.get("types", ""))
+                }
                 self._probed = data.get("probed", {})
 
     def _save(self) -> None:
@@ -449,9 +459,11 @@ class OnvifProbe:
                 if match:
                     port = int(match.group(1))
             result = await self.probe_device(ip, port)
-            if not result.get("onvif"):
+            if not result.get("onvif") and is_video_device(dev.get("types", "")):
                 # It answered WS-Discovery as a video transmitter, so it is
                 # one, even if the follow-up probe got nowhere without a login.
+                # (Windows and NAS boxes answer WS-Discovery too, as
+                # "wsdp:Device pub:Computer"; those don't count.)
                 result.update({"onvif": True, "auth_required": True, "source": "ws-discovery"})
                 result.pop("error", None)
             if not result.get("model") and dev.get("scope_hardware"):

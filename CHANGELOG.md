@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.55 — 2026-10-19
+
+- NAS boxes and Windows PCs answer ONVIF discovery too ("I'm a computer"), and 0.3.51-0.3.54 counted any answer as a camera. Only devices that say they're a video transmitter count now, and the wrong results saved by those versions are dropped on startup.
+
 ## 0.3.54 — 2026-10-19
 
 Camera firmware check.
