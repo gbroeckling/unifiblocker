@@ -103,6 +103,8 @@ class OnvifProbe:
         # ip → probe result
         self._cache: dict[str, dict[str, Any]] = {}
         self._discovered: list[dict[str, Any]] = []
+        # URLs that answered with an ONVIF/SOAP fault (service there, login needed).
+        self._fault_urls: set[str] = set()
 
     @property
     def cache(self) -> dict[str, dict[str, Any]]:
@@ -136,34 +138,33 @@ class OnvifProbe:
         devices: list[dict[str, Any]] = []
 
         try:
-            # Create UDP socket for multicast.
-            loop = asyncio.get_event_loop()
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 4)
-            sock.setblocking(False)
+            # Create UDP socket for multicast. The with block closes it on
+            # every path, errors included.
+            loop = asyncio.get_running_loop()
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 4)
+                sock.setblocking(False)
 
-            # Send probe.
-            await loop.sock_sendto(sock, probe_msg, (MULTICAST_ADDR, MULTICAST_PORT))
-            _LOGGER.info("Sent ONVIF WS-Discovery probe")
+                # Send probe.
+                await loop.sock_sendto(sock, probe_msg, (MULTICAST_ADDR, MULTICAST_PORT))
+                _LOGGER.info("Sent ONVIF WS-Discovery probe")
 
-            # Collect responses.
-            end_time = time.time() + DISCOVERY_TIMEOUT
-            while time.time() < end_time:
-                try:
-                    data, addr = await asyncio.wait_for(
-                        loop.sock_recvfrom(sock, 65535),
-                        timeout=max(0.1, end_time - time.time()),
-                    )
-                    device = self._parse_discovery_response(data, addr[0])
-                    if device:
-                        devices.append(device)
-                except asyncio.TimeoutError:
-                    break
-                except Exception:
-                    continue
-
-            sock.close()
+                # Collect responses.
+                end_time = time.time() + DISCOVERY_TIMEOUT
+                while time.time() < end_time:
+                    try:
+                        data, addr = await asyncio.wait_for(
+                            loop.sock_recvfrom(sock, 65535),
+                            timeout=max(0.1, end_time - time.time()),
+                        )
+                        device = self._parse_discovery_response(data, addr[0])
+                        if device:
+                            devices.append(device)
+                    except asyncio.TimeoutError:
+                        break
+                    except Exception:
+                        continue
         except Exception as err:
             _LOGGER.warning("WS-Discovery failed: %s", err)
 
@@ -282,6 +283,14 @@ class OnvifProbe:
                     break
 
         if device_info is None:
+            prefix = (f"http://{ip}:{port}/", f"https://{ip}:{port}/")
+            fault = next((u for u in self._fault_urls if u.startswith(prefix)), None)
+            if fault:
+                # It speaks ONVIF but wants a login. That's still a camera.
+                self._fault_urls -= {u for u in self._fault_urls if u.startswith(prefix)}
+                result.update({"service_url": fault, "auth_required": True})
+                self._cache[ip] = result
+                return result
             result["onvif"] = False
             result["error"] = "No ONVIF service found"
             self._cache[ip] = result
@@ -332,10 +341,16 @@ class OnvifProbe:
                         return await resp.text()
                     # Some cameras return 401 for unauthenticated GetDeviceInformation
                     # but still give useful data in the error response.
-                    if resp.status == 401:
+                    if resp.status in (400, 401, 403, 500):
                         text = await resp.text()
-                        if "Manufacturer" in text or "Model" in text:
+                        if resp.status == 401 and ("Manufacturer" in text or "Model" in text):
                             return text
+                        # A SOAP/ONVIF fault ("NotAuthorized" etc.) means an ONVIF
+                        # service is there and wants a login. A plain 401 page
+                        # doesn't: routers and NAS boxes answer every path that way.
+                        low = text[:4000].lower()
+                        if "envelope" in low and ("onvif" in low or "notauthorized" in low or "fault" in low):
+                            self._fault_urls.add(url)
         except Exception:
             pass
         return None
@@ -380,8 +395,16 @@ class OnvifProbe:
                 if match:
                     port = int(match.group(1))
             result = await self.probe_device(ip, port)
+            if not result.get("onvif"):
+                # It answered WS-Discovery as a video transmitter, so it is
+                # one, even if the follow-up probe got nowhere without a login.
+                result.update({"onvif": True, "auth_required": True, "source": "ws-discovery"})
+                result.pop("error", None)
+            if not result.get("model") and dev.get("scope_hardware"):
+                result["model"] = dev["scope_hardware"]
             # Merge discovery info.
             result.update({k: v for k, v in dev.items() if k not in result})
+            self._cache[ip] = result
             results.append(result)
         return results
 

@@ -536,6 +536,8 @@ class PortScanner:
                 "recommendations": [],
             }
 
+        from .device_categorizer import camera_port_verdict
+
         # Build port details and group set.
         port_details = []
         groups: set[str] = set()
@@ -547,6 +549,11 @@ class PortScanner:
                 "group": info["group"],
             })
             groups.add(info["group"])
+        # Camera groups only count when the ports really say camera (same
+        # rule the categorizer uses), so 8009 or 81 alone, or a NAS that
+        # answers 3702, doesn't come out as a camera.
+        if not camera_port_verdict(open_ports):
+            groups = {g for g in groups if not g.startswith("camera") and g != "onvif"}
 
         # Match against fingerprint rules.
         guess_cat = "unknown"

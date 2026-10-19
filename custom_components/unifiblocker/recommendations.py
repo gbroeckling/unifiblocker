@@ -203,25 +203,29 @@ def generate_recommendations(
         recs.append({
             "priority": PRIORITY_CRITICAL,
             "priority_label": PRIORITY_LABELS[PRIORITY_CRITICAL],
-            "title": "XMEye cloud ports active — phoning home to China",
-            "detail": "Ports 34567/34568 are the XMEye/Xiongmai cloud protocol. This device is actively "
-                      "communicating with Chinese cloud servers. CVE-2018-10088 allows unauthenticated "
-                      "remote access. The cloud can push firmware updates without your consent. "
-                      "Move to local-only subnet or quarantine.",
+            "title": "XMEye/Xiongmai DVR protocol open",
+            "detail": "Ports 34567/34568 are the XMEye/Xiongmai DVR protocol, so this is almost certainly "
+                      "an XMEye-based camera or DVR. These normally keep a connection open to Xiongmai's "
+                      "cloud, and CVE-2018-10088 allows unauthenticated remote access. The cloud can push "
+                      "firmware updates without your consent. Move to local-only subnet or quarantine.",
             "action": "local_only",
             "action_data": {"mac": mac, "category": "camera"},
         })
 
-    if any(p in open_ports for p in [6789, 32100, 19000, 8800]):
+    p2p_ports = [p for p in [6789, 32100, 19000, 8800] if p in open_ports]
+    # These are ordinary ports on plenty of other things, so one of them on
+    # its own only counts on something we already think is a camera.
+    if p2p_ports and (is_camera or len(p2p_ports) >= 2):
         recs.append({
             "priority": PRIORITY_HIGH,
             "priority_label": PRIORITY_LABELS[PRIORITY_HIGH],
-            "title": "P2P cloud relay port active",
-            "detail": "This device is using a P2P cloud relay to maintain a connection to an external server. "
-                      "This allows remote access to the device from the manufacturer's app, but it also means "
-                      "your video feed passes through servers you don't control. Block these ports or move to local-only.",
-            "action": "block_port",
-            "action_data": {"mac": mac, "ports": [p for p in [6789, 32100, 19000, 8800] if p in open_ports]},
+            "title": "P2P cloud relay port open",
+            "detail": f"Port(s) {', '.join(map(str, p2p_ports))} are used by camera P2P cloud services, which keep a "
+                      "connection to the manufacturer's servers so its app can reach the camera from anywhere. "
+                      "That also means your video can pass through servers you don't control. "
+                      "Move it to local-only so it can't reach the internet.",
+            "action": "local_only",
+            "action_data": {"mac": mac, "category": "camera"},
         })
 
     if 445 in open_ports or 139 in open_ports:

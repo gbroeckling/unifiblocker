@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.51 — 2026-10-19
+
+Fewer devices wrongly called cameras.
+
+- Ordinary ports no longer make a device a camera on their own: 8009 (Chromecast), 9000, 10000, 7681, 1935, 6000, 81 and friends now only count next to a real camera port like RTSP, ONVIF or the Dahua/Hikvision/XMEye protocols, or in pairs. A box that also shares files or takes remote desktop (Blue Iris PCs, NAS boxes) isn't called a camera for serving RTSP.
+- Scans saved by older versions are re-judged by these rules, so devices they got wrong are fixed without rescanning.
+- Hostnames are matched on whole words, so "camille-laptop" and "kids-ipad" are no longer cameras, while "frontcam", "DS-2CD2143..." and "DH-IPC-..." still are.
+- Vendor names are matched on whole words too: "Ring" no longer matches every "...Engineering Co.", and "ACTi" no longer matches Actiontec.
+- A camera chip maker (HiSilicon, Ingenic...) on its own is no longer "camera, high confidence". It's high with a camera-like hostname, medium with no hostname, and low otherwise.
+- A device that answers ONVIF but wants a login now counts as a camera. So does one that answered ONVIF discovery, even when the follow-up probe needed a password. Both used to be thrown away.
+- The XMEye and P2P cloud recommendations describe what was actually seen (a port that's open) instead of claiming the device is talking to China. The P2P one now offers local-only instead of a port block, and a single common port only triggers it on a camera.
+- Fixed a socket leak in the NetBIOS probe and ONVIF discovery.
+
 ## 0.3.50 — 2026-10-19
 
 - The usage report's Preview read the integration's manifest from disk inside Home Assistant's event loop, which Home Assistant flags as a blocking call. It now gets the version from Home Assistant when the integration loads.

@@ -28,9 +28,44 @@ Categories
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
-from .vendor_lookup import CAMERA_VENDORS, lookup_vendor_safe
+from .vendor_lookup import CAMERA_VENDORS, is_camera_hostname, lookup_vendor_safe
+
+# Ports that only mean "camera" next to a stronger sign. Each one is also a
+# perfectly ordinary port elsewhere: 8009 Chromecast, 9000 Portainer, 10000
+# Webmin, 7681 ttyd, 1935 any RTMP server, 6000 X11, 81/9080/5050 alt web.
+WEAK_CAMERA_PORTS = frozenset({
+    81, 85, 1935, 3702, 5050, 6000, 6789, 7681, 8000, 8009, 8082, 8200, 8800,
+    9000, 9010, 9080, 10000, 10001, 15000, 19000, 20000,
+})
+# File sharing and Windows remote access: a box with these that also serves
+# RTSP is a PC or NAS running camera software (Blue Iris, Surveillance
+# Station), not a camera. 3702 is in the weak list for the same reason;
+# Windows and NAS boxes answer WS-Discovery too.
+FILE_SERVER_PORTS = frozenset({135, 139, 445, 548, 2049, 3389})
+
+
+def camera_port_verdict(open_ports: list[int]) -> str | None:
+    """'high' / 'medium' if the open ports say camera, else None."""
+    ports = set(open_ports or [])
+    if ports & FILE_SERVER_PORTS:
+        return None
+    if ports & STRONG_CAMERA_PORTS:
+        return "high"
+    if len(ports & WEAK_CAMERA_PORTS) >= 2:
+        return "medium"
+    if {8800, 443} <= ports:
+        # TP-Link Tapo camera with RTSP/ONVIF switched off: its app port
+        # 8800 next to HTTPS. Tapo plugs don't expose 8800.
+        return "medium"
+    return None
+# Ports that are hard to explain on anything but a camera, DVR or NVR.
+STRONG_CAMERA_PORTS = frozenset({
+    554, 8554, 8555, 1554, 10554, 8899, 2020, 9527, 7788,
+    37777, 37778, 37780, 37781, 38888, 9530, 34567, 34568, 34569,
+})
 
 # ── Category definitions ─────────────────────────────────────────────
 
@@ -188,7 +223,7 @@ for _cv in CAMERA_VENDORS:
 # ── Hostname patterns → category ────────────────────────────────────
 # Checked in order; first match wins.
 
-_HOSTNAME_PATTERNS: list[tuple[list[str], str]] = [
+_HOSTNAME_PATTERNS: list[tuple[list[str] | None, str]] = [
     # ESPHome
     (["esphome", "esp32", "esp8266", "esp-", "esph-", "espresense"], "esphome"),
     # Home Assistant
@@ -198,9 +233,9 @@ _HOSTNAME_PATTERNS: list[tuple[list[str], str]] = [
       "lifx", "nanoleaf", "hue-", "hue_", "tradfri", "ikea-", "sengled",
       "cync", "wyze-bulb", "kasa-", "tp-link-", "tapo-", "magic-home",
       "flux-", "tuya-light", "tuya-led", "smartlight", "strip", "rgb"], "led"),
-    # Cameras
-    (["ipc", "ipcam", "camera", "cam-", "dvr", "nvr", "hikvision", "dahua",
-      "dh-", "ds-", "reolink", "amcrest", "foscam", "xmeye", "ezviz", "imou"], "camera"),
+    # Cameras: matched with is_camera_hostname() (word edges) rather than
+    # substrings, so "camille-laptop" and "kids-ipad" aren't cameras.
+    (None, "camera"),
     # Crypto miners
     (["miner", "antminer", "asic", "bitmain", "whatsminer", "avalon",
       "innosilicon", "goldshell", "helium", "bobcat", "rak", "sensecap",
@@ -339,28 +374,14 @@ def categorize_device(
         scan_conf = scan_result.get("guess_confidence", "low")
         open_ports = scan_result.get("open_ports", [])
 
-        # If the scan identified it as a camera with any confidence, trust it.
-        if scan_cat == "camera":
-            return _result("camera", "high", "port_scan")
-
-        # RTSP port 554 open = camera (almost always)
-        if 554 in open_ports:
-            return _result("camera", "high", "port_scan")
-
-        # ONVIF ports = camera
-        if any(p in open_ports for p in [3702, 8899, 2020, 6000]):
-            return _result("camera", "high", "port_scan")
-
-        # Any Hikvision/Dahua/XMEye specific port = camera
-        if any(p in open_ports for p in [8000, 9527, 8200, 37777, 37778, 34567, 34568, 9530]):
-            return _result("camera", "high", "port_scan")
-
-        # Camera cloud ports = camera
-        if any(p in open_ports for p in [6789, 32100, 19000, 8800, 15000, 20000]):
-            return _result("camera", "high", "port_scan")
+        # Judge the ports here rather than trusting the scan's stored guess:
+        # scans saved by older versions called 8009 or 81 alone a camera.
+        verdict = camera_port_verdict(open_ports)
+        if verdict:
+            return _result("camera", verdict, "port_scan")
 
         # Scan identified a non-camera category with medium+ confidence
-        if scan_cat != "unknown" and scan_conf in ("high", "medium"):
+        if scan_cat not in ("unknown", "camera") and scan_conf in ("high", "medium"):
             return _result(scan_cat, scan_conf, "port_scan")
 
     # 3a. Known crypto miner vendor — check BEFORE camera
@@ -369,17 +390,15 @@ def categorize_device(
         return _result("crypto", "high", "vendor")
 
     # 3b. Known camera vendor OUI — fuzzy match
-    from .vendor_lookup import is_camera_vendor as _is_cam_vendor, CAMERA_CHIP_VENDORS
+    from .vendor_lookup import is_camera_chip_vendor, is_camera_vendor as _is_cam_vendor
     if _is_cam_vendor(vendor):
         return _result("camera", "high", "vendor")
 
     # 4. Camera chip vendor (HiSilicon, Ingenic, etc.)
     #    These PROBABLY make cameras but could be other embedded devices.
     #    Promote to camera if ANY other signal suggests camera.
-    if vendor in CAMERA_CHIP_VENDORS:
-        # Any camera hostname hint?
-        cam_hints = ["ipc", "cam", "dvr", "nvr", "ds-", "dh-", "hik", "dahua"]
-        if hn and any(h in hn for h in cam_hints):
+    if is_camera_chip_vendor(vendor):
+        if is_camera_hostname(hn):
             return _result("camera", "high", "vendor+hostname")
         # No hostname at all? Chip vendor + no hostname = very likely camera.
         if not hn:
@@ -395,7 +414,8 @@ def categorize_device(
 
     if vendor in ("Amazon",):
         for hint, cat in _AMAZON_HOSTNAME_HINTS.items():
-            if hint in hn:
+            # Start of a word, so "ring" means a Ring device, not "spring".
+            if re.search(r"(?:^|[^a-z])" + re.escape(hint), hn):
                 return _result(cat, "high", "hostname")
 
     if vendor in ("Google", "Nest Labs"):
@@ -406,6 +426,10 @@ def categorize_device(
     # 6. Hostname pattern matching (any vendor)
     if hn:
         for patterns, cat in _HOSTNAME_PATTERNS:
+            if patterns is None:
+                if is_camera_hostname(hn):
+                    return _result(cat, "medium", "hostname")
+                continue
             for pat in patterns:
                 if pat in hn:
                     return _result(cat, "high" if len(pat) > 4 else "medium", "hostname")
@@ -418,7 +442,8 @@ def categorize_device(
     vendor_lower = vendor.lower() if vendor else ""
     if vendor_lower:
         for v_key, v_cat in _VENDOR_CATEGORY.items():
-            if v_key.lower() in vendor_lower:
+            # Whole words: the "Ring" key must not match "...Engineering".
+            if re.search(r"\b" + re.escape(v_key.lower()) + r"\b", vendor_lower):
                 return _result(v_cat, "medium", "vendor_fuzzy")
 
     # 8. DPI-based inference

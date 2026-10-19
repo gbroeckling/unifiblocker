@@ -8,6 +8,8 @@ equipment.
 """
 from __future__ import annotations
 
+import re
+
 # OUI prefix → vendor name.  Keys are uppercase, colon-separated, first 3
 # octets (e.g. "AA:BB:CC").
 _OUI_TABLE: dict[str, str] = {
@@ -853,10 +855,42 @@ CAMERA_VENDOR_KEYWORDS: list[str] = [
     "ezviz", "imou", "annke", "lorex", "swann", "eufy", "wyze",
     "yi technology", "wansview", "hiseeu", "zosi", "sunell", "tvt",
     "provision", "milesight", "tiandy", "kedacom", "geovision",
-    "dericam", "acti", "grandstream", "hisilicon", "ingenic",
-    "sigmastar", "novatek", "grainmedia", "vigi", "ring",
+    "dericam", "acti", "grandstream", "vigi", "ring",
     "camera", "ipcam", "ip cam", "nvr", "dvr", "surveillance",
 ]
+# Whole words only: "acti" must not hit Actiontec, "ring" must not hit
+# every "...Engineering Co." in the OUI table. Chip makers (HiSilicon etc.)
+# are left out; on their own they don't make a device a camera.
+_CAMERA_VENDOR_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(k) for k in CAMERA_VENDOR_KEYWORDS) + r")\b"
+)
+_CHIP_VENDOR_RE = re.compile(r"\b(?:hisilicon|ingenic|sigmastar|novatek|grainmedia)\b")
+
+# Camera-looking hostnames, matched on word edges so "camille-laptop" and
+# "kids-ipad" don't count:
+#   ipc / cam / camera / dvr / nvr as a whole word, optionally numbered (cam2)
+#   ...cam / ...ipc at the end of a word (frontcam, webcam2)
+#   Hikvision and Dahua default names: DS-2CD2143..., DH-IPC-HFW1230...
+#   brand names anywhere
+_CAMERA_HOSTNAME_RE = re.compile(
+    r"(?:^|[^a-z0-9])(?:ipcam|ipc|camera|cam|webcam|dvr|nvr|xvr)\d*(?=$|[^a-z])"
+    r"|[a-z](?:cam|ipc)\d*(?=$|[^a-z])"
+    r"|(?:^|[^a-z0-9])ds-\d"
+    r"|(?:^|[^a-z0-9])dh-(?:ipc|nvr|xvr|sd|hac|hcvr)"
+    r"|hikvision|dahua|reolink|amcrest|foscam|xmeye|ezviz|imou"
+)
+
+
+def is_camera_hostname(hostname: str) -> bool:
+    """True if *hostname* looks like a camera's (see _CAMERA_HOSTNAME_RE)."""
+    return bool(hostname) and bool(_CAMERA_HOSTNAME_RE.search(hostname.lower()))
+
+
+def is_camera_chip_vendor(vendor: str) -> bool:
+    """True for SoC makers found in cheap cameras (and plenty else)."""
+    if not vendor or vendor == "Unknown":
+        return False
+    return vendor in CAMERA_CHIP_VENDORS or bool(_CHIP_VENDOR_RE.search(vendor.lower()))
 
 
 CRYPTO_VENDOR_KEYWORDS: list[str] = [
@@ -885,11 +919,10 @@ def is_camera_vendor(vendor: str) -> bool:
     if not vendor or vendor == "Unknown":
         return False
     # Exact match first (fast path).
-    if vendor in CAMERA_VENDORS or vendor in CAMERA_CHIP_VENDORS:
+    if vendor in CAMERA_VENDORS:
         return True
-    # Fuzzy match — keyword anywhere in vendor string.
-    vendor_lower = vendor.lower()
-    return any(kw in vendor_lower for kw in CAMERA_VENDOR_KEYWORDS)
+    # Fuzzy match — keyword as a whole word anywhere in the vendor string.
+    return bool(_CAMERA_VENDOR_RE.search(vendor.lower()))
 
 
 def is_camera_like(mac: str, hostname: str = "", vendor: str = "") -> bool:
@@ -899,7 +932,8 @@ def is_camera_like(mac: str, hostname: str = "", vendor: str = "") -> bool:
     """
     if not vendor:
         vendor = lookup_vendor_safe(mac)
-    if is_camera_vendor(vendor):
+    if is_camera_vendor(vendor) or is_camera_hostname(hostname):
         return True
-    hn = hostname.lower()
-    return any(pat in hn for pat in CAMERA_HOSTNAME_PATTERNS)
+    # A camera SoC maker with no name, or nothing but the chip to go on, is
+    # most likely a cheap camera; one with an ordinary hostname isn't.
+    return is_camera_chip_vendor(vendor) and not (hostname or "").strip()

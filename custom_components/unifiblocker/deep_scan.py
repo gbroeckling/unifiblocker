@@ -321,18 +321,16 @@ async def _probe_netbios(ip: str) -> dict[str, Any] | None:
         + b"\x00\x01"  # Class: IN
     )
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.settimeout(PROBE_TIMEOUT)
-        sock.setblocking(False)
-
-        await loop.sock_sendto(sock, query, (ip, 137))
-        data, _ = await asyncio.wait_for(
-            loop.sock_recvfrom(sock, 1024),
-            timeout=PROBE_TIMEOUT,
-        )
-        sock.close()
+        # The with block closes the socket on timeouts too (it leaked before).
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.setblocking(False)
+            await loop.sock_sendto(sock, query, (ip, 137))
+            data, _ = await asyncio.wait_for(
+                loop.sock_recvfrom(sock, 1024),
+                timeout=PROBE_TIMEOUT,
+            )
 
         if len(data) > 56:
             num_names = data[56]
