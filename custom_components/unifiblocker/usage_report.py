@@ -292,7 +292,7 @@ def build_payload(hass: HomeAssistant, install_id: str, taken: dict[str, Any] | 
         "schema": SCHEMA,
         "install_id": install_id,
         "day": time.strftime("%Y-%m-%d", time.gmtime()),
-        "version": _manifest_version(),
+        "version": _version,
         "ha_version": str(ha_version)[:16],
         "python": platform.python_version().rsplit(".", 1)[0],
         "env": env,
@@ -311,13 +311,9 @@ def build_payload(hass: HomeAssistant, install_id: str, taken: dict[str, Any] | 
     }
 
 
-@functools.cache
-def _manifest_version() -> str:
-    import pathlib  # noqa: PLC0415
-    try:
-        return json.loads((pathlib.Path(__file__).parent / "manifest.json").read_text())["version"]
-    except Exception:
-        return "?"
+# Filled in by ReportManager.async_load from HA's (cached) integration info;
+# reading manifest.json here would be blocking I/O on the event loop.
+_version = "?"
 
 
 def assert_shareable(payload: dict[str, Any]) -> None:
@@ -374,6 +370,12 @@ class ReportManager:
         if isinstance(data, dict):
             self.settings.update(data)
         _state.enabled = bool(self.settings["enabled"])
+        global _version  # noqa: PLW0603
+        try:
+            from homeassistant.loader import async_get_integration  # noqa: PLC0415
+            _version = str((await async_get_integration(self.hass, DOMAIN)).version or "?")
+        except Exception:
+            _version = "?"
 
     async def _save(self) -> None:
         await self._store.async_save(self.settings)

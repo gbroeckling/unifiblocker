@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.50 — 2026-10-19
+
+- The usage report's Preview read the integration's manifest from disk inside Home Assistant's event loop, which Home Assistant flags as a blocking call. It now gets the version from Home Assistant when the integration loads.
+
 ## 0.3.49 — 2026-10-19
 
 - 0.3.48 broke the sidebar panel: none of its commands registered, so it showed nothing. Fixed.
