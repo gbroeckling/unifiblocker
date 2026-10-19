@@ -255,6 +255,26 @@ UCG Max (UniFi OS)                Home Assistant
 - A local admin account on the controller
 - Network access from Home Assistant to the controller over HTTPS
 
+## Privacy and the opt-in usage report
+
+UniFi Blocker talks to your controller and to devices on your LAN. The only other outside call is to minerstat.com for coin prices, and only if you have miners. It sends nothing about you or your network anywhere unless you turn on the usage report.
+
+### Help improve UniFi Blocker (opt-in)
+
+I test against one network. Bugs that only show up on other controllers, other firmware or bigger networks never get seen unless someone shares that they happened. So there's an **opt-in, off-by-default** report: the **Help improve UniFi Blocker** card at the bottom of the panel's Overview. **Preview** shows the exact JSON before you turn anything on.
+
+When it's on, UniFi Blocker POSTs a small JSON report (a few KB, hard cap 8 KB) to `unifiblocker.enerx.ca` at most once a day. This is the complete list of what's in it:
+
+- `schema`, `version`, `ha_version`, `python`, the UTC `day`, and a random `install_id`
+- `env`: the controller's UniFi Network version (major.minor only), whether it's reachable, the poll interval, the auto-scan count, whether SSL is verified, and whether the local-only subnet is the default one (not the subnet itself)
+- `counts`: clients, wired clients, cameras, suspicious, new, trusted, quarantined, blocked and local-only devices, miners, scanned devices, manual categories and learned rules; clients per category (camera, iot, printer...); and devices matching each built-in vendor advisory (Hikvision, Dahua, XMEye/Xiongmai, EZVIZ, Imou, Reolink, Foscam)
+- `usage`: how many times each tool was used since the last report (Quantify, port scan, ONVIF, trust, quarantine, local-only and so on) and which panel views were opened, from a fixed list
+- `health`: polls, failed polls, average and slowest poll time; controller API errors as method, endpoint and status (for example `GET stat/event 404`, with any ids in the path replaced by `:id`); how many warnings and errors each UniFi Blocker module logged (module names only, never the message); and how often Home Assistant complained about our entities being slow to update or too big for the recorder
+
+**Never**: MAC or IP addresses, hostnames, device names, vendor strings from your network, entity ids, your controller's address, site or login, or timestamps finer than the day. Before every send the integration walks every value and refuses the whole report if it finds a MAC, UUID, 32-hex, IP, email or entity-id shape, or any string over 64 characters. The server checks the same shapes again and doesn't store your IP address. Its code is in [`server/`](server/).
+
+The install ID only exists so installs can be counted rather than pings. **New anonymous ID** replaces it. Turning the report on is an admin action, and counting starts the moment you turn it on, so nothing from before goes. Turn it off any time from the same card.
+
 ## License
 
 GNU General Public License v3.0 — see [LICENSE](LICENSE).

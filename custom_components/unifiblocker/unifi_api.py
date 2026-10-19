@@ -8,6 +8,8 @@ from typing import Any
 
 import aiohttp
 
+from . import usage_report
+
 from .const import (
     API_ALL_USERS,
     API_CLIENTS,
@@ -177,6 +179,7 @@ class UniFiApi:
                         raise UniFiAuthError("Re-authentication failed")
                     if resp.status >= 400:
                         body = await resp.text()
+                        usage_report.record_api_error(method, path, resp.status)
                         # 404 usually means this controller version doesn't have the
                         # endpoint; the caller decides whether that matters.
                         _LOGGER.log(

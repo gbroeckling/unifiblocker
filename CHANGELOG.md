@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.48 — 2026-10-19
+
+- New: an opt-in usage and issue report, off unless you turn it on. It's the "Help improve UniFi Blocker" card at the bottom of Overview, with a Preview of the exact JSON. Once a day it sends counts and versions only (device counts by category, which tools get used, poll times, controller API errors, warnings logged per module) so problems on other people's networks can be found. Never MACs, IPs, names, vendor strings or entity ids, and the whole report is refused if anything like that turns up. The full list is in the README under "Privacy and the opt-in usage report".
+
 ## 0.3.47 — 2026-10-19
 
 - The device lists on New devices, Quarantined devices, Suspicious devices, All clients detail and the two review binary sensors are far bigger than the recorder's 16 KB limit, so Home Assistant logged five warnings every poll. Those lists are now kept out of history. They're still on the entities, so dashboards and templates work as before.

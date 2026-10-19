@@ -77,6 +77,11 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
     store = DeviceStore(hass)
     await store.async_load()
 
+    # Opt-in usage report: load consent before the first poll so it's counted.
+    from .usage_report import ReportManager
+    report = ReportManager(hass)
+    await report.async_load()
+
     # Port scanner
     try:
         from .port_scanner import PortScanner
@@ -132,13 +137,17 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
     hass.data[DOMAIN][entry.entry_id] = {
         "api": api, "store": store, "coordinator": coordinator,
         "local_net": local_net, "scanner": scanner, "onvif": onvif,
-        "learned": learned,
+        "learned": learned, "report": report,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Options and reconfigure both land here.
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
+
+    report.refresh_entity_ids(entry.entry_id)
+    report.start()
+    entry.async_on_unload(report.stop)
 
     # Sidebar panel
     try:

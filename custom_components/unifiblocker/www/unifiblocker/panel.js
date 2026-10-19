@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.47";
+const VERSION = "0.3.48";
 const SIDEBAR_THRESHOLD = 5;
 
 // Everything the panel renders goes through innerHTML, and a lot of it comes
@@ -47,6 +47,9 @@ class UniFiBlockerPanel extends HTMLElement {
     this._quantifyResults = null;
     this._recs = {};
     this._miners = { rigs: [], summary: {} };
+    this._report = null;          // opt-in usage report status
+    this._reportPreview = null;
+    this._lastView = null;
     this._initialized = false;
   }
 
@@ -62,7 +65,7 @@ class UniFiBlockerPanel extends HTMLElement {
   async _ws(type, extra = {}) { if (!this._hass) return null; try { return _sanitize(await this._hass.callWS({ type, ...extra })); } catch (e) { console.warn("[UB]", type, e); return null; } }
 
   async _fetchAll() {
-    const [ov, cl, cats, ln, recs, mn, sr] = await Promise.all([
+    const [ov, cl, cats, ln, recs, mn, sr, rp] = await Promise.all([
       this._ws("unifiblocker/overview"),
       this._ws("unifiblocker/clients"),
       this._ws("unifiblocker/categories"),
@@ -70,6 +73,7 @@ class UniFiBlockerPanel extends HTMLElement {
       this._ws("unifiblocker/recommendations"),
       this._ws("unifiblocker/miners"),
       this._ws("unifiblocker/scan_results"),
+      this._ws("unifiblocker/report_status"),
     ]);
     if (ov) this._overview = ov;
     if (cl) this._data = cl;
@@ -78,6 +82,7 @@ class UniFiBlockerPanel extends HTMLElement {
     if (recs) this._recs = recs;
     if (mn) this._miners = mn;
     if (sr && sr.results) this._scanCache = { ...sr.results, ...this._scanCache };
+    if (rp) this._report = rp;
     this._render();
   }
 
@@ -216,6 +221,11 @@ class UniFiBlockerPanel extends HTMLElement {
       case "ports": mc.innerHTML = this._vPorts(); break;
     }
     this._bindActions(mc);
+    // Counts toward the opt-in report only; the backend ignores it when off.
+    if (this._view !== this._lastView) {
+      this._lastView = this._view;
+      if (this._report && this._report.enabled) this._ws("unifiblocker/report_view", { view: this._view });
+    }
   }
 
   _bindActions(mc) {
@@ -291,6 +301,9 @@ class UniFiBlockerPanel extends HTMLElement {
     mc.querySelectorAll("[data-ensureFw]").forEach(btn => {
       btn.addEventListener("click", () => this._ensureRule());
     });
+    mc.querySelectorAll("[data-report]").forEach(btn => {
+      btn.addEventListener("click", () => this._reportAction(btn.dataset.report));
+    });
     mc.querySelectorAll("[data-clearcat]").forEach(btn => {
       btn.addEventListener("click", async () => {
         if (!this._actionMode) { alert("Enable Action Mode first."); return; }
@@ -352,7 +365,42 @@ class UniFiBlockerPanel extends HTMLElement {
         <button class="btn btn-quantify" data-quantify="1">🔬 Quantify Unknown Devices</button>
         <p style="font-size:10px;color:var(--secondary-text-color);margin-top:4px">Deep-scans all unknown devices using HTTP banners, TLS certs, SSH, DNS, NetBIOS, and TTL analysis</p>
       </div>
-      ${this._vQuantifyResults()}`;
+      ${this._vQuantifyResults()}
+      ${this._vReportCard()}`;
+  }
+
+  _vReportCard() {
+    const r = this._report;
+    if (!r) return "";
+    const p = this._reportPreview;
+    return `<div class="card"><h2>Help improve UniFi Blocker</h2>
+      <p>Off unless you turn it on. Once a day it sends counts and versions so problems on other networks can be found and fixed: how many clients, cameras and categories, which tools get used, poll times, controller API errors, and warnings logged by the integration.</p>
+      <p><strong>Never sent:</strong> MAC or IP addresses, hostnames, device names, vendor strings from your network, entity ids, your controller's address. A check refuses the whole report if anything like that is in it. Press Preview to see exactly what would go.</p>
+      <p>Status: ${r.enabled ? `<span class="badge ok">On</span>${r.last_day ? ` · last sent ${r.last_day}` : " · nothing sent yet"}` : '<span class="badge">Off</span>'}</p>
+      <div class="rec-actions">
+        ${r.enabled
+          ? `<button class="btn" data-report="off">Turn off</button><button class="btn" data-report="send">Send a report now</button><button class="btn" data-report="newid">New anonymous ID</button>`
+          : `<button class="btn btn-trust" data-report="on">Turn on</button>`}
+        <button class="btn" data-report="preview">${p ? "Refresh preview" : "Preview"}</button>
+      </div>
+      ${p ? `<p style="font-size:11px">${p.bytes} bytes to ${p.url}${p.problems.length ? ` · <span style="color:#e94560">would be refused: ${p.problems.join("; ")}</span>` : ""}</p>
+        <pre class="mono" style="max-height:320px;overflow:auto;font-size:10px;white-space:pre-wrap">${JSON.stringify(p.payload, null, 2)}</pre>` : ""}
+    </div>`;
+  }
+
+  async _reportAction(what) {
+    const cmd = { on: ["report_set", { enabled: true }], off: ["report_set", { enabled: false }],
+      send: ["report_send", {}], newid: ["report_new_id", {}], preview: ["report_preview", {}] }[what];
+    if (!cmd) return;
+    if (what === "newid" && !confirm("Replace the anonymous ID? Reports after this count as a new install.")) return;
+    const r = await this._ws(`unifiblocker/${cmd[0]}`, cmd[1]);
+    if (!r) return;
+    if (what === "preview") this._reportPreview = r;
+    else {
+      this._report = { ...this._report, ...r };
+      if (what === "send") alert(r.sent ? `Report sent (${r.bytes} bytes).` : `Not sent: ${r.reason}`);
+    }
+    this._updateMain();
   }
 
   _vQuantifyResults() {

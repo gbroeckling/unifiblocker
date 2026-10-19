@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import logging
+import time
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -11,6 +12,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .const import DOMAIN, STATE_NEW, STATE_QUARANTINED, STATE_TRUSTED, STATE_IGNORED
 from .device_categorizer import categorize_all_clients as categorize_devices, get_category_counts
+from . import usage_report
 from .device_store import DeviceStore
 from .miners import MinerTracker
 from .port_identify import analyze_dpi_entry
@@ -282,10 +284,12 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
 
     async def _async_update_data(self) -> UniFiBlockerData:
         """Fetch clients from the controller and update the store."""
+        started = time.monotonic()
         try:
             clients = await self.api.get_clients()
             devices = await self.api.get_devices()
         except UniFiApiError as err:
+            usage_report.record_poll(time.monotonic() - started, ok=False)
             raise UpdateFailed(f"Error communicating with UniFi: {err}") from err
 
         now = datetime.now(timezone.utc)
@@ -396,6 +400,7 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         except Exception:
             _LOGGER.debug("Miner tracker update failed", exc_info=True)
 
+        usage_report.record_poll(time.monotonic() - started, ok=True)
         return UniFiBlockerData(
             clients=clients,
             devices=devices,
