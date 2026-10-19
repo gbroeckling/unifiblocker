@@ -439,6 +439,7 @@ async def ws_get_recommendations(
     data = entry["coordinator"].data
     scanner = entry.get("scanner")
     local_net = entry.get("local_net")
+    local_prefix = local_net.subnet if local_net else "192.168.2"
 
     # Per-device recommendations.
     device_recs: dict[str, list] = {}
@@ -450,7 +451,7 @@ async def ws_get_recommendations(
             scan = scanner.get_result(mac)
             if scan:
                 enriched["scan_result"] = scan
-        recs = generate_recommendations(enriched)
+        recs = generate_recommendations(enriched, local_prefix=local_prefix)
         if recs:
             device_recs[mac] = recs
 
@@ -469,7 +470,9 @@ async def ws_get_recommendations(
             if scan:
                 d["scan_result"] = scan
 
-    network_recs = generate_network_recommendations(all_enriched, firewall_exists=fw_exists)
+    network_recs = generate_network_recommendations(
+        all_enriched, firewall_exists=fw_exists, local_prefix=local_prefix,
+    )
 
     connection.send_result(msg["id"], {
         "device_recs": device_recs,
@@ -693,7 +696,9 @@ async def ws_deep_scan_unknowns(
     _LOGGER.info("Quantify: deep-scanning %d unknown devices", len(targets))
 
     # Run deep scan.
-    results = await deep_scan_multiple(targets)
+    from homeassistant.components import zeroconf
+    aiozc = await zeroconf.async_get_async_instance(hass)
+    results = await deep_scan_multiple(targets, aiozc=aiozc)
 
     # Only high-confidence guesses are applied, and none of them train the
     # learner. Anything weaker is kept as a suggestion the user can accept.
@@ -903,7 +908,8 @@ async def ws_localnet_status(
         "assignments": local_net.assignments,
         "ranges": local_net.get_range_info(),
         "firewall": fw_status,
-        "subnet": "192.168.2.0/24",
+        "subnet": local_net.cidr,
+        "prefix": local_net.subnet,
     })
 
 

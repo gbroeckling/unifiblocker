@@ -588,7 +588,7 @@ class PortScanner:
         if guess_risk == "critical":
             recommendations.append("QUARANTINE this device immediately — it poses an active security risk.")
         if "camera_cloud" in groups or "camera_xmeye" in groups:
-            recommendations.append("Move to Local-Only subnet (192.168.2.x) to block all internet access while keeping local streaming.")
+            recommendations.append("Move to the Local-Only subnet to block all internet access while keeping local streaming.")
         if "camera" in groups and "camera_cloud" not in groups:
             recommendations.append("Consider moving to Local-Only subnet as a precaution — cameras don't need internet for local viewing.")
         if "remote_insecure" in groups:

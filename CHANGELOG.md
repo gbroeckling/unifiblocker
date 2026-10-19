@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.45 — 2026-10-19
+
+Cleanup from the HACS review.
+
+- `unifiblocker_saved_config.json` is gone. It's deleted on startup if an older version left one behind. To change the controller address or login, use Reconfigure on the integration instead of removing and re-adding it.
+- The local-only subnet and auto-scan count options actually do something now, and changing options reloads the integration. The two subnet fields are merged into one, which has to be a /24. Devices you already assigned keep their current address.
+- Setting auto-scan count to 0 turns auto-scan off.
+- The Configure dialog works again on newer Home Assistant versions.
+- ONVIF and deep-scan HTTPS probes reuse Home Assistant's SSL context instead of building a new one (and reading the CA bundle from disk) on every probe.
+- The deep scan uses Home Assistant's shared mDNS instance instead of starting its own. mDNS results also map to categories properly now; they never matched before.
+
 ## 0.3.44 — 2026-10-18
 
 More fixes, mostly to the scan and recommendation tools.

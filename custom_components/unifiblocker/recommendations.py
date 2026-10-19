@@ -97,7 +97,9 @@ PRIORITY_LABELS = {
 }
 
 
-def generate_recommendations(device: dict[str, Any]) -> list[dict[str, Any]]:
+def generate_recommendations(
+    device: dict[str, Any], local_prefix: str = "192.168.2"
+) -> list[dict[str, Any]]:
     """Generate prioritized recommendations for a single device.
 
     *device* is an enriched client dict from the coordinator.
@@ -147,13 +149,13 @@ def generate_recommendations(device: dict[str, Any]) -> list[dict[str, Any]]:
 
     # ── 2. Camera on main network ────────────────────────────────────
 
-    if is_camera and ip and not ip.startswith("192.168.2."):
+    if is_camera and ip and not ip.startswith(f"{local_prefix}."):
         recs.append({
             "priority": PRIORITY_HIGH,
             "priority_label": PRIORITY_LABELS[PRIORITY_HIGH],
             "title": "Camera on main network — not isolated",
             "detail": "This camera is on your main network and can reach other devices and the internet. "
-                      "Move it to the local-only subnet (192.168.2.x) to block internet access while "
+                      f"Move it to the local-only subnet ({local_prefix}.x) to block internet access while "
                       "keeping local RTSP/ONVIF streaming. Cameras don't need internet for local recording.",
             "action": "local_only",
             "action_data": {"mac": mac, "category": "camera"},
@@ -378,12 +380,13 @@ def generate_recommendations(device: dict[str, Any]) -> list[dict[str, Any]]:
 def generate_network_recommendations(
     devices: list[dict[str, Any]],
     firewall_exists: bool = False,
+    local_prefix: str = "192.168.2",
 ) -> list[dict[str, Any]]:
     """Generate network-wide security recommendations."""
     recs: list[dict[str, Any]] = []
 
     cameras = [d for d in devices if d.get("is_camera")]
-    cameras_on_main = [d for d in cameras if not d.get("ip", "").startswith("192.168.2.")]
+    cameras_on_main = [d for d in cameras if not d.get("ip", "").startswith(f"{local_prefix}.")]
     new_count = sum(1 for d in devices if d.get("state") == "new")
     telnet_devices = [d for d in devices if 23 in (d.get("scan_result", {}).get("open_ports", []))]
 
@@ -406,7 +409,7 @@ def generate_network_recommendations(
             "title": f"{len(cameras_on_main)} camera(s) on main network",
             "detail": "These cameras can reach the internet and all other devices on your network. "
                       f"MACs: {', '.join(d.get('mac','') for d in cameras_on_main[:5])}. "
-                      "Move them to the local-only subnet (192.168.2.x).",
+                      f"Move them to the local-only subnet ({local_prefix}.x).",
             "action": "info",
             "action_data": {},
         })

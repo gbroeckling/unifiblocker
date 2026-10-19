@@ -68,10 +68,11 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
         await api.close()
         raise
 
-    # Reading the saved form defaults scrubs the plaintext password that
-    # older versions left in the config dir.
-    from .config_flow import _get_saved_config
-    await _get_saved_config(hass)
+    from .config_flow import (
+        DEFAULT_AUTO_SCAN_COUNT, DEFAULT_LOCAL_CIDR,
+        async_remove_old_saved_config, local_prefix_from_cidr,
+    )
+    await async_remove_old_saved_config(hass)
 
     store = DeviceStore(hass)
     await store.async_load()
@@ -107,6 +108,9 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
         from .local_network import LocalNetworkManager
         local_net = LocalNetworkManager(hass)
         await local_net.async_load()
+        cidr = data.get("local_cidr", DEFAULT_LOCAL_CIDR)
+        if local_net.cidr != cidr:
+            await local_net.update_config(subnet=local_prefix_from_cidr(cidr), cidr=cidr)
     except Exception:
         _LOGGER.warning("Local network manager failed to load", exc_info=True)
         local_net = None
@@ -117,6 +121,7 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
         scanner=scanner,
         onvif=onvif,
         learned=learned,
+        auto_scan_count=data.get("auto_scan_count", DEFAULT_AUTO_SCAN_COUNT),
     )
     await coordinator.async_config_entry_first_refresh()
 
@@ -131,6 +136,9 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Options and reconfigure both land here.
+    entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
 
     # Sidebar panel
     try:
@@ -170,6 +178,10 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
         for n, h in [("trust_device", h_trust), ("ignore_device", h_ignore), ("quarantine_device", h_quarantine), ("block_device", h_block), ("unblock_device", h_unblock), ("reconnect_device", h_reconnect)]:
             hass.services.async_register(DOMAIN, n, h, schema=MAC_SCHEMA)
+
+
+async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

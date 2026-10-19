@@ -19,12 +19,12 @@ import asyncio
 import logging
 import re
 import socket
-import ssl
 import struct
 import time
 from typing import Any
 
 import aiohttp
+from homeassistant.util.ssl import get_default_no_verify_context
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ async def deep_scan_device(
     ip: str, mac: str,
     vendor: str = "", hostname: str = "",
     is_wired: bool = False, open_ports: list[int] | None = None,
+    aiozc: Any = None,
 ) -> dict[str, Any]:
     """Run all fingerprinting techniques on a single device.
 
@@ -57,7 +58,7 @@ async def deep_scan_device(
         _probe_dns_reverse(ip),
         _probe_ttl(ip),
         _probe_netbios(ip),
-        _probe_mdns(ip),
+        _probe_mdns(ip, aiozc),
         return_exceptions=True,
     )
 
@@ -165,9 +166,8 @@ async def _probe_http(ip: str, port: int) -> dict[str, Any] | None:
 
 async def _probe_https(ip: str, port: int) -> dict[str, Any] | None:
     """Grab HTTPS banner AND inspect TLS certificate."""
-    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
+    # Shared with the rest of HA, so never modify it.
+    ctx = get_default_no_verify_context()
 
     result: dict[str, Any] = {"port": port}
 
@@ -381,55 +381,53 @@ _MDNS_SERVICE_MAP: dict[str, tuple[str, str]] = {
 }
 
 
-async def _probe_mdns(ip: str) -> dict[str, Any] | None:
-    """Discover mDNS services advertised by this IP."""
+async def _probe_mdns(ip: str, aiozc: Any = None) -> dict[str, Any] | None:
+    """Discover mDNS services advertised by this IP.
+
+    *aiozc* is HA's shared AsyncZeroconf. It belongs to HA, so we only browse
+    on it and never close it. Without it the probe is skipped.
+    """
+    if aiozc is None:
+        return None
     try:
-        from zeroconf import Zeroconf, ServiceBrowser, IPVersion
-        import ipaddress
+        from zeroconf import ServiceStateChange
+        from zeroconf.asyncio import AsyncServiceBrowser, AsyncServiceInfo
 
-        found_services: list[dict[str, str]] = []
+        seen: list[tuple[str, str]] = []
 
-        class Listener:
-            def add_service(self, zc, stype, name):
-                try:
-                    info = zc.get_service_info(stype, name, timeout=2000)
-                    if info and info.parsed_addresses():
-                        for addr in info.parsed_addresses():
-                            if addr == ip:
-                                txt = {}
-                                if info.properties:
-                                    txt = {k.decode("utf-8", errors="ignore"): v.decode("utf-8", errors="ignore")
-                                           for k, v in info.properties.items() if isinstance(k, bytes)}
-                                cat_info = _MDNS_SERVICE_MAP.get(stype, ("unknown", stype))
-                                found_services.append({
-                                    "service": stype,
-                                    "name": name,
-                                    "category": cat_info[0],
-                                    "description": cat_info[1],
-                                    "txt": txt,
-                                })
-                except Exception:
-                    pass
-            def remove_service(self, zc, stype, name): pass
-            def update_service(self, zc, stype, name): pass
+        def on_change(zeroconf, service_type, name, state_change):
+            if state_change is ServiceStateChange.Added:
+                seen.append((service_type, name))
 
-        zc = Zeroconf(ip_version=IPVersion.V4Only)
-        listener = Listener()
+        zc = aiozc.zeroconf
+        browser = AsyncServiceBrowser(
+            zc, [f"{stype}.local." for stype in _MDNS_SERVICE_MAP], handlers=[on_change]
+        )
+        try:
+            await asyncio.sleep(3)
+        finally:
+            await browser.async_cancel()
 
-        # Browse the most identifying service types.
-        browsers = []
-        for stype in _MDNS_SERVICE_MAP:
-            try:
-                browsers.append(ServiceBrowser(zc, f"{stype}.local.", listener))
-            except Exception:
-                pass
-
-        # Wait for responses.
-        await asyncio.sleep(3)
-
-        for b in browsers:
-            b.cancel()
-        zc.close()
+        found_services: list[dict[str, Any]] = []
+        for service_type, name in seen:
+            info = AsyncServiceInfo(service_type, name)
+            if not await info.async_request(zc, 2000):
+                continue
+            if ip not in info.parsed_addresses():
+                continue
+            txt = {
+                k.decode("utf-8", errors="ignore"): (v or b"").decode("utf-8", errors="ignore")
+                for k, v in (info.properties or {}).items() if isinstance(k, bytes)
+            }
+            stype = service_type.removesuffix(".local.")
+            cat_info = _MDNS_SERVICE_MAP.get(stype, ("unknown", stype))
+            found_services.append({
+                "service": stype,
+                "name": name,
+                "category": cat_info[0],
+                "description": cat_info[1],
+                "txt": txt,
+            })
 
         if found_services:
             # Pick the most specific category.
@@ -444,8 +442,6 @@ async def _probe_mdns(ip: str) -> dict[str, Any] | None:
                 "best_description": best["description"],
                 "service_count": len(found_services),
             }
-    except ImportError:
-        _LOGGER.debug("zeroconf not available for mDNS probe")
     except Exception as err:
         _LOGGER.debug("mDNS probe failed: %s", err)
     return None
@@ -709,7 +705,9 @@ _VENDOR_HOSTNAME_MAP: list[tuple[list[str], str, str]] = [
 ]
 
 
-async def deep_scan_multiple(targets: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+async def deep_scan_multiple(
+    targets: list[dict[str, Any]], aiozc: Any = None
+) -> dict[str, dict[str, Any]]:
     """Deep-scan multiple devices sequentially."""
     results: dict[str, dict[str, Any]] = {}
     for t in targets:
@@ -723,6 +721,7 @@ async def deep_scan_multiple(targets: list[dict[str, Any]]) -> dict[str, dict[st
                     hostname=t.get("hostname", ""),
                     is_wired=t.get("is_wired", False),
                     open_ports=t.get("open_ports"),
+                    aiozc=aiozc,
                 )
             except Exception as err:
                 _LOGGER.debug("Deep scan failed for %s: %s", ip, err)

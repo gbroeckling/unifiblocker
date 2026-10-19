@@ -12,6 +12,17 @@
           "verify_ssl": "Verify SSL certificate",
           "scan_interval": "Scan interval (seconds)"
         }
+      },
+      "reconfigure": {
+        "title": "Update controller connection",
+        "description": "Change the controller address or login. The integration reloads when you save.",
+        "data": {
+          "host": "Host (IP or hostname)",
+          "username": "Username",
+          "password": "Password",
+          "site": "Site ID",
+          "verify_ssl": "Verify SSL certificate"
+        }
       }
     },
     "error": {
@@ -20,7 +31,8 @@
       "unknown": "An unexpected error occurred."
     },
     "abort": {
-      "already_configured": "UniFi Blocker is already configured."
+      "already_configured": "UniFi Blocker is already configured.",
+      "reconfigure_successful": "Connection updated."
     }
   },
   "options": {
@@ -30,11 +42,13 @@
         "data": {
           "scan_interval": "Scan interval (seconds)",
           "verify_ssl": "Verify SSL certificate",
-          "local_subnet": "Local-only subnet (e.g. 192.168.2)",
-          "local_cidr": "Local-only CIDR (e.g. 192.168.2.0/24)",
+          "local_cidr": "Local-only subnet (a /24, e.g. 192.168.2.0/24)",
           "auto_scan_count": "Devices to auto-scan per poll cycle"
         }
       }
+    },
+    "error": {
+      "invalid_cidr": "Enter an IPv4 /24 subnet such as 192.168.2.0/24."
     }
   }
 }

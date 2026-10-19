@@ -247,6 +247,7 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         scanner: Any = None,
         onvif: Any = None,
         learned: Any = None,
+        auto_scan_count: int = 5,
     ) -> None:
         super().__init__(
             hass,
@@ -261,6 +262,7 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         self.learned = learned
         self.miners = MinerTracker(scanner)
         self._auto_scanned: set[str] = set()  # MACs already auto-scanned
+        self._auto_scan_count = auto_scan_count
 
     async def _async_update_data(self) -> UniFiBlockerData:
         """Fetch clients from the controller and update the store."""
@@ -341,10 +343,11 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
                 if state == "new" or vendor == "Unknown" or vendor in CAMERA_CHIP_VENDORS or not hostname.strip():
                     scan_targets.append({"ip": ip, "mac": mac})
 
-            # Scan up to 5 devices per poll cycle to avoid overwhelming the network.
+            # Scan a few devices per poll cycle (auto_scan_count option) so we
+            # don't hammer the network. 0 turns auto-scan off.
             # Only mark the ones we actually scan, the rest get picked up next poll.
-            if scan_targets:
-                batch = scan_targets[:5]
+            if scan_targets and self._auto_scan_count > 0:
+                batch = scan_targets[:self._auto_scan_count]
                 self._auto_scanned.update(t["mac"] for t in batch)
                 _LOGGER.debug("Auto-scanning %d new/unknown devices", len(batch))
                 try:

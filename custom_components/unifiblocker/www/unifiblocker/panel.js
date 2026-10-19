@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.44";
+const VERSION = "0.3.45";
 const SIDEBAR_THRESHOLD = 5;
 
 // Everything the panel renders goes through innerHTML, and a lot of it comes
@@ -713,7 +713,7 @@ class UniFiBlockerPanel extends HTMLElement {
       </div>
 
       ${cameras.length?`<div class="card warn-card"><h2>📹 Cameras on Network (${cameras.length})</h2>
-        <p class="subtitle">Every detected camera. Consider isolating these to a local-only subnet (192.168.2.x) to prevent phone-home traffic.</p>
+        <p class="subtitle">Every detected camera. Consider isolating these to a local-only subnet (${this._lp()}.x) to prevent phone-home traffic.</p>
         <table class="data-table"><thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>IP</th><th>State</th><th>Blocked</th><th>TX/RX</th></tr></thead><tbody>
           ${cameras.map(c=>`<tr>
             <td class="mono">${c.mac}</td><td>${c.name||"—"}</td><td>${c.vendor||"?"}</td><td class="mono">${c.ip||"—"}</td>
@@ -858,7 +858,7 @@ class UniFiBlockerPanel extends HTMLElement {
 
     // Group devices by access level.
     const internetAccess = [];    // Normal DHCP, has internet
-    const localOnly = [];         // On 192.168.2.x, no internet
+    const localOnly = [];         // On ${this._lp()}.x, no internet
     const blocked = [];           // Quarantined / blocked on controller
     const unreviewed = [];        // State=new, no decision yet
 
@@ -916,7 +916,7 @@ class UniFiBlockerPanel extends HTMLElement {
           <thead><tr><th>Level</th><th>Description</th><th>Devices</th><th>Risk</th></tr></thead>
           <tbody>
             <tr><td>🌍 Internet</td><td>Full network + internet access (normal DHCP)</td><td>${internetAccess.length}</td><td>${camerasExposed.length ? '<span class="badge warn">Cameras exposed</span>' : '<span class="badge ok">OK</span>'}</td></tr>
-            <tr><td>🔒 Local Only</td><td>Network access but no internet (192.168.2.x)</td><td>${localOnly.length}</td><td><span class="badge ok">Isolated</span></td></tr>
+            <tr><td>🔒 Local Only</td><td>Network access but no internet (${this._lp()}.x)</td><td>${localOnly.length}</td><td><span class="badge ok">Isolated</span></td></tr>
             <tr><td>🚫 Blocked</td><td>Quarantined — no network access at all</td><td>${blocked.length}</td><td><span class="badge ok">Contained</span></td></tr>
             <tr><td>🆕 Unreviewed</td><td>Not yet classified — needs your decision</td><td>${unreviewed.length}</td><td>${unreviewed.length > 10 ? '<span class="badge warn">Review needed</span>' : '<span class="badge ok">OK</span>'}</td></tr>
           </tbody>
@@ -995,7 +995,7 @@ class UniFiBlockerPanel extends HTMLElement {
           <thead><tr><th>Level</th><th>Internet</th><th>Local Network</th><th>How to Assign</th></tr></thead>
           <tbody>
             <tr><td>🌍 Internet (default)</td><td>✅ Yes</td><td>✅ Yes</td><td>Default for all DHCP devices (192.168.3.x)</td></tr>
-            <tr><td>🔒 Local Only</td><td>🚫 No</td><td>✅ Yes</td><td>Assign in Local Only view → gets 192.168.2.x + firewall block</td></tr>
+            <tr><td>🔒 Local Only</td><td>🚫 No</td><td>✅ Yes</td><td>Assign in Local Only view → gets ${this._lp()}.x + firewall block</td></tr>
             <tr><td>🚫 Blocked</td><td>🚫 No</td><td>🚫 No</td><td>Quarantine or Block → controller rejects all connections</td></tr>
             <tr><td>✅ Trusted (reserved)</td><td>✅ Yes</td><td>✅ Yes</td><td>Trust + DHCP reservation in 192.168.1.x</td></tr>
           </tbody>
@@ -1090,7 +1090,7 @@ class UniFiBlockerPanel extends HTMLElement {
             <ul style="font-size:12px;padding-left:20px;line-height:2">
               <li>Keep the UNAS on your <strong>trusted network</strong> (192.168.1.x) with a reserved IP</li>
               <li>The UNAS needs internet access for firmware updates and cloud features</li>
-              <li>Do <strong>NOT</strong> put it on the local-only subnet (192.168.2.x)</li>
+              <li>Do <strong>NOT</strong> put it on the local-only subnet (${this._lp()}.x)</li>
               <li>Consider giving it a static IP via DHCP reservation for reliable backups</li>
             </ul>
           </div>
@@ -1150,9 +1150,9 @@ class UniFiBlockerPanel extends HTMLElement {
 
     // Group by subnet.
     const trusted = clients.filter(c => c.ip && c.ip.startsWith("192.168.1."));
-    const localOnly = clients.filter(c => c.ip && c.ip.startsWith("192.168.2."));
+    const localOnly = clients.filter(c => c.ip && c.ip.startsWith(this._lp() + "."));
     const dhcp = clients.filter(c => c.ip && c.ip.startsWith("192.168.3."));
-    const other = clients.filter(c => c.ip && !c.ip.startsWith("192.168.1.") && !c.ip.startsWith("192.168.2.") && !c.ip.startsWith("192.168.3."));
+    const other = clients.filter(c => c.ip && !c.ip.startsWith("192.168.1.") && !c.ip.startsWith(this._lp() + ".") && !c.ip.startsWith("192.168.3."));
 
     // Category counts per zone.
     const countCats = (list) => {
@@ -1211,9 +1211,9 @@ class UniFiBlockerPanel extends HTMLElement {
           <text x="140" y="268" text-anchor="middle" fill="#888" font-size="10">devices</text>
           <text x="140" y="290" text-anchor="middle" fill="#aaa" font-size="10">${countCats(trusted)}</text>
 
-          <!-- Zone 2: Local Only (192.168.2.x) -->
+          <!-- Zone 2: Local Only (${this._lp()}.x) -->
           <rect x="280" y="190" width="240" height="${Math.max(180, 100 + localOnly.length * 4)}" rx="12" fill="url(#grd2)" stroke="#e94560" stroke-width="1.5"/>
-          <text x="400" y="215" text-anchor="middle" fill="#e94560" font-size="13" font-weight="bold">🔒 Local Only — 192.168.2.x</text>
+          <text x="400" y="215" text-anchor="middle" fill="#e94560" font-size="13" font-weight="bold">🔒 Local Only — ${this._lp()}.x</text>
           <text x="400" y="233" text-anchor="middle" fill="#888" font-size="10">Reserved IPs • NO Internet</text>
           <text x="400" y="253" text-anchor="middle" fill="#ccc" font-size="22" font-weight="bold">${localOnly.length}</text>
           <text x="400" y="268" text-anchor="middle" fill="#888" font-size="10">devices</text>
@@ -1254,7 +1254,7 @@ class UniFiBlockerPanel extends HTMLElement {
               <td>${trusted.filter(c=>c.is_camera).length}</td>
             </tr>
             <tr>
-              <td>🔒 Local Only</td><td class="mono">192.168.2.0/24</td><td>Reserved</td>
+              <td>🔒 Local Only</td><td class="mono">${this._lcidr()}</td><td>Reserved</td>
               <td><span class="badge danger">Blocked</span></td><td>${localOnly.length}</td>
               <td>${localOnly.filter(c=>c.is_camera).length}</td>
             </tr>
@@ -1317,7 +1317,7 @@ class UniFiBlockerPanel extends HTMLElement {
     });
 
     return `<h1>🔒 Local-Only Network</h1>
-      <p class="subtitle">Devices on 192.168.2.x have no internet access. They work locally only.</p>
+      <p class="subtitle">Devices on ${this._lp()}.x have no internet access. They work locally only.</p>
 
       <div class="card">
         <h2>Internet Blocking</h2>
@@ -1382,7 +1382,7 @@ class UniFiBlockerPanel extends HTMLElement {
       <div class="card">
         <h2>Check IP Availability</h2>
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
-          <input type="text" id="checkIpInput" class="filter-input" placeholder="e.g. 192.168.2.35" style="width:200px;margin:0" />
+          <input type="text" id="checkIpInput" class="filter-input" placeholder="e.g. ${this._lp()}.35" style="width:200px;margin:0" />
           <button class="btn btn-scan" id="checkIpBtn">🔍 Check</button>
         </div>
         <div id="checkIpResult"></div>
@@ -1390,8 +1390,8 @@ class UniFiBlockerPanel extends HTMLElement {
 
       <div class="card">
         <h2>Setup Guide</h2>
-        <p>This system manages the <strong>192.168.2.0/24</strong> subnet on your flat network.<br/>
-        Devices assigned here get a DHCP reservation in the 192.168.2.x range and a per-device traffic rule on the UCG Max that blocks their MAC address from reaching the internet.</p>
+        <p>This system manages the <strong>${this._lcidr()}</strong> subnet on your flat network.<br/>
+        Devices assigned here get a DHCP reservation in the ${this._lp()}.x range and a per-device traffic rule on the UCG Max that blocks their MAC address from reaching the internet.</p>
         <p style="margin-top:8px"><strong>How it works:</strong></p>
         <ol style="font-size:12px;padding-left:20px;margin-top:4px;line-height:1.8">
           <li>Enable <strong>Action Mode</strong> in the sidebar</li>
@@ -1583,6 +1583,10 @@ class UniFiBlockerPanel extends HTMLElement {
       </div>`:""}
     </div>`;
   }
+
+  // Local-only subnet from the integration options (defaults to 192.168.2.0/24).
+  _lp() { return (this._localnet && this._localnet.prefix) || "192.168.2"; }
+  _lcidr() { return (this._localnet && this._localnet.subnet) || "192.168.2.0/24"; }
 
   _actBtns(mac, cat) {
     const localBtn = `<button class="btn btn-local" data-localassign="${cat||'iot'}" data-mac="${mac}">🔒Local Only</button>`;

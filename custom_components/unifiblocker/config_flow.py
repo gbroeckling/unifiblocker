@@ -1,7 +1,7 @@
 """Config flow for UniFi Blocker."""
 from __future__ import annotations
 
-import json
+import ipaddress
 import logging
 import os
 from typing import Any
@@ -13,58 +13,68 @@ _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "unifiblocker"
 
-# Saved config file — survives integration removal.
-# Stored in HA's config dir, NOT inside custom_components (which HACS replaces).
-_SAVED_CONFIG_FILE = "unifiblocker_saved_config.json"
+DEFAULT_LOCAL_CIDR = "192.168.2.0/24"
+DEFAULT_AUTO_SCAN_COUNT = 5
+
+# Older versions kept the form input here so re-adding was quicker. It held
+# the controller password, so it's gone; reconfigure covers the same need.
+_OLD_SAVED_CONFIG_FILE = "unifiblocker_saved_config.json"
 
 
-async def _get_saved_config(hass) -> dict[str, Any]:
-    """Load previously used config from disk (async-safe)."""
-    path = os.path.join(hass.config.config_dir, _SAVED_CONFIG_FILE)
+async def async_remove_old_saved_config(hass) -> None:
+    """Delete the saved-config file older versions left in the config dir."""
+    path = os.path.join(hass.config.config_dir, _OLD_SAVED_CONFIG_FILE)
+
+    def _remove() -> None:
+        if os.path.exists(path):
+            os.remove(path)
+
     try:
-        saved = await hass.async_add_executor_job(_read_json, path)
-    except Exception:
-        return {}
-    # Older versions wrote the password here in plain text. Scrub it.
-    if "password" in saved:
-        saved.pop("password")
-        await _save_config_async(hass, saved)
-    return saved
+        await hass.async_add_executor_job(_remove)
+    except OSError:
+        _LOGGER.warning("Could not remove %s", path, exc_info=True)
 
 
-async def _save_config_async(hass, data: dict[str, Any]) -> None:
-    """Save config to disk (async-safe)."""
-    path = os.path.join(hass.config.config_dir, _SAVED_CONFIG_FILE)
-    try:
-        await hass.async_add_executor_job(_write_json, path, data)
-    except Exception:
-        _LOGGER.warning("Could not save config", exc_info=True)
-
-
-def _read_json(path: str) -> dict:
-    if os.path.exists(path):
-        with open(path, "r") as f:
-            return json.load(f)
-    return {}
-
-
-def _write_json(path: str, data: dict) -> None:
-    with open(path, "w") as f:
-        json.dump(data, f)
-
-
-def _build_schema(saved: dict[str, Any]) -> vol.Schema:
-    """Build the form schema, pre-filling from saved config."""
+def _connection_schema(defaults: dict[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
-            vol.Required("host", default=saved.get("host", "")): str,
-            vol.Required("username", default=saved.get("username", "")): str,
+            vol.Required("host", default=defaults.get("host", "")): str,
+            vol.Required("username", default=defaults.get("username", "")): str,
             vol.Required("password"): str,
-            vol.Optional("site", default=saved.get("site", "default")): str,
-            vol.Optional("verify_ssl", default=saved.get("verify_ssl", False)): bool,
-            vol.Optional("scan_interval", default=saved.get("scan_interval", 60)): int,
+            vol.Optional("site", default=defaults.get("site", "default")): str,
+            vol.Optional("verify_ssl", default=defaults.get("verify_ssl", False)): bool,
         }
     )
+
+
+async def _test_connection(user_input: dict[str, Any]) -> str | None:
+    """Try to log in. Returns an error key, or None if it worked."""
+    from .unifi_api import UniFiApi, UniFiAuthError, UniFiConnectionError
+
+    api = UniFiApi(
+        host=user_input["host"],
+        username=user_input["username"],
+        password=user_input["password"],
+        site=user_input.get("site", "default"),
+        verify_ssl=user_input.get("verify_ssl", False),
+    )
+    try:
+        await api.test_connection()
+    except UniFiAuthError:
+        return "invalid_auth"
+    except UniFiConnectionError:
+        return "cannot_connect"
+    except Exception:
+        _LOGGER.exception("Connection test failed")
+        return "unknown"
+    finally:
+        await api.close()
+    return None
+
+
+def local_prefix_from_cidr(cidr: str) -> str:
+    """'192.168.2.0/24' -> '192.168.2'."""
+    return str(ipaddress.ip_network(cidr, strict=False).network_address).rsplit(".", 1)[0]
 
 
 class UniFiBlockerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -74,79 +84,90 @@ class UniFiBlockerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         """Handle the initial setup step."""
-        # Abort immediately if already configured — no form, no 500.
         if self._async_current_entries():
             return self.async_abort(reason="already_configured")
 
         errors: dict[str, str] = {}
-        saved = await _get_saved_config(self.hass)
-
         if user_input is not None:
             await self.async_set_unique_id(DOMAIN)
             self._abort_if_unique_id_configured()
-
-            from .unifi_api import UniFiApi, UniFiAuthError, UniFiConnectionError
-
-            api = UniFiApi(
-                host=user_input["host"],
-                username=user_input["username"],
-                password=user_input["password"],
-                site=user_input.get("site", "default"),
-                verify_ssl=user_input.get("verify_ssl", False),
-            )
-            try:
-                await api.test_connection()
-            except UniFiAuthError:
-                errors["base"] = "invalid_auth"
-            except UniFiConnectionError:
-                errors["base"] = "cannot_connect"
-            except Exception:
-                _LOGGER.exception("Connection test failed")
-                errors["base"] = "unknown"
-            finally:
-                await api.close()
-
-            if not errors:
-                # Save config for future re-adds, minus the password.
-                await _save_config_async(
-                    self.hass, {k: v for k, v in user_input.items() if k != "password"}
-                )
+            error = await _test_connection(user_input)
+            if error:
+                errors["base"] = error
+            else:
                 return self.async_create_entry(
                     title=f"UniFi Blocker ({user_input['host']})",
                     data=user_input,
                 )
 
+        defaults = user_input or {}
         return self.async_show_form(
             step_id="user",
-            data_schema=_build_schema(saved),
+            data_schema=_connection_schema(defaults).extend({
+                vol.Optional("scan_interval", default=defaults.get("scan_interval", 60)): int,
+            }),
             errors=errors,
-            description_placeholders={
-                "has_saved": "true" if saved.get("host") else "false",
-            },
+        )
+
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None):
+        """Change the controller address or login without removing the integration."""
+        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            error = await _test_connection(user_input)
+            if error:
+                errors["base"] = error
+            else:
+                # The update listener in __init__ reloads the entry.
+                self.hass.config_entries.async_update_entry(
+                    entry,
+                    title=f"UniFi Blocker ({user_input['host']})",
+                    data={**entry.data, **user_input},
+                )
+                return self.async_abort(reason="reconfigure_successful")
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=_connection_schema(user_input or dict(entry.data)),
+            errors=errors,
         )
 
     @staticmethod
     def async_get_options_flow(config_entry):
-        return _OptionsFlow(config_entry)
+        return _OptionsFlow()
 
 
 class _OptionsFlow(config_entries.OptionsFlow):
-
-    def __init__(self, config_entry) -> None:
-        self.config_entry = config_entry
+    # Looks the entry up through self.handler (the entry id), which works on
+    # every HA version we support. Newer HA no longer lets us assign
+    # self.config_entry.
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
+        entry = self.hass.config_entries.async_get_entry(self.handler)
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            try:
+                net = ipaddress.ip_network(user_input["local_cidr"], strict=False)
+                if net.version != 4 or net.prefixlen != 24:
+                    raise ValueError
+                user_input["local_cidr"] = str(net)
+            except ValueError:
+                errors["local_cidr"] = "invalid_cidr"
+            if not errors:
+                return self.async_create_entry(title="", data=user_input)
 
-        cur = {**self.config_entry.data, **self.config_entry.options}
+        cur = {**entry.data, **entry.options, **(user_input or {})}
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
-                vol.Optional("scan_interval", default=cur.get("scan_interval", 60)): int,
+                vol.Optional("scan_interval", default=cur.get("scan_interval", 60)): vol.All(
+                    int, vol.Range(min=10)
+                ),
                 vol.Optional("verify_ssl", default=cur.get("verify_ssl", False)): bool,
-                vol.Optional("local_subnet", default=cur.get("local_subnet", "192.168.2")): str,
-                vol.Optional("local_cidr", default=cur.get("local_cidr", "192.168.2.0/24")): str,
-                vol.Optional("auto_scan_count", default=cur.get("auto_scan_count", 5)): int,
+                vol.Optional("local_cidr", default=cur.get("local_cidr", DEFAULT_LOCAL_CIDR)): str,
+                vol.Optional(
+                    "auto_scan_count", default=cur.get("auto_scan_count", DEFAULT_AUTO_SCAN_COUNT)
+                ): vol.All(int, vol.Range(min=0, max=50)),
             }),
+            errors=errors,
         )

@@ -23,6 +23,7 @@ from typing import Any
 from xml.etree import ElementTree as ET
 
 import aiohttp
+from homeassistant.util.ssl import get_default_no_verify_context
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -313,10 +314,9 @@ class OnvifProbe:
 
     async def _soap_request(self, url: str, body: str) -> str | None:
         """Send a SOAP request and return the response body."""
-        import ssl
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+        # HA's shared no-verify context: built once at startup, so no disk
+        # reads on the event loop. Never modify it, other integrations use it.
+        ctx = get_default_no_verify_context()
 
         headers = {
             "Content-Type": "application/soap+xml; charset=utf-8",
