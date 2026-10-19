@@ -94,7 +94,8 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
     # ONVIF probe engine
     try:
         from .onvif_probe import OnvifProbe
-        onvif = OnvifProbe()
+        onvif = OnvifProbe(hass)
+        await onvif.async_load()
     except Exception:
         _LOGGER.warning("ONVIF probe failed to load", exc_info=True)
         onvif = None
@@ -129,10 +130,6 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
         auto_scan_count=data.get("auto_scan_count", DEFAULT_AUTO_SCAN_COUNT),
     )
     await coordinator.async_config_entry_first_refresh()
-
-    # Run ONVIF discovery in background after coordinator is up.
-    if onvif:
-        hass.async_create_task(onvif.discover_and_probe_all())
 
     hass.data[DOMAIN][entry.entry_id] = {
         "api": api, "store": store, "coordinator": coordinator,

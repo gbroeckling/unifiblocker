@@ -449,7 +449,7 @@ class PortScanner:
 
         # Check cooldown.
         cached = self._cache.get(mac)
-        if cached and time.time() - cached.get("scan_time", 0) < SCAN_COOLDOWN:
+        if cached and cached.get("ip") == ip and time.time() - cached.get("scan_time", 0) < SCAN_COOLDOWN:
             return cached
 
         if mac in self._scanning:

@@ -22,6 +22,12 @@ from .vendor_lookup import CAMERA_CHIP_VENDORS, is_camera_like, lookup_vendor_sa
 
 _LOGGER = logging.getLogger(__name__)
 
+RESCAN_AFTER_S = 7 * 86400       # port scans and ONVIF results older than this get redone
+DISCOVERY_EVERY_S = 6 * 3600     # ONVIF WS-Discovery
+ONVIF_PROBES_PER_PASS = 3
+# Web ports a camera's ONVIF service usually sits on.
+ONVIF_HINT_PORTS = frozenset({80, 2020, 8000, 8080, 8899})
+
 
 class UniFiBlockerData:
     """Snapshot returned by the coordinator after each poll."""
@@ -213,7 +219,7 @@ class UniFiBlockerData:
             "onvif_model": cat_data.get("onvif_model", ""),
             "onvif_firmware": cat_data.get("onvif_firmware", ""),
             "onvif_serial": cat_data.get("onvif_serial", ""),
-            "onvif": self._get_onvif_for_ip(client.get("ip", "")),
+            "onvif": self._get_onvif_for(mac, client.get("ip", "")),
             "ip_history": self.store.get_ip_history(mac),
             "manual_category": self.store.get_manual_category(mac),
             "suggested_category": self.store.get_suggestion(mac),
@@ -231,11 +237,11 @@ class UniFiBlockerData:
             "flags": dpi.get("flags", []),
         }
 
-    def _get_onvif_for_ip(self, ip: str) -> dict[str, Any] | None:
-        """Look up ONVIF probe result for an IP. Returns only key fields."""
-        if not self.onvif or not ip:
+    def _get_onvif_for(self, mac: str, ip: str) -> dict[str, Any] | None:
+        """Look up the ONVIF result for a client. Returns only key fields."""
+        if not self.onvif:
             return None
-        result = self.onvif.get_result(ip)
+        result = self.onvif.result_for(mac, ip)
         if not result:
             return None
         # Only return essential fields — not the raw SOAP data.
@@ -245,6 +251,7 @@ class UniFiBlockerData:
             "model": result.get("model", ""),
             "firmware_version": result.get("firmware_version", ""),
             "serial_number": result.get("serial_number", ""),
+            "auth_required": bool(result.get("auth_required")),
         }
 
     def all_clients_enriched(self) -> list[dict[str, Any]]:
@@ -278,9 +285,66 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         self.onvif = onvif
         self.learned = learned
         self.miners = MinerTracker(scanner)
-        self._auto_scanned: set[str] = set()  # MACs already auto-scanned
+        # (mac, ip) pairs already port-scanned / ONVIF-probed this run, so a
+        # device that fails doesn't get retried every poll.
+        self._auto_scanned: set[tuple[str, str]] = set()
+        self._onvif_tried: set[tuple[str, str]] = set()
+        self._onvif_busy = False
+        self._last_discovery = 0.0
         self._auto_scan_count = auto_scan_count
         self._events_supported = True  # stat/event is gone on newer UniFi Network
+
+    def _schedule_onvif(self, clients: list[dict[str, Any]], now_ts: float) -> None:
+        """Start ONVIF discovery and probes in the background when due.
+
+        Discovery runs at startup and every 6 h. A device gets a direct probe
+        when its port scan shows a likely ONVIF port and we have no ONVIF
+        result for it, it moved to a new IP, or the result is over a week
+        old. Probes can take minutes, so they never hold up the poll.
+        """
+        if self._onvif_busy:
+            return
+        discover = now_ts - self._last_discovery >= DISCOVERY_EVERY_S
+        targets: list[tuple[str, str]] = []
+        if self.scanner:
+            for client in clients:
+                mac, ip = client.get("mac", "").lower(), client.get("ip", "")
+                if not mac or not ip or (mac, ip) in self._onvif_tried:
+                    continue
+                scan = self.scanner.get_result(mac)
+                if not scan or not ONVIF_HINT_PORTS & set(scan.get("open_ports") or []):
+                    continue
+                known = self.onvif.known_for(mac)
+                if known and known.get("ip") == ip and now_ts - known.get("probe_time", 0) < RESCAN_AFTER_S:
+                    continue
+                targets.append((mac, ip))
+                if len(targets) >= ONVIF_PROBES_PER_PASS:
+                    break
+        if not discover and not targets:
+            return
+        if discover:
+            self._last_discovery = now_ts
+        self._onvif_tried.update(targets)
+        self._onvif_busy = True
+
+        async def _run() -> None:
+            try:
+                if discover:
+                    await self.onvif.discover_and_probe_all()
+                for mac, ip in targets:
+                    await self.onvif.probe_ip(ip)
+                    self.onvif.note_probe(mac, ip)
+            except Exception:
+                _LOGGER.debug("ONVIF background pass failed", exc_info=True)
+            finally:
+                self._onvif_busy = False
+
+        entry = getattr(self, "config_entry", None)
+        if entry is not None:
+            # Tied to the entry, so it's cancelled on unload/reload.
+            entry.async_create_background_task(self.hass, _run(), "unifiblocker onvif")
+        else:
+            self.hass.async_create_background_task(_run(), "unifiblocker onvif")
 
     async def _async_update_data(self) -> UniFiBlockerData:
         """Fetch clients from the controller and update the store."""
@@ -359,7 +423,14 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             for client in clients:
                 mac = client.get("mac", "").lower()
                 ip = client.get("ip", "")
-                if not mac or not ip or mac in self._auto_scanned:
+                if not mac or not ip or (mac, ip) in self._auto_scanned:
+                    continue
+                cached = self.scanner.get_result(mac)
+                if cached and cached.get("status") == "complete":
+                    # Already known: rescan only when it moved or the scan is old.
+                    if cached.get("ip") == ip and now_ts - cached.get("scan_time", 0) < RESCAN_AFTER_S:
+                        continue
+                    scan_targets.append({"ip": ip, "mac": mac})
                     continue
                 state = self.store.get_state(mac)
                 vendor = client.get("oui") or lookup_vendor_safe(mac)
@@ -373,12 +444,26 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             # Only mark the ones we actually scan, the rest get picked up next poll.
             if scan_targets and self._auto_scan_count > 0:
                 batch = scan_targets[:self._auto_scan_count]
-                self._auto_scanned.update(t["mac"] for t in batch)
+                self._auto_scanned.update((t["mac"], t["ip"]) for t in batch)
                 _LOGGER.debug("Auto-scanning %d new/unknown devices", len(batch))
                 try:
                     await self.scanner.scan_multiple(batch)
                 except Exception:
                     _LOGGER.debug("Auto-scan error", exc_info=True)
+
+        onvif_by_ip: dict[str, dict[str, Any]] | None = None
+        if self.onvif:
+            self._schedule_onvif(clients, now_ts)
+            # Keyed by the client's current IP, but backed by what we know
+            # about its MAC, so a camera that moved keeps its ONVIF identity.
+            onvif_by_ip = {}
+            for client in clients:
+                mac, ip = client.get("mac", "").lower(), client.get("ip", "")
+                if mac and ip:
+                    self.onvif.link(mac, ip)
+                    found = self.onvif.result_for(mac, ip)
+                    if found:
+                        onvif_by_ip[ip] = found
 
         # Categorize every client using ALL available signals.
         categories = categorize_devices(
@@ -386,7 +471,7 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             dpi_data=dpi,
             manual_overrides=self.store.get_all_manual_categories(),
             scan_data=self.scanner.cache if self.scanner else None,
-            onvif_data=self.onvif.cache if self.onvif else None,
+            onvif_data=onvif_by_ip,
             learned_patterns=self.learned,
         )
 

@@ -99,12 +99,66 @@ NS = {
 class OnvifProbe:
     """Discover and probe ONVIF cameras on the network."""
 
-    def __init__(self) -> None:
+    def __init__(self, hass: Any = None) -> None:
         # ip → probe result
         self._cache: dict[str, dict[str, Any]] = {}
         self._discovered: list[dict[str, Any]] = []
         # URLs that answered with an ONVIF/SOAP fault (service there, login needed).
         self._fault_urls: set[str] = set()
+        # mac → last positive result (with the IP it was seen on). Saved, so a
+        # camera keeps its ONVIF identity across restarts and IP changes.
+        self._by_mac: dict[str, dict[str, Any]] = {}
+        self._probed: dict[str, dict[str, Any]] = {}   # mac → last probe (any outcome)
+        self._store = None
+        if hass is not None:
+            from homeassistant.helpers.storage import Store
+            self._store = Store(hass, 1, "unifiblocker_onvif")
+
+    async def async_load(self) -> None:
+        if self._store:
+            data = await self._store.async_load()
+            if isinstance(data, dict):
+                self._by_mac = data.get("by_mac", {})
+                self._probed = data.get("probed", {})
+
+    def _save(self) -> None:
+        if self._store:
+            self._store.async_delay_save(lambda: {"by_mac": self._by_mac, "probed": self._probed}, 30)
+
+    def note_probe(self, mac: str, ip: str) -> None:
+        """Record that *mac* was probed at *ip*, positive or not, so devices
+        without ONVIF aren't probed again on every restart."""
+        self._probed[mac.lower()] = {"ip": ip, "probe_time": time.time()}
+        self.link(mac, ip)
+        self._save()
+
+    def link(self, mac: str, ip: str) -> bool:
+        """Remember a positive result for *ip* under *mac*. True if it changed."""
+        r = self._cache.get(ip)
+        mac = mac.lower()
+        if not r or not r.get("onvif"):
+            return False
+        old = self._by_mac.get(mac)
+        if old and old.get("probe_time", 0) >= r.get("probe_time", 0) and old.get("ip") == ip:
+            return False
+        self._by_mac[mac] = {**r, "ip": ip}
+        self._save()
+        return True
+
+    def result_for(self, mac: str, ip: str) -> dict[str, Any] | None:
+        """Best ONVIF result for a client: a positive one for its current IP,
+        else what we last knew about its MAC, else whatever the IP gave."""
+        live = self._cache.get(ip) if ip else None
+        if live and live.get("onvif"):
+            return live
+        return self._by_mac.get(mac.lower()) or live
+
+    def known_for(self, mac: str) -> dict[str, Any] | None:
+        """The newest thing we know for *mac*: a positive result, or just the
+        last probe. Both carry "ip" and "probe_time"."""
+        mac = mac.lower()
+        hits = [r for r in (self._by_mac.get(mac), self._probed.get(mac)) if r]
+        return max(hits, key=lambda r: r.get("probe_time", 0)) if hits else None
 
     @property
     def cache(self) -> dict[str, dict[str, Any]]:

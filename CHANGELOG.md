@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.52 — 2026-10-19
+
+Scan and ONVIF results that last.
+
+- ONVIF results are now saved by MAC. A camera keeps its ONVIF identity across restarts and when it changes IP, instead of going back to unknown until the next discovery.
+- ONVIF discovery runs at startup and then every 6 hours, not just once. Devices whose port scan shows a likely ONVIF port get probed directly. Probes run in the background so they never hold up a poll, and devices without ONVIF aren't probed again until a week has passed.
+- Port scans are redone when a device changes IP or the scan is over a week old. Devices that were already scanned are no longer rescanned after every restart.
+
 ## 0.3.51 — 2026-10-19
 
 Fewer devices wrongly called cameras.
