@@ -177,7 +177,12 @@ class UniFiApi:
                         raise UniFiAuthError("Re-authentication failed")
                     if resp.status >= 400:
                         body = await resp.text()
-                        _LOGGER.error("API %s %s → %d: %s", method, url, resp.status, body[:500])
+                        # 404 usually means this controller version doesn't have the
+                        # endpoint; the caller decides whether that matters.
+                        _LOGGER.log(
+                            logging.DEBUG if resp.status == 404 else logging.ERROR,
+                            "API %s %s → %d: %s", method, url, resp.status, body[:500],
+                        )
                         raise UniFiApiError(f"{resp.status}: {body[:200]}")
                     data = await resp.json(content_type=None)
                     # UniFi wraps most responses in {"meta":{}, "data":[]}

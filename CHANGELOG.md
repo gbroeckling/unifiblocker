@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.46 — 2026-10-19
+
+Quieter logs.
+
+- Newer UniFi Network versions don't have the `stat/event` endpoint. The integration logged an error for it on every poll. It now checks once, notes it at info level, and stops asking.
+- minerstat.com started refusing unauthenticated requests. When it fails, the integration warns once and retries every 10 minutes instead of on every poll. Miner profitability numbers stay empty until that's sorted out.
+
 ## 0.3.45 — 2026-10-19
 
 Cleanup from the HACS review.

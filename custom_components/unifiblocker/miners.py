@@ -424,9 +424,12 @@ class _CoinCache:
     def __init__(self) -> None:
         self._data: dict[str, dict[str, Any]] = {}
         self._fetched_at: float = 0.0
+        self._failing = False
 
     async def get(self, session: aiohttp.ClientSession) -> dict[str, dict[str, Any]]:
-        if self._data and time.time() - self._fetched_at < COIN_CACHE_TTL:
+        # Failures count as a fetch too, so a dead API gets one try per TTL
+        # instead of one per poll.
+        if time.time() - self._fetched_at < COIN_CACHE_TTL:
             return self._data
         try:
             wanted = ",".join(sorted({c["coin"] for c in ALGO_COIN.values()}))
@@ -438,9 +441,13 @@ class _CoinCache:
                 resp.raise_for_status()
                 rows = await resp.json()
             self._data = {row["coin"]: row for row in rows if row.get("coin")}
-            self._fetched_at = time.time()
+            self._failing = False
         except Exception as err:
-            _LOGGER.warning("minerstat fetch failed: %s", err)
+            # Warn once per failure streak, not every 10 minutes.
+            _LOGGER.log(logging.DEBUG if self._failing else logging.WARNING,
+                        "minerstat fetch failed: %s", err)
+            self._failing = True
+        self._fetched_at = time.time()
         return self._data
 
 

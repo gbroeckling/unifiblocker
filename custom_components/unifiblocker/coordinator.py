@@ -263,6 +263,7 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         self.miners = MinerTracker(scanner)
         self._auto_scanned: set[str] = set()  # MACs already auto-scanned
         self._auto_scan_count = auto_scan_count
+        self._events_supported = True  # stat/event is gone on newer UniFi Network
 
     async def _async_update_data(self) -> UniFiBlockerData:
         """Fetch clients from the controller and update the store."""
@@ -305,10 +306,15 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         events: list[dict[str, Any]] = []
         health: dict[str, Any] = {}
         dpi: dict[str, dict[str, Any]] = {}
-        try:
-            events = await self.api.get_events(limit=100)
-        except UniFiApiError:
-            _LOGGER.debug("Could not fetch events", exc_info=True)
+        if self._events_supported:
+            try:
+                events = await self.api.get_events(limit=100)
+            except UniFiApiError as err:
+                if str(err).startswith("404"):
+                    self._events_supported = False
+                    _LOGGER.info("Controller has no stat/event endpoint, not polling it")
+                else:
+                    _LOGGER.debug("Could not fetch events", exc_info=True)
         try:
             health = await self.api.check_health()
         except Exception:
