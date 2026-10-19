@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.59 — 2026-10-19
+
+New-device policy.
+
+- A camera seen for the first time is cut off from the internet straight away (`block_internet`, the default) with a per-device traffic rule. Its IP doesn't change, so local viewing and recording keep working. You get a notification, and trusting the camera removes the block. Set it to `notify` or `off` under Configure.
+- Other new devices get one notification listing them (`notify`, the default, or `off`) and a `unifiblocker_new_device` event each.
+- Nothing already on your network counts as new after you update, so you won't get a flood.
+
 ## 0.3.58 — 2026-10-19
 
 Phone-home monitor.

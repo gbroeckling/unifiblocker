@@ -220,6 +220,15 @@ UniFi Blocker works best with a flat /22 network that uses IP-range-based firewa
 
 The device services take a single parameter, `mac` (e.g. `"aa:bb:cc:dd:ee:ff"`). `run_quantify` and `onvif_discover` take none.
 
+### New devices and cameras
+
+Two options (Settings → Devices & services → UniFi Blocker → Configure) decide what happens when something shows up for the first time:
+
+- **When a new camera shows up**: `block_internet` (default) cuts it off from the internet straight away with a per-device traffic rule. Its IP doesn't change, so it keeps working on your network. You get a notification, and trusting the camera removes the block. Some cameras need the internet once to finish setting up in their app; trust it for that. `notify` only tells you, `off` does nothing.
+- **When any other new device shows up**: `notify` (default) sends one notification listing them, `off` does nothing.
+
+Devices already on the network when you install or update don't count as new. Every new device also fires `unifiblocker_new_device` (`mac`, `ip`, `name`, `vendor`, `category`, `is_camera`).
+
 ### Containment failed event
 
 If a device on local-only (or quarantined, or blocked) shows traffic that UniFi let through, UniFi Blocker fires `unifiblocker_containment_failed` with `mac`, `ip`, `name`, `allowed` (how many connections) and `destinations`, at most once a day per device.

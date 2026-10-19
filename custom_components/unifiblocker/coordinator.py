@@ -321,6 +321,8 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         onvif: Any = None,
         learned: Any = None,
         auto_scan_count: int = 5,
+        camera_policy: str = "block_internet",
+        device_policy: str = "notify",
     ) -> None:
         super().__init__(
             hass,
@@ -341,6 +343,8 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         self._onvif_busy = False
         self._last_discovery = 0.0
         self._auto_scan_count = auto_scan_count
+        self._camera_policy = camera_policy
+        self._device_policy = device_policy
         # Slower-moving sources, refreshed on their own schedule (see *_EVERY_S).
         self._security: list[dict[str, Any]] = []
         self._traffic_rows: list[dict[str, Any]] = []
@@ -416,6 +420,9 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
         now_ts = now.timestamp()
+
+        # Who's new (before the store learns about them).
+        new_macs = self.store.new_devices([c.get("mac", "") for c in clients])
 
         # Merge every active client into the persistent store.
         for client in clients:
@@ -567,7 +574,8 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         cams = {c.get("mac", "").lower(): (c.get("name") or c.get("hostname") or "")
                 for c in clients if data.enrich_client(c).get("is_camera")}
         data.hotspots = camera_hotspots(self._rogue, cams)
-        self._announce_new_cameras(data)
+        await self._announce_new_cameras(data)
+        self._announce_new_devices(data, new_macs)
         self._announce_leaks(data, now_ts)
         return data
 
@@ -594,6 +602,7 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         out = {m.lower() for m in (self.local_net.assignments if self.local_net else {})}
         out |= {m.lower() for m in self.store.get_devices_by_state(STATE_QUARANTINED)}
         out |= {c.get("mac", "").lower() for c in clients if c.get("blocked")}
+        out |= self.store.auto_blocked_macs()
         return out
 
     def _watched_macs(self, clients, categories, contained: set[str]) -> list[str]:
@@ -641,9 +650,32 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         await due("rogue", ROGUE_EVERY_S, rogue)
         await due("flows", FLOWS_EVERY_S, flows)
 
-    def _announce_new_cameras(self, data: UniFiBlockerData) -> None:
+    def _announce_new_devices(self, data: UniFiBlockerData, new_macs: list[str]) -> None:
+        """unifiblocker_new_device per device seen for the first time, plus
+        one notification (new_device_policy). Cameras are handled by
+        _announce_new_cameras."""
+        if not new_macs:
+            return
+        fresh = []
+        for client in data.clients:
+            mac = client.get("mac", "").lower()
+            if mac in new_macs:
+                e = data.enrich_client(client)
+                self.hass.bus.async_fire(f"{DOMAIN}_new_device", {
+                    "mac": mac, "ip": e.get("ip", ""), "name": e.get("name", ""),
+                    "vendor": e.get("vendor", ""), "category": e.get("category", ""),
+                    "is_camera": bool(e.get("is_camera")),
+                })
+                if not e.get("is_camera"):
+                    fresh.append(e)
+        from .policy import on_new_devices
+        on_new_devices(self.hass, self._device_policy, fresh)
+
+    async def _announce_new_cameras(self, data: UniFiBlockerData) -> None:
         """Fire unifiblocker_new_camera once for each camera seen for the
-        first time, so automations can notify, scan or isolate it."""
+        first time, so automations can notify, scan or isolate it, and apply
+        new_camera_policy (see policy.py)."""
+        from .policy import on_new_camera
         cams = {}
         for client in data.clients:
             e = data.enrich_client(client)
@@ -662,3 +694,4 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
                 "manufacturer": onvif.get("manufacturer") or e.get("onvif_manufacturer", ""),
                 "model": onvif.get("model") or e.get("onvif_model", ""),
             })
+            await on_new_camera(self.hass, self._camera_policy, self.api, self.local_net, self.store, e)

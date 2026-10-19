@@ -13,6 +13,8 @@ _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "unifiblocker"
 
+from .policy import CAMERA_POLICIES, DEFAULT_CAMERA_POLICY, DEFAULT_DEVICE_POLICY, DEVICE_POLICIES
+
 DEFAULT_LOCAL_CIDR = "192.168.2.0/24"
 DEFAULT_AUTO_SCAN_COUNT = 5
 
@@ -168,6 +170,12 @@ class _OptionsFlow(config_entries.OptionsFlow):
                 vol.Optional(
                     "auto_scan_count", default=cur.get("auto_scan_count", DEFAULT_AUTO_SCAN_COUNT)
                 ): vol.All(int, vol.Range(min=0, max=50)),
+                vol.Optional(
+                    "new_camera_policy", default=cur.get("new_camera_policy", DEFAULT_CAMERA_POLICY)
+                ): vol.In(CAMERA_POLICIES),
+                vol.Optional(
+                    "new_device_policy", default=cur.get("new_device_policy", DEFAULT_DEVICE_POLICY)
+                ): vol.In(DEVICE_POLICIES),
             }),
             errors=errors,
         )

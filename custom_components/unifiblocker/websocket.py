@@ -1115,9 +1115,8 @@ async def ws_trust_device(
         connection.send_error(msg["id"], "not_ready", "Integration not loaded")
         return
     mac = msg["mac"]
-    await entry["store"].set_state(mac, STATE_TRUSTED)
-    await entry["api"].unblock_client(mac)
-    await entry["coordinator"].async_request_refresh()
+    from .policy import trust
+    await trust(entry, mac)
     connection.send_result(msg["id"], {"ok": True, "mac": mac, "state": "trusted"})
 
 

@@ -43,7 +43,13 @@
           "scan_interval": "Scan interval (seconds)",
           "verify_ssl": "Verify SSL certificate",
           "local_cidr": "Local-only subnet (a /24, e.g. 192.168.2.0/24)",
-          "auto_scan_count": "Devices to auto-scan per poll cycle"
+          "auto_scan_count": "Devices to auto-scan per poll cycle",
+          "new_camera_policy": "When a new camera shows up",
+          "new_device_policy": "When any other new device shows up"
+        },
+        "data_description": {
+          "new_camera_policy": "block_internet: cut it off from the internet right away (it keeps working on your network; trust it to undo). notify: just tell me. off: do nothing.",
+          "new_device_policy": "notify: one notification listing new devices. off: do nothing."
         }
       }
     },

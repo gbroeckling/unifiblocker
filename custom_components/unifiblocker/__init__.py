@@ -78,6 +78,7 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await store.async_load()
 
     # Opt-in usage report: load consent before the first poll so it's counted.
+    from .policy import DEFAULT_CAMERA_POLICY, DEFAULT_DEVICE_POLICY
     from .usage_report import ReportManager
     report = ReportManager(hass)
     await report.async_load()
@@ -128,6 +129,8 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
         onvif=onvif,
         learned=learned,
         auto_scan_count=data.get("auto_scan_count", DEFAULT_AUTO_SCAN_COUNT),
+        camera_policy=data.get("new_camera_policy", DEFAULT_CAMERA_POLICY),
+        device_policy=data.get("new_device_policy", DEFAULT_DEVICE_POLICY),
     )
     coordinator.local_net = local_net
     await coordinator.async_config_entry_first_refresh()
@@ -179,7 +182,8 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
             raise RuntimeError("Not loaded")
 
         async def h_trust(c):
-            d = await _ed(); await d["store"].set_state(c.data["mac"], STATE_TRUSTED); await d["api"].unblock_client(c.data["mac"]); await d["coordinator"].async_request_refresh()
+            from .policy import trust
+            d = await _ed(); await trust(d, c.data["mac"])
         async def h_ignore(c):
             d = await _ed(); await d["store"].set_state(c.data["mac"], STATE_IGNORED); await d["coordinator"].async_request_refresh()
         async def h_quarantine(c):

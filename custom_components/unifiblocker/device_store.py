@@ -72,6 +72,35 @@ class DeviceStore:
 
     # ── new-camera tracking ──────────────────────────────────────────
 
+    def new_devices(self, seen: list[str]) -> list[str]:
+        """Of *seen* (every MAC in this poll), the ones never seen before.
+        Call before upsert_from_unifi. The first call on a store with no
+        baseline records everything and returns nothing, so a fresh install
+        or an update doesn't announce the whole network."""
+        fresh = [m for m in (x.lower() for x in seen) if m and m not in self._devices]
+        if not self._meta.get("devices_baselined"):
+            self._meta["devices_baselined"] = True
+            self.schedule_save()
+            return []
+        return fresh
+
+    def mark_auto_blocked(self, mac: str, rule_id: str) -> None:
+        entry = self._devices.setdefault(mac.lower(), {"state": STATE_NEW})
+        entry["auto_blocked"] = {"rule_id": rule_id}
+        self.schedule_save()
+
+    def auto_blocked(self, mac: str) -> dict[str, Any] | None:
+        entry = self._devices.get(mac.lower())
+        return entry.get("auto_blocked") if entry else None
+
+    def auto_blocked_macs(self) -> set[str]:
+        return {m for m, e in self._devices.items() if e.get("auto_blocked")}
+
+    async def clear_auto_blocked(self, mac: str) -> None:
+        entry = self._devices.get(mac.lower())
+        if entry and entry.pop("auto_blocked", None) is not None:
+            await self.async_save()
+
     def new_cameras(self, macs: list[str]) -> list[str]:
         """Of *macs* (devices that look like cameras now), the ones never
         seen as a camera before. Marks them seen.
