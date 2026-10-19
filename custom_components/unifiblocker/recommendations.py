@@ -258,6 +258,21 @@ def generate_recommendations(
             "action_data": {} if device.get("containment") else {"mac": mac},
         })
 
+    # ── 1e. Home automation that depends on a cloud ──────────────────
+
+    ha = device.get("home_automation") or {}
+    if ha.get("tier") == "cloud_local" and not device.get("containment"):
+        recs.append({
+            "priority": PRIORITY_LOW,
+            "priority_label": PRIORITY_LABELS[PRIORITY_LOW],
+            "title": f"{ha['brand']}: talks to its cloud, but can run locally",
+            "detail": (ha.get("local_option") or "It has a local control option.")
+                      + " Once Home Assistant controls it locally, it can go on local-only without breaking."
+                      " Do that in that order: cutting it off first stops it working.",
+            "action": "info",
+            "action_data": {"mac": mac},
+        })
+
     # ── 2. Camera on main network ────────────────────────────────────
 
     if is_camera and ip and not ip.startswith(f"{local_prefix}."):
@@ -511,6 +526,18 @@ def generate_network_recommendations(
                       "Turn off its access-point / hotspot mode in the camera's settings.",
             "action": "info",
             "action_data": {"mac": h["camera_mac"]},
+        })
+    cloud_only = [d for d in devices if (d.get("home_automation") or {}).get("tier") == "cloud"]
+    if cloud_only:
+        brands = sorted({d["home_automation"]["brand"] for d in cloud_only})
+        recs.append({
+            "priority": PRIORITY_INFO,
+            "priority_label": PRIORITY_LABELS[PRIORITY_INFO],
+            "title": f"{len(cloud_only)} home device{'s' if len(cloud_only) != 1 else ''} only work through a cloud",
+            "detail": ", ".join(brands) + ". These stop working if cut off from the internet, so local-only isn't an "
+                      "option for them. If that's a concern, look for a local alternative.",
+            "action": "info",
+            "action_data": {},
         })
     nearby = [h for h in hotspots or [] if h["reason"] == "camera_ssid"]
     if nearby:

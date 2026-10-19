@@ -18,6 +18,7 @@ from .miners import MinerTracker
 from .port_identify import analyze_dpi_entry
 from .suspicious_traffic import analyze_all_clients
 from .unifi_api import UniFiApi, UniFiApiError
+from .home_automation import classify as classify_home_automation
 from .insights import (
     camera_hotspots, containment_status, hourly_series, security_events,
     summarize_flows, traffic_spike, unifi_fingerprint,
@@ -173,6 +174,7 @@ class UniFiBlockerData:
             return dict(self._enriched[key])
         try:
             self._enriched[key] = self._do_enrich(client)
+            self._enriched[key]["home_automation"] = classify_home_automation(self._enriched[key])
             return dict(self._enriched[key])
         except Exception as err:
             _LOGGER.error("Enrich failed for %s: %s", client.get("mac", "?"), err, exc_info=True)
@@ -610,7 +612,15 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         the proof), then cameras. Capped so one pass stays cheap."""
         cams = [c.get("mac", "").lower() for c in clients
                 if categories.get(c.get("mac", "").lower(), {}).get("category") == "camera"]
-        ordered = sorted(contained) + [m for m in cams if m not in contained]
+        # Cloud-tied home automation too, after the cameras.
+        ha = []
+        for c in clients:
+            mac = c.get("mac", "").lower()
+            light = {"hostname": c.get("hostname", ""), "name": c.get("name", ""), "vendor": c.get("oui", ""),
+                     "category": categories.get(mac, {}).get("category", "")}
+            if (classify_home_automation(light) or {}).get("tier") in ("cloud", "cloud_local"):
+                ha.append(mac)
+        ordered = sorted(contained) + [m for m in cams + ha if m not in contained]
         return [m for m in ordered if m][:FLOWS_MAX_DEVICES]
 
     async def _refresh_slow_sources(self, now_ts: float, watched: list[str] | None = None) -> None:

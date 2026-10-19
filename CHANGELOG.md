@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.60 — 2026-10-19
+
+Home automation.
+
+- Home automation devices are sorted by how much they depend on someone else's cloud: local (ESPHome, WLED, Tasmota, Zigbee coordinators, Vera), cloud with a local option (Tuya, Shelly, Kasa/Tapo, Govee, Xiaomi, Sonoff, Hue, IKEA, ecobee, Control4...), and cloud only (Echo, Google/Nest, Ring, Wyze, ChargePoint, robot vacuums).
+- Cloud-tied devices are watched by the phone-home monitor too.
+- Devices with a local option get a recommendation saying how to switch Home Assistant to it, and to do that before putting them on local-only, because cutting them off first breaks them.
+
 ## 0.3.59 — 2026-10-19
 
 New-device policy.

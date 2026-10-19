@@ -307,6 +307,9 @@ def build_payload(hass: HomeAssistant, install_id: str, taken: dict[str, Any] | 
                         data.enrich_client(c).get("containment") for c in data.clients
                         if data.enrich_client(c).get("containment"))),
                     "dns_bypass_devices": sum(1 for s in data.phone_home.values() if s.get("dns_bypass")),
+                    "home_automation_tiers": dict(collections.Counter(
+                        (data.enrich_client(c).get("home_automation") or {}).get("tier") for c in data.clients
+                        if data.enrich_client(c).get("home_automation"))),
                     "phone_home_clouds": dict(collections.Counter(
                         cloud for s in data.phone_home.values() for cloud in s.get("clouds", {}))),
                 },
