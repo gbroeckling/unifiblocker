@@ -29,7 +29,7 @@ VENDOR_ADVISORIES: dict[str, dict[str, Any]] = {
     "XMEye/Xiongmai": {
         "risk": "critical",
         "cves": ["CVE-2018-10088 (buffer overflow RCE)", "Mirai botnet primary target"],
-        "phone_home": ["xmeye.net", "xmcsrv.net", "nseye.com", "eseecloud.com", "meye.net"],
+        "phone_home": ["xmeye.net", "xmcsrv.net", "secu100.net", "nseye.com", "eseecloud.com", "meye.net"],
         "advice": "HIGHEST RISK. Cloud account cannot be fully disabled. Firmware update mechanism controlled by cloud without user consent. Quarantine or replace. These were the primary Mirai botnet devices.",
     },
     "Reolink": {
@@ -214,6 +214,48 @@ def generate_recommendations(
                          if is_camera else ""),
             "action": "review",
             "action_data": {"mac": mac},
+        })
+
+    # ── 1d. Phone-home monitor (traffic flows) ──────────────────────
+
+    ph = device.get("phone_home") or {}
+    if device.get("containment") == "leaking":
+        recs.append({
+            "priority": PRIORITY_CRITICAL,
+            "priority_label": PRIORITY_LABELS[PRIORITY_CRITICAL],
+            "title": f"Not contained: UniFi let {ph.get('allowed', 0)} connection{'s' if ph.get('allowed') != 1 else ''} through",
+            "detail": "This device is meant to be cut off from the internet, but UniFi logged traffic it allowed: "
+                      + ", ".join(f"{d['host']}:{d['port']}" for d in ph.get("top_destinations", [])[:4])
+                      + ". Check that its local-only rule is enabled and above any allow rules, or quarantine it.",
+            "action": "quarantine",
+            "action_data": {"mac": mac},
+        })
+    sweep = ph.get("port_sweep")
+    if sweep:
+        held = device.get("containment") in ("holding", "quiet")
+        recs.append({
+            "priority": PRIORITY_MEDIUM if held else PRIORITY_HIGH,
+            "priority_label": PRIORITY_LABELS[PRIORITY_MEDIUM if held else PRIORITY_HIGH],
+            "title": f"Probing for a way out: {sweep['ports']} ports on one server",
+            "detail": f"It tried {sweep['ports']} different ports on {sweep['host']}"
+                      + (f" ({next(iter(ph.get('regions') or {}), '')})" if ph.get("regions") else "")
+                      + ". P2P cameras do this to find any port a firewall forgets to block. "
+                      + ("Local-only is stopping all of them." if held else "Put it on local-only so none get through."),
+            "action": "info" if held else "local_only",
+            "action_data": {} if held else {"mac": mac, "category": "camera"},
+        })
+    if ph.get("dns_bypass"):
+        names = ", ".join(ph["dns_bypass"])
+        recs.append({
+            "priority": PRIORITY_MEDIUM,
+            "priority_label": PRIORITY_LABELS[PRIORITY_MEDIUM],
+            "title": f"Uses its own DNS ({names})",
+            "detail": "It sends DNS straight to " + names + " instead of the resolver your network hands out, so any "
+                      "DNS filtering you run doesn't apply to it. Hard-coded DNS is common on cheap cameras and IoT. "
+                      + ("Local-only already blocks it." if device.get("containment") in ("holding", "quiet")
+                         else "Local-only would block it, or add a traffic rule that blocks DNS for this device."),
+            "action": "info" if device.get("containment") else "local_only",
+            "action_data": {} if device.get("containment") else {"mac": mac},
         })
 
     # ── 2. Camera on main network ────────────────────────────────────

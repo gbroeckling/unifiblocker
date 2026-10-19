@@ -177,3 +177,109 @@ def camera_hotspots(rogue: list[dict[str, Any]], cameras: dict[str, str]) -> lis
         })
     out.sort(key=lambda h: (h["reason"] != "own_camera", -(h.get("rssi") or 0)))
     return out
+
+
+# ── phone-home monitor (traffic flows) ───────────────────────────────────
+
+# Domain suffix -> whose cloud it is. Camera clouds plus the common
+# home-automation ones.
+CLOUD_DOMAINS: dict[str, str] = {
+    "secu100.net": "Xiongmai (XMEye)", "xmeye.net": "Xiongmai (XMEye)", "xmcsrv.net": "Xiongmai (XMEye)",
+    "nseye.com": "Xiongmai (XMEye)", "eseecloud.com": "Xiongmai (XMEye)",
+    "hik-connect.com": "Hikvision", "hikvision.com": "Hikvision", "ezvizlife.com": "EZVIZ (Hikvision)",
+    "ezviz7.com": "EZVIZ (Hikvision)", "easy4ip.com": "Dahua / Imou", "dahuatech.com": "Dahua",
+    "imoulife.com": "Imou (Dahua)", "reolink.com": "Reolink", "reolink.cloud": "Reolink",
+    "foscam.com": "Foscam", "myfoscam.com": "Foscam",
+    "tuyaus.com": "Tuya / Smart Life", "tuyaeu.com": "Tuya / Smart Life", "tuyacn.com": "Tuya / Smart Life",
+    "tuyain.com": "Tuya / Smart Life", "iotbing.com": "Tuya / Smart Life",
+    "tplinkcloud.com": "TP-Link Kasa/Tapo", "tplinknbu.com": "TP-Link Kasa/Tapo", "tapo.com": "TP-Link Kasa/Tapo",
+    "govee.com": "Govee", "coolkit.cc": "eWeLink (Sonoff)", "ewelink.cc": "eWeLink (Sonoff)",
+    "mi.com": "Xiaomi", "xiaomi.com": "Xiaomi", "miot-spec.org": "Xiaomi", "aqara.com": "Aqara",
+    "wyze.com": "Wyze", "wyzecam.com": "Wyze", "meross.com": "Meross", "broadlink.com.cn": "Broadlink",
+    "ibroadlink.com": "Broadlink", "ring.com": "Ring (Amazon)", "eufylife.com": "Eufy (Anker)",
+    "roborock.com": "Roborock", "ecouser.net": "Ecovacs", "dreame.tech": "Dreame",
+}
+# Public resolvers. Reaching these directly means the device ignores the DNS
+# your network hands out (and any filtering on it).
+PUBLIC_DNS = {
+    "dns.google": "Google DNS", "8.8.8.8": "Google DNS", "8.8.4.4": "Google DNS",
+    "one.one.one.one": "Cloudflare DNS", "1.1.1.1": "Cloudflare DNS", "1.0.0.1": "Cloudflare DNS",
+    "dns.quad9.net": "Quad9", "9.9.9.9": "Quad9", "208.67.222.222": "OpenDNS", "208.67.220.220": "OpenDNS",
+    "114.114.114.114": "114DNS (China)", "223.5.5.5": "AliDNS (China)", "119.29.29.29": "DNSPod (China)",
+    "180.76.76.76": "Baidu DNS (China)",
+}
+PORT_SWEEP_MIN = 5   # this many different ports on one server = hunting for a way out
+
+
+def _cloud_of(host: str) -> str | None:
+    host = (host or "").lower().rstrip(".")
+    for suffix, who in CLOUD_DOMAINS.items():
+        if host == suffix or host.endswith("." + suffix):
+            return who
+    return None
+
+
+def summarize_flows(flows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """One device's logged flows -> what it tried to reach and what stopped it."""
+    if not flows:
+        return None
+    attempts = blocked = allowed = 0
+    dests: dict[str, dict[str, Any]] = {}
+    regions: dict[str, int] = {}
+    clouds: dict[str, int] = {}
+    dns: dict[str, int] = {}
+    ours = 0
+    times = []
+    ports_by_host: dict[str, set] = {}
+    for f in flows:
+        n = int(f.get("count") or 1)
+        attempts += n
+        if f.get("action") == "blocked":
+            blocked += n
+        else:
+            allowed += n
+        d = f.get("destination") or {}
+        host = (d.get("domains") or [None])[0] or d.get("ip") or "?"
+        key = f"{host}:{d.get('port')}"
+        e = dests.setdefault(key, {"host": host, "port": d.get("port"), "region": d.get("region") or "",
+                                   "protocol": f.get("protocol", ""), "count": 0})
+        e["count"] += n
+        if d.get("region"):
+            regions[d["region"]] = regions.get(d["region"], 0) + n
+        for h in (d.get("domains") or []) + [d.get("ip") or ""]:
+            who = _cloud_of(h)
+            if who:
+                clouds[who] = clouds.get(who, 0) + n
+                break
+        # DNS only means port 53/853: pinging 8.8.8.8 is a connectivity
+        # check, not a DNS lookup.
+        if d.get("port") in (53, 853):
+            label = PUBLIC_DNS.get(host) or PUBLIC_DNS.get(d.get("ip") or "") or f"DNS server {d.get('ip') or host}"
+            dns[label] = dns.get(label, 0) + n
+        ports_by_host.setdefault(d.get("ip") or host, set()).add(d.get("port"))
+        if any(str(p.get("name", "")).lower().startswith("ub:") for p in f.get("policies") or []):
+            ours += n
+        if f.get("time"):
+            times.append(int(f["time"]))
+    top = sorted(dests.values(), key=lambda x: -x["count"])[:6]
+    span_min = round((max(times) - min(times)) / 60000) if len(times) > 1 else None
+    sweep_host, sweep_ports = max(((h, len(p - {None})) for h, p in ports_by_host.items()),
+                                  key=lambda x: x[1], default=(None, 0))
+    return {
+        "attempts": attempts, "blocked": blocked, "allowed": allowed,
+        "blocked_by_our_rule": ours, "window_minutes": span_min,
+        "top_destinations": top, "regions": dict(sorted(regions.items(), key=lambda x: -x[1])[:5]),
+        "clouds": clouds, "dns_bypass": dns,
+        "port_sweep": {"host": sweep_host, "ports": sweep_ports} if sweep_ports >= PORT_SWEEP_MIN else None,
+    }
+
+
+def containment_status(summary: dict[str, Any] | None, contained: bool) -> str | None:
+    """For a device that's meant to be cut off from the internet:
+    "leaking" if UniFi logged traffic it let through, "holding" if it logged
+    blocked attempts, "quiet" if nothing was logged at all."""
+    if not contained:
+        return None
+    if not summary:
+        return "quiet"
+    return "leaking" if summary["allowed"] else "holding"

@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.57";
+const VERSION = "0.3.58";
 const SIDEBAR_THRESHOLD = 5;
 
 // Everything the panel renders goes through innerHTML, and a lot of it comes
@@ -1709,6 +1709,18 @@ class UniFiBlockerPanel extends HTMLElement {
     }
     if (d.blocked_by_rule_24h) parts.push(`<div class="info-row"><span class="info-label">Local-only</span><span><span class="badge ok">working</span> blocked ${d.blocked_by_rule_24h} internet attempt${d.blocked_by_rule_24h === 1 ? "" : "s"} today</span></div>`);
     if (d.security_events_24h) parts.push(`<div class="info-row"><span class="info-label">UniFi log</span><span><span class="badge warn">${d.security_events_24h} security event${d.security_events_24h === 1 ? "" : "s"}</span></span></div>`);
+    const ph = d.phone_home;
+    const cs = { holding: ["ok", "contained"], quiet: ["ok", "contained, no attempts seen"], leaking: ["danger", "NOT contained"] }[d.containment];
+    if (cs || ph) {
+      const span = ph && ph.window_minutes ? ` in ${ph.window_minutes < 120 ? ph.window_minutes + " min" : Math.round(ph.window_minutes / 60) + " h"}` : "";
+      parts.push(`<div class="info-row"><span class="info-label">Internet</span><span>${cs ? `<span class="badge ${cs[0]}">${cs[1]}</span> ` : ""}${ph ? `${ph.attempts} attempt${ph.attempts === 1 ? "" : "s"}${span}${ph.allowed ? `, <strong>${ph.allowed} let through</strong>` : ", all blocked"}` : ""}</span></div>`);
+      if (ph && Object.keys(ph.clouds || {}).length) parts.push(`<div class="info-row"><span class="info-label">Calls</span><span>${Object.keys(ph.clouds).join(", ")} cloud</span></div>`);
+      if (ph && (ph.top_destinations || []).length) parts.push(`<div class="info-row"><span class="info-label">Tries</span><span class="mono" style="font-size:10px">${ph.top_destinations.slice(0, 4).map(t => `${t.host}:${t.port ?? "-"}${t.region ? " (" + t.region + ")" : ""} ×${t.count}`).join("<br>")}</span></div>`);
+      if (ph && ph.port_sweep) parts.push(`<div class="info-row"><span class="info-label">Probing</span><span><span class="badge warn">${ph.port_sweep.ports} ports</span> on ${ph.port_sweep.host}</span></div>`);
+      if (ph && Object.keys(ph.dns_bypass || {}).length) parts.push(`<div class="info-row"><span class="info-label">DNS</span><span><span class="badge warn">own DNS</span> ${Object.keys(ph.dns_bypass).join(", ")}</span></div>`);
+    } else if (d.is_camera) {
+      parts.push(`<div class="info-row"><span class="info-label">Internet</span><span style="font-size:11px">Not visible: UniFi only logs blocked traffic. Put it on local-only to see what it tries to reach.</span></div>`);
+    }
     const fp = d.unifi_fingerprint;
     if (fp) parts.push(`<div class="info-row"><span class="info-label">UniFi ID</span><span>category ${fp.dev_cat ?? "?"}${fp.os_name ? ", " + fp.os_name : ""}${fp.camera ? ' <span class="badge camera">camera</span>' : ""}</span></div>`);
     return parts.length ? `<div class="device-info">${parts.join("")}</div>` : "";

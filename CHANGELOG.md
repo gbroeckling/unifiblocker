@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.58 — 2026-10-19
+
+Phone-home monitor.
+
+- Cameras and every device on local-only, quarantined or blocked are checked against UniFi's traffic flows every 15 minutes. Device cards show what each one tries to reach (host, port, country), whose cloud it is (Xiongmai, Hikvision, Tuya, TP-Link...), and how many attempts were blocked by its local-only rule.
+- Contained devices show "contained" when UniFi only logged blocked attempts, and "NOT contained" if it ever logs traffic it let through. That comes with a critical recommendation and a `unifiblocker_containment_failed` event.
+- Flags devices probing for a way out (5+ different ports on one server, as P2P cameras do) and devices using their own DNS server instead of yours.
+- UniFi only logs blocked traffic, so for a camera that isn't contained the card says what it reaches can't be seen until it's on local-only, instead of implying it's quiet.
+
 ## 0.3.57 — 2026-10-19
 
 Using what current UniFi firmware actually reports.

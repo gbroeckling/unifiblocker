@@ -31,6 +31,7 @@ Failure is silent; the counters stay and go with the next report.
 """
 from __future__ import annotations
 
+import collections
 from datetime import timedelta
 import functools
 import json
@@ -302,6 +303,12 @@ def build_payload(hass: HomeAssistant, install_id: str, taken: dict[str, Any] | 
                     "camera_ssids_nearby": sum(1 for h in data.hotspots if h["reason"] == "camera_ssid"),
                     "traffic_spikes": sum(1 for c in data.clients if (data.enrich_client(c).get("traffic_spike"))),
                     "unifi_fingerprint_cameras": sum(1 for c in data.clients if c.get("dev_cat") in (9, 57)),
+                    "containment": dict(collections.Counter(
+                        data.enrich_client(c).get("containment") for c in data.clients
+                        if data.enrich_client(c).get("containment"))),
+                    "dns_bypass_devices": sum(1 for s in data.phone_home.values() if s.get("dns_bypass")),
+                    "phone_home_clouds": dict(collections.Counter(
+                        cloud for s in data.phone_home.values() for cloud in s.get("clouds", {}))),
                 },
             }
 

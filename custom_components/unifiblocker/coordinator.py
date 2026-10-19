@@ -18,7 +18,10 @@ from .miners import MinerTracker
 from .port_identify import analyze_dpi_entry
 from .suspicious_traffic import analyze_all_clients
 from .unifi_api import UniFiApi, UniFiApiError
-from .insights import camera_hotspots, hourly_series, security_events, traffic_spike, unifi_fingerprint
+from .insights import (
+    camera_hotspots, containment_status, hourly_series, security_events,
+    summarize_flows, traffic_spike, unifi_fingerprint,
+)
 from .vendor_lookup import CAMERA_CHIP_VENDORS, is_camera_like, lookup_vendor_safe
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,6 +31,8 @@ DISCOVERY_EVERY_S = 6 * 3600     # ONVIF WS-Discovery
 SECURITY_LOG_EVERY_S = 600       # system-log/all
 TRAFFIC_EVERY_S = 900            # stat/report/hourly.user
 ROGUE_EVERY_S = 1800             # stat/rogueap (Wi-Fi networks around us)
+FLOWS_EVERY_S = 900              # v2 traffic-flows, per watched device
+FLOWS_MAX_DEVICES = 30
 ONVIF_PROBES_PER_PASS = 3
 # Web ports a camera's ONVIF service usually sits on.
 ONVIF_HINT_PORTS = frozenset({80, 2020, 8000, 8080, 8899})
@@ -51,6 +56,8 @@ class UniFiBlockerData:
         security: list[dict[str, Any]] | None = None,
         traffic: dict[str, list[int]] | None = None,
         hotspots: list[dict[str, Any]] | None = None,
+        phone_home: dict[str, dict[str, Any]] | None = None,
+        contained: set[str] | None = None,
     ) -> None:
         self.clients = clients
         self.devices = devices
@@ -65,6 +72,9 @@ class UniFiBlockerData:
         self.security = security or []      # SECURITY entries from system-log/all
         self.traffic = traffic or {}        # mac → bytes per hour, last 24 h
         self.hotspots = hotspots or []      # camera-looking Wi-Fi networks nearby
+        self.phone_home = phone_home or {}  # mac → summarize_flows() of its logged flows
+        self.contained = contained or set() # macs meant to be off the internet
+        self._watched: set[str] = set()
         from .insights import events_by_mac
         self._security_by_mac = events_by_mac(self.security)
         self._contained_by_mac = events_by_mac(self.security, ours=True)
@@ -240,6 +250,9 @@ class UniFiBlockerData:
             "blocked_by_rule_24h": self._contained_by_mac.get(mac_lower, 0),
             "traffic_24h": self.traffic.get(mac_lower),
             "traffic_spike": traffic_spike(self.traffic.get(mac_lower) or []),
+            "phone_home": self.phone_home.get(mac_lower),
+            "watched": mac_lower in self.phone_home or mac_lower in self._watched,
+            "containment": containment_status(self.phone_home.get(mac_lower), mac_lower in self.contained),
             "ip_history": self.store.get_ip_history(mac),
             "manual_category": self.store.get_manual_category(mac),
             "suggested_category": self.store.get_suggestion(mac),
@@ -333,6 +346,9 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         self._traffic_rows: list[dict[str, Any]] = []
         self._rogue: list[dict[str, Any]] = []
         self._fetched_at: dict[str, float] = {}
+        self._flows: dict[str, dict[str, Any] | None] = {}
+        self._leak_announced: dict[str, float] = {}
+        self.local_net: Any = None   # set by __init__ once it exists
         self._events_supported = True  # stat/event is gone on newer UniFi Network
 
     def _schedule_onvif(self, clients: list[dict[str, Any]], now_ts: float) -> None:
@@ -527,7 +543,9 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             _LOGGER.debug("Miner tracker update failed", exc_info=True)
 
         usage_report.record_poll(time.monotonic() - started, ok=True)
-        await self._refresh_slow_sources(now_ts)
+        contained = self._contained_macs(clients)
+        watched = self._watched_macs(clients, categories, contained)
+        await self._refresh_slow_sources(now_ts, watched)
         data = UniFiBlockerData(
             clients=clients,
             devices=devices,
@@ -541,15 +559,52 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             onvif=self.onvif,
             security=self._security,
             traffic=hourly_series(self._traffic_rows),
+            phone_home={m: s for m, s in self._flows.items() if s},
+            contained=contained,
         )
+        data._watched = set(watched)
         # Hotspots need to know which clients are cameras, so they come after.
         cams = {c.get("mac", "").lower(): (c.get("name") or c.get("hostname") or "")
                 for c in clients if data.enrich_client(c).get("is_camera")}
         data.hotspots = camera_hotspots(self._rogue, cams)
         self._announce_new_cameras(data)
+        self._announce_leaks(data, now_ts)
         return data
 
-    async def _refresh_slow_sources(self, now_ts: float) -> None:
+    def _announce_leaks(self, data: UniFiBlockerData, now_ts: float) -> None:
+        """Fire unifiblocker_containment_failed (at most daily per device)
+        when UniFi logs traffic it let through from a device that's meant to
+        be cut off."""
+        for client in data.clients:
+            mac = client.get("mac", "").lower()
+            e = data.enrich_client(client)
+            if e.get("containment") != "leaking" or now_ts - self._leak_announced.get(mac, 0) < 86400:
+                continue
+            self._leak_announced[mac] = now_ts
+            ph = e.get("phone_home") or {}
+            self.hass.bus.async_fire(f"{DOMAIN}_containment_failed", {
+                "mac": mac, "ip": e.get("ip", ""), "name": e.get("name", ""),
+                "allowed": ph.get("allowed", 0),
+                "destinations": [d["host"] for d in ph.get("top_destinations", [])][:5],
+            })
+
+    def _contained_macs(self, clients: list[dict[str, Any]]) -> set[str]:
+        """Devices that are supposed to be off the internet: local-only,
+        quarantined, or blocked on the controller."""
+        out = {m.lower() for m in (self.local_net.assignments if self.local_net else {})}
+        out |= {m.lower() for m in self.store.get_devices_by_state(STATE_QUARANTINED)}
+        out |= {c.get("mac", "").lower() for c in clients if c.get("blocked")}
+        return out
+
+    def _watched_macs(self, clients, categories, contained: set[str]) -> list[str]:
+        """Who gets their traffic flows read: contained devices first (that's
+        the proof), then cameras. Capped so one pass stays cheap."""
+        cams = [c.get("mac", "").lower() for c in clients
+                if categories.get(c.get("mac", "").lower(), {}).get("category") == "camera"]
+        ordered = sorted(contained) + [m for m in cams if m not in contained]
+        return [m for m in ordered if m][:FLOWS_MAX_DEVICES]
+
+    async def _refresh_slow_sources(self, now_ts: float, watched: list[str] | None = None) -> None:
         """Security log, hourly traffic and nearby Wi-Fi, each on its own
         schedule. Failures keep the last good copy; the poll goes on."""
         async def due(name: str, every: float, fetch) -> None:
@@ -572,7 +627,19 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
 
         await due("security", SECURITY_LOG_EVERY_S, sec)
         await due("traffic", TRAFFIC_EVERY_S, traffic)
+        async def flows() -> None:
+            # One query per device, so a chatty camera can't crowd out the rest.
+            fresh = {}
+            for mac in watched or []:
+                try:
+                    fresh[mac] = summarize_flows(await self.api.get_traffic_flows([mac], 24, max_pages=1))
+                except Exception:
+                    _LOGGER.debug("Could not fetch flows for %s", mac, exc_info=True)
+                    fresh[mac] = self._flows.get(mac)
+            self._flows = fresh
+
         await due("rogue", ROGUE_EVERY_S, rogue)
+        await due("flows", FLOWS_EVERY_S, flows)
 
     def _announce_new_cameras(self, data: UniFiBlockerData) -> None:
         """Fire unifiblocker_new_camera once for each camera seen for the

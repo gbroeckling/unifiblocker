@@ -220,6 +220,10 @@ UniFi Blocker works best with a flat /22 network that uses IP-range-based firewa
 
 The device services take a single parameter, `mac` (e.g. `"aa:bb:cc:dd:ee:ff"`). `run_quantify` and `onvif_discover` take none.
 
+### Containment failed event
+
+If a device on local-only (or quarantined, or blocked) shows traffic that UniFi let through, UniFi Blocker fires `unifiblocker_containment_failed` with `mac`, `ip`, `name`, `allowed` (how many connections) and `destinations`, at most once a day per device.
+
 ### New camera event
 
 When a device is seen as a camera for the first time, UniFi Blocker fires `unifiblocker_new_camera` with `mac`, `ip`, `name`, `vendor`, `manufacturer`, `model`, `confidence` and `category_source`. Cameras already on the network when you install or update don't fire it. Example: get a notification and scan it.

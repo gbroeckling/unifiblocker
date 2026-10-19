@@ -129,6 +129,7 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
         learned=learned,
         auto_scan_count=data.get("auto_scan_count", DEFAULT_AUTO_SCAN_COUNT),
     )
+    coordinator.local_net = local_net
     await coordinator.async_config_entry_first_refresh()
 
     hass.data[DOMAIN][entry.entry_id] = {
