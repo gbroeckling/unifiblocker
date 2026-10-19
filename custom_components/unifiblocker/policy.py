@@ -1,7 +1,7 @@
 """What happens when something new shows up on the network.
 
 new_camera_policy (options):
-    block_internet  default. Add the "UB: <mac> local-only" traffic rule so
+    block_internet  default. Add the "UB: <mac> no internet" traffic rule so
                     the camera can't reach the internet. Its IP doesn't
                     change, so local viewing and recording keep working.
                     Trusting the camera removes the rule again.

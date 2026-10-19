@@ -48,7 +48,7 @@ def security_events(log: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "rule": (params.get("TRIGGER") or {}).get("name", ""),
             "source": "system_log",
         })
-        # Blocked by one of our own "UB: <mac> local-only" rules: that's the
+        # Blocked by one of our own "UB: <mac> ..." rules: that's the
         # containment working, not a threat.
         out[-1]["ours"] = out[-1]["rule"].lower().startswith("ub:")
     out.sort(key=lambda x: x.get("time") or 0, reverse=True)

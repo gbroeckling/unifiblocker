@@ -1,1864 +1,1881 @@
 /**
- * UniFi Blocker – Sidebar Panel
- *
- * Read-only by default. Action Mode toggle enables write operations.
- * Dynamic category sub-navigation when a category has 5+ devices.
- * Manual device identification tool for unknowns.
+ * @license
+ * Copyright 2019 Google LLC
+ * SPDX-License-Identifier: BSD-3-Clause
  */
-
-const VERSION = "0.3.60";
-const SIDEBAR_THRESHOLD = 5;
-
-// Everything the panel renders goes through innerHTML, and a lot of it comes
-// straight off the network (DHCP hostnames, ONVIF replies, miner APIs). A
-// device on the LAN controls those strings, so escape every string in every
-// WS response before it gets anywhere near a template.
-const _ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "`": "&#96;" };
-const _esc = (s) => String(s).replace(/[&<>"'`]/g, (c) => _ESC[c]);
-function _sanitize(v) {
-  if (typeof v === "string") return _esc(v);
-  if (Array.isArray(v)) return v.map(_sanitize);
-  if (v && typeof v === "object") {
-    const o = {};
-    for (const [k, x] of Object.entries(v)) o[_esc(k)] = _sanitize(x);
-    return o;
+const tt = globalThis, ut = tt.ShadowRoot && (tt.ShadyCSS === void 0 || tt.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype, mt = Symbol(), Ct = /* @__PURE__ */ new WeakMap();
+let zt = class {
+  constructor(t, a, s) {
+    if (this._$cssResult$ = !0, s !== mt) throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");
+    this.cssText = t, this.t = a;
   }
-  return v;
-}
-
-class UniFiBlockerPanel extends HTMLElement {
+  get styleSheet() {
+    let t = this.o;
+    const a = this.t;
+    if (ut && t === void 0) {
+      const s = a !== void 0 && a.length === 1;
+      s && (t = Ct.get(a)), t === void 0 && ((this.o = t = new CSSStyleSheet()).replaceSync(this.cssText), s && Ct.set(a, t));
+    }
+    return t;
+  }
+  toString() {
+    return this.cssText;
+  }
+};
+const Zt = (e) => new zt(typeof e == "string" ? e : e + "", void 0, mt), vt = (e, ...t) => {
+  const a = e.length === 1 ? e[0] : t.reduce((s, n, i) => s + ((r) => {
+    if (r._$cssResult$ === !0) return r.cssText;
+    if (typeof r == "number") return r;
+    throw Error("Value passed to 'css' function must be a 'css' function result: " + r + ". Use 'unsafeCSS' to pass non-literal values, but take care to ensure page security.");
+  })(n) + e[i + 1], e[0]);
+  return new zt(a, e, mt);
+}, Yt = (e, t) => {
+  if (ut) e.adoptedStyleSheets = t.map((a) => a instanceof CSSStyleSheet ? a : a.styleSheet);
+  else for (const a of t) {
+    const s = document.createElement("style"), n = tt.litNonce;
+    n !== void 0 && s.setAttribute("nonce", n), s.textContent = a.cssText, e.appendChild(s);
+  }
+}, At = ut ? (e) => e : (e) => e instanceof CSSStyleSheet ? ((t) => {
+  let a = "";
+  for (const s of t.cssRules) a += s.cssText;
+  return Zt(a);
+})(e) : e;
+/**
+ * @license
+ * Copyright 2017 Google LLC
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+const { is: te, defineProperty: ee, getOwnPropertyDescriptor: se, getOwnPropertyNames: ae, getOwnPropertySymbols: ne, getPrototypeOf: ie } = Object, ot = globalThis, St = ot.trustedTypes, oe = St ? St.emptyScript : "", re = ot.reactiveElementPolyfillSupport, W = (e, t) => e, et = { toAttribute(e, t) {
+  switch (t) {
+    case Boolean:
+      e = e ? oe : null;
+      break;
+    case Object:
+    case Array:
+      e = e == null ? e : JSON.stringify(e);
+  }
+  return e;
+}, fromAttribute(e, t) {
+  let a = e;
+  switch (t) {
+    case Boolean:
+      a = e !== null;
+      break;
+    case Number:
+      a = e === null ? null : Number(e);
+      break;
+    case Object:
+    case Array:
+      try {
+        a = JSON.parse(e);
+      } catch {
+        a = null;
+      }
+  }
+  return a;
+} }, bt = (e, t) => !te(e, t), Pt = { attribute: !0, type: String, converter: et, reflect: !1, useDefault: !1, hasChanged: bt };
+Symbol.metadata ??= Symbol("metadata"), ot.litPropertyMetadata ??= /* @__PURE__ */ new WeakMap();
+let H = class extends HTMLElement {
+  static addInitializer(t) {
+    this._$Ei(), (this.l ??= []).push(t);
+  }
+  static get observedAttributes() {
+    return this.finalize(), this._$Eh && [...this._$Eh.keys()];
+  }
+  static createProperty(t, a = Pt) {
+    if (a.state && (a.attribute = !1), this._$Ei(), this.prototype.hasOwnProperty(t) && ((a = Object.create(a)).wrapped = !0), this.elementProperties.set(t, a), !a.noAccessor) {
+      const s = Symbol(), n = this.getPropertyDescriptor(t, s, a);
+      n !== void 0 && ee(this.prototype, t, n);
+    }
+  }
+  static getPropertyDescriptor(t, a, s) {
+    const { get: n, set: i } = se(this.prototype, t) ?? { get() {
+      return this[a];
+    }, set(r) {
+      this[a] = r;
+    } };
+    return { get: n, set(r) {
+      const h = n?.call(this);
+      i?.call(this, r), this.requestUpdate(t, h, s);
+    }, configurable: !0, enumerable: !0 };
+  }
+  static getPropertyOptions(t) {
+    return this.elementProperties.get(t) ?? Pt;
+  }
+  static _$Ei() {
+    if (this.hasOwnProperty(W("elementProperties"))) return;
+    const t = ie(this);
+    t.finalize(), t.l !== void 0 && (this.l = [...t.l]), this.elementProperties = new Map(t.elementProperties);
+  }
+  static finalize() {
+    if (this.hasOwnProperty(W("finalized"))) return;
+    if (this.finalized = !0, this._$Ei(), this.hasOwnProperty(W("properties"))) {
+      const a = this.properties, s = [...ae(a), ...ne(a)];
+      for (const n of s) this.createProperty(n, a[n]);
+    }
+    const t = this[Symbol.metadata];
+    if (t !== null) {
+      const a = litPropertyMetadata.get(t);
+      if (a !== void 0) for (const [s, n] of a) this.elementProperties.set(s, n);
+    }
+    this._$Eh = /* @__PURE__ */ new Map();
+    for (const [a, s] of this.elementProperties) {
+      const n = this._$Eu(a, s);
+      n !== void 0 && this._$Eh.set(n, a);
+    }
+    this.elementStyles = this.finalizeStyles(this.styles);
+  }
+  static finalizeStyles(t) {
+    const a = [];
+    if (Array.isArray(t)) {
+      const s = new Set(t.flat(1 / 0).reverse());
+      for (const n of s) a.unshift(At(n));
+    } else t !== void 0 && a.push(At(t));
+    return a;
+  }
+  static _$Eu(t, a) {
+    const s = a.attribute;
+    return s === !1 ? void 0 : typeof s == "string" ? s : typeof t == "string" ? t.toLowerCase() : void 0;
+  }
   constructor() {
-    super();
-    this.attachShadow({ mode: "open" });
-    this._hass = null;
-    this._view = "overview";
-    this._viewArg = null;       // for category:<name> views
-    this._actionMode = false;
-    this._data = { clients: [] };
-    this._overview = {};
-    this._categories = {};
-    this._pollTimer = null;
-    this._sortCol = "category";
-    this._sortAsc = true;
-    this._filter = "";
-    this._localnet = {};
-    this._scanCache = {};
-    this._scanning = new Set();
-    this._quantifyResults = null;
-    this._recs = {};
-    this._miners = { rigs: [], summary: {} };
-    this._report = null;          // opt-in usage report status
-    this._reportPreview = null;
-    this._lastView = null;
-    this._initialized = false;
+    super(), this._$Ep = void 0, this.isUpdatePending = !1, this.hasUpdated = !1, this._$Em = null, this._$Ev();
   }
-
-  set hass(h) {
-    this._hass = h;
-    if (!this._initialized) { this._initialized = true; this._render(); this._fetchAll(); this._startPolling(); }
+  _$Ev() {
+    this._$ES = new Promise((t) => this.enableUpdating = t), this._$AL = /* @__PURE__ */ new Map(), this._$E_(), this.requestUpdate(), this.constructor.l?.forEach((t) => t(this));
   }
-  setConfig(c) {}
-  connectedCallback() { if (this._hass && !this._initialized) { this._initialized = true; this._render(); this._fetchAll(); this._startPolling(); } }
-  disconnectedCallback() { this._stopPolling(); }
-
-  // ── Data ──────────────────────────────────────────────────────────
-  async _ws(type, extra = {}) { if (!this._hass) return null; try { return _sanitize(await this._hass.callWS({ type, ...extra })); } catch (e) { console.warn("[UB]", type, e); return null; } }
-
-  async _fetchAll() {
-    const [ov, cl, cats, ln, recs, mn, sr, rp, lr] = await Promise.all([
-      this._ws("unifiblocker/overview"),
-      this._ws("unifiblocker/clients"),
-      this._ws("unifiblocker/categories"),
-      this._ws("unifiblocker/localnet_status"),
-      this._ws("unifiblocker/recommendations"),
-      this._ws("unifiblocker/miners"),
-      this._ws("unifiblocker/scan_results"),
-      this._ws("unifiblocker/report_status"),
-      this._ws("unifiblocker/learned_rules"),
-    ]);
-    if (ov) this._overview = ov;
-    if (cl) this._data = cl;
-    if (cats) this._categories = cats.categories || {};
-    if (ln) this._localnet = ln;
-    if (recs) this._recs = recs;
-    if (mn) this._miners = mn;
-    if (sr && sr.results) this._scanCache = { ...sr.results, ...this._scanCache };
-    if (rp) this._report = rp;
-    if (lr) this._learned = lr;
-    this._render();
+  addController(t) {
+    (this._$EO ??= /* @__PURE__ */ new Set()).add(t), this.renderRoot !== void 0 && this.isConnected && t.hostConnected?.();
   }
-
-  _startPolling() { this._stopPolling(); this._pollTimer = setInterval(() => this._fetchAll(), 30000); }
-  _stopPolling() { if (this._pollTimer) { clearInterval(this._pollTimer); this._pollTimer = null; } }
-
-  async _action(type, mac) { if (!this._actionMode) return; const r = await this._ws(type, { mac }); if (r && r.ok) setTimeout(() => this._fetchAll(), 800); }
-  async _setCategory(mac, category, name) { const r = await this._ws("unifiblocker/set_category", { mac, category, name: name || undefined }); if (r && r.ok) setTimeout(() => this._fetchAll(), 800); }
-  async _quantify() {
-    if (!this._actionMode) {
-      alert("Action Mode must be enabled to run Quantify.\n\nThis scan identifies unknown devices and automatically categorizes them, which changes device data. Enable Action Mode in the sidebar first.");
-      return;
+  removeController(t) {
+    this._$EO?.delete(t);
+  }
+  _$E_() {
+    const t = /* @__PURE__ */ new Map(), a = this.constructor.elementProperties;
+    for (const s of a.keys()) this.hasOwnProperty(s) && (t.set(s, this[s]), delete this[s]);
+    t.size > 0 && (this._$Ep = t);
+  }
+  createRenderRoot() {
+    const t = this.shadowRoot ?? this.attachShadow(this.constructor.shadowRootOptions);
+    return Yt(t, this.constructor.elementStyles), t;
+  }
+  connectedCallback() {
+    this.renderRoot ??= this.createRenderRoot(), this.enableUpdating(!0), this._$EO?.forEach((t) => t.hostConnected?.());
+  }
+  enableUpdating(t) {
+  }
+  disconnectedCallback() {
+    this._$EO?.forEach((t) => t.hostDisconnected?.());
+  }
+  attributeChangedCallback(t, a, s) {
+    this._$AK(t, s);
+  }
+  _$ET(t, a) {
+    const s = this.constructor.elementProperties.get(t), n = this.constructor._$Eu(t, s);
+    if (n !== void 0 && s.reflect === !0) {
+      const i = (s.converter?.toAttribute !== void 0 ? s.converter : et).toAttribute(a, s.type);
+      this._$Em = t, i == null ? this.removeAttribute(n) : this.setAttribute(n, i), this._$Em = null;
     }
-    const btn = this.shadowRoot.querySelector("[data-quantify]");
-    if (btn) { btn.textContent = "🔬 Scanning... this takes a while"; btn.disabled = true; }
-    const r = await this._ws("unifiblocker/deep_scan_unknowns");
-    if (r) {
-      this._quantifyResults = r;
-      setTimeout(() => this._fetchAll(), 1000);
+  }
+  _$AK(t, a) {
+    const s = this.constructor, n = s._$Eh.get(t);
+    if (n !== void 0 && this._$Em !== n) {
+      const i = s.getPropertyOptions(n), r = typeof i.converter == "function" ? { fromAttribute: i.converter } : i.converter?.fromAttribute !== void 0 ? i.converter : et;
+      this._$Em = n;
+      const h = r.fromAttribute(a, i.type);
+      this[n] = h ?? this._$Ej?.get(n) ?? h, this._$Em = null;
     }
-    if (btn) { btn.textContent = "🔬 Quantify Unknown Devices"; btn.disabled = false; }
   }
-
-  async _scanDevice(mac) {
-    const el = this.shadowRoot.getElementById(`scan-${mac.replace(/:/g,"")}`);
-    if (el) el.innerHTML = '<div class="scan-loading">Scanning ~90 ports... this takes a few seconds</div>';
-    this._scanning.add(mac.toLowerCase());
-    if (!el) this._updateMain();
-    const r = await this._ws("unifiblocker/scan_device", { mac });
-    this._scanning.delete(mac.toLowerCase());
-    if (r) this._scanCache[mac.toLowerCase()] = r;
-    this._updateMain();
+  requestUpdate(t, a, s, n = !1, i) {
+    if (t !== void 0) {
+      const r = this.constructor;
+      if (n === !1 && (i = this[t]), s ??= r.getPropertyOptions(t), !((s.hasChanged ?? bt)(i, a) || s.useDefault && s.reflect && i === this._$Ej?.get(t) && !this.hasAttribute(r._$Eu(t, s)))) return;
+      this.C(t, a, s);
+    }
+    this.isUpdatePending === !1 && (this._$ES = this._$EP());
   }
-
-  async _assignLocal(mac, category, name) { if (!this._actionMode) { alert("Enable Action Mode first."); return; } const r = await this._ws("unifiblocker/localnet_assign", { mac, category, name: name||undefined }); if (r) { alert(r.ok ? `Assigned ${r.ip} to ${mac}` : `Error: ${r.error}`); setTimeout(() => this._fetchAll(), 800); } }
-  async _removeLocal(mac) { if (!this._actionMode) { alert("Enable Action Mode first."); return; } const r = await this._ws("unifiblocker/localnet_remove", { mac }); if (r) setTimeout(() => this._fetchAll(), 800); }
-  async _ensureRule() { if (!this._actionMode) { alert("Enable Action Mode first."); return; } const r = await this._ws("unifiblocker/localnet_ensure_rule"); if (r) alert(r.ok ? `Firewall rule ${r.status}: ${r.rule_id||"done"}` : `Error: ${r.error}`); setTimeout(() => this._fetchAll(), 800); }
-
-  // ── Render ────────────────────────────────────────────────────────
-  _render() {
-    const catIcons = this._overview.category_icons || {};
-    const catLabels = this._overview.category_labels || {};
-
-    // Build dynamic category nav items
-    let catNav = "";
-    const sorted = Object.entries(this._categories).sort((a, b) => b[1].count - a[1].count);
-    for (const [cat, info] of sorted) {
-      if (info.count >= SIDEBAR_THRESHOLD) {
-        const active = this._view === "category" && this._viewArg === cat ? "active" : "";
-        catNav += `<div class="nav-item sub ${active}" data-view="category" data-arg="${cat}">
-          <span class="nav-icon">${info.icon}</span>
-          <span class="nav-label">${info.label} <span class="nav-count">${info.count}</span></span>
-        </div>`;
+  C(t, a, { useDefault: s, reflect: n, wrapped: i }, r) {
+    s && !(this._$Ej ??= /* @__PURE__ */ new Map()).has(t) && (this._$Ej.set(t, r ?? a ?? this[t]), i !== !0 || r !== void 0) || (this._$AL.has(t) || (this.hasUpdated || s || (a = void 0), this._$AL.set(t, a)), n === !0 && this._$Em !== t && (this._$Eq ??= /* @__PURE__ */ new Set()).add(t));
+  }
+  async _$EP() {
+    this.isUpdatePending = !0;
+    try {
+      await this._$ES;
+    } catch (a) {
+      Promise.reject(a);
+    }
+    const t = this.scheduleUpdate();
+    return t != null && await t, !this.isUpdatePending;
+  }
+  scheduleUpdate() {
+    return this.performUpdate();
+  }
+  performUpdate() {
+    if (!this.isUpdatePending) return;
+    if (!this.hasUpdated) {
+      if (this.renderRoot ??= this.createRenderRoot(), this._$Ep) {
+        for (const [n, i] of this._$Ep) this[n] = i;
+        this._$Ep = void 0;
+      }
+      const s = this.constructor.elementProperties;
+      if (s.size > 0) for (const [n, i] of s) {
+        const { wrapped: r } = i, h = this[n];
+        r !== !0 || this._$AL.has(n) || h === void 0 || this.C(n, void 0, i, h);
       }
     }
-
-    this.shadowRoot.innerHTML = `
-      <style>${CSS}</style>
-      <div class="shell">
-        <nav class="sidebar">
-          <div class="brand"><div class="brand-icon">🛡</div><div class="brand-text">UniFi Blocker</div><div class="brand-ver">v${VERSION}</div></div>
-          <div class="nav-items">
-            ${this._nav("overview", "Overview", "📊")}
-            ${this._nav("new", "New Devices", "🆕")}
-            ${this._nav("suspicious", "Suspicious", "⚠")}
-            ${this._nav("clients", "All Clients", "📋")}
-            ${this._nav("recommendations", "Security", "🛡")}
-            ${this._nav("identify", "Identify", "🔍")}
-            ${this._nav("nas", "Network Access", "🌐")}
-            ${this._nav("localnet", "Local Only", "🔒")}
-            ${this._nav("storage", "Storage / NAS", "💾")}
-            ${this._nav("mining", "Mining", "⛏")}
-            ${this._nav("netmap", "Network Map", "🗺")}
-            ${catNav ? '<div class="nav-divider">Categories</div>' + catNav : ""}
-            ${this._nav("quarantined", "Quarantined", "🚫")}
-            ${this._nav("ports", "Port Guide", "🔌")}
-          </div>
-          <div class="action-toggle">
-            <label class="toggle-label"><input type="checkbox" id="at" /><span class="toggle-switch"></span><span class="toggle-text">Action Mode</span></label>
-            <div class="toggle-hint" id="ah">Read-only</div>
-          </div>
-        </nav>
-        <main class="content" id="mc"></main>
-      </div>`;
-
-    // Nav click handlers
-    this.shadowRoot.querySelectorAll(".nav-item").forEach(el => {
-      el.addEventListener("click", () => {
-        this._view = el.dataset.view;
-        this._viewArg = el.dataset.arg || null;
-        this._render();
-      });
-    });
-
-    // Action mode toggle
-    const at = this.shadowRoot.getElementById("at");
-    if (at) {
-      at.checked = this._actionMode;
-      at.addEventListener("change", e => {
-        this._actionMode = e.target.checked;
-        this.shadowRoot.getElementById("ah").textContent = this._actionMode ? "Actions enabled" : "Read-only";
-        this._updateMain();
-      });
+    let t = !1;
+    const a = this._$AL;
+    try {
+      t = this.shouldUpdate(a), t ? (this.willUpdate(a), this._$EO?.forEach((s) => s.hostUpdate?.()), this.update(a)) : this._$EM();
+    } catch (s) {
+      throw t = !1, this._$EM(), s;
     }
-    this._updateMain();
+    t && this._$AE(a);
   }
-
-  _nav(view, label, icon) {
-    const a = this._view === view && !this._viewArg ? "active" : "";
-    return `<div class="nav-item ${a}" data-view="${view}"><span class="nav-icon">${icon}</span><span class="nav-label">${label}</span></div>`;
+  willUpdate(t) {
   }
-
-  _updateMain() {
-    const mc = this.shadowRoot.getElementById("mc");
-    if (!mc) return;
-    switch (this._view) {
-      case "overview": mc.innerHTML = this._vOverview(); break;
-      case "detail_connected": mc.innerHTML = this._vDetailConnected(); break;
-      case "detail_wireless": mc.innerHTML = this._vDetailWireless(); break;
-      case "detail_wired": mc.innerHTML = this._vDetailWired(); break;
-      case "detail_blocked": mc.innerHTML = this._vDetailBlocked(); break;
-      case "detail_trusted": mc.innerHTML = this._vDetailTrusted(); break;
-      case "detail_threats": mc.innerHTML = this._vDetailThreats(); break;
-      case "new": mc.innerHTML = this._vDeviceList(this._overview.new_devices || [], "New / Unidentified Devices", "Devices that haven't been classified yet."); break;
-      case "suspicious": mc.innerHTML = this._vDeviceList((this._overview.suspicious_devices || []).sort((a,b) => (b.suspicion_score||0)-(a.suspicion_score||0)), "Suspicious Traffic", "Devices scored 3+ on behavioral heuristics."); break;
-      case "clients": mc.innerHTML = this._vClients(); break;
-      case "recommendations": mc.innerHTML = this._vRecommendations(); break;
-      case "identify": mc.innerHTML = this._vIdentify(); break;
-      case "nas": mc.innerHTML = this._vNAS(); break;
-      case "localnet": mc.innerHTML = this._vLocalNet(); break;
-      case "storage": mc.innerHTML = this._vStorage(); break;
-      case "mining": mc.innerHTML = this._vMining(); break;
-      case "netmap": mc.innerHTML = this._vNetMap(); break;
-      case "category": mc.innerHTML = this._vCategory(); break;
-      case "quarantined": mc.innerHTML = this._vDeviceList((this._data.clients||[]).filter(c=>c.state==="quarantined"||c.blocked), "Quarantined / Blocked", "Devices blocked on the controller."); break;
-      case "ports": mc.innerHTML = this._vPorts(); break;
+  _$AE(t) {
+    this._$EO?.forEach((a) => a.hostUpdated?.()), this.hasUpdated || (this.hasUpdated = !0, this.firstUpdated(t)), this.updated(t);
+  }
+  _$EM() {
+    this._$AL = /* @__PURE__ */ new Map(), this.isUpdatePending = !1;
+  }
+  get updateComplete() {
+    return this.getUpdateComplete();
+  }
+  getUpdateComplete() {
+    return this._$ES;
+  }
+  shouldUpdate(t) {
+    return !0;
+  }
+  update(t) {
+    this._$Eq &&= this._$Eq.forEach((a) => this._$ET(a, this[a])), this._$EM();
+  }
+  updated(t) {
+  }
+  firstUpdated(t) {
+  }
+};
+H.elementStyles = [], H.shadowRootOptions = { mode: "open" }, H[W("elementProperties")] = /* @__PURE__ */ new Map(), H[W("finalized")] = /* @__PURE__ */ new Map(), re?.({ ReactiveElement: H }), (ot.reactiveElementVersions ??= []).push("2.1.2");
+/**
+ * @license
+ * Copyright 2017 Google LLC
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+const $t = globalThis, Ot = (e) => e, st = $t.trustedTypes, Et = st ? st.createPolicy("lit-html", { createHTML: (e) => e }) : void 0, Ft = "$lit$", P = `lit$${Math.random().toFixed(9).slice(2)}$`, qt = "?" + P, le = `<${qt}>`, T = document, Q = () => T.createComment(""), K = (e) => e === null || typeof e != "object" && typeof e != "function", gt = Array.isArray, ce = (e) => gt(e) || typeof e?.[Symbol.iterator] == "function", ht = `[ 	
+\f\r]`, V = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, Nt = /-->/g, Mt = />/g, E = RegExp(`>|${ht}(?:([^\\s"'>=/]+)(${ht}*=${ht}*(?:[^ 	
+\f\r"'\`<>=]|("|')|))|$)`, "g"), Tt = /'/g, Ut = /"/g, Vt = /^(?:script|style|textarea|title)$/i, Wt = (e) => (t, ...a) => ({ _$litType$: e, strings: t, values: a }), o = Wt(1), de = Wt(2), B = Symbol.for("lit-noChange"), l = Symbol.for("lit-nothing"), Rt = /* @__PURE__ */ new WeakMap(), N = T.createTreeWalker(T, 129);
+function Qt(e, t) {
+  if (!gt(e) || !e.hasOwnProperty("raw")) throw Error("invalid template strings array");
+  return Et !== void 0 ? Et.createHTML(t) : t;
+}
+const he = (e, t) => {
+  const a = e.length - 1, s = [];
+  let n, i = t === 2 ? "<svg>" : t === 3 ? "<math>" : "", r = V;
+  for (let h = 0; h < a; h++) {
+    const c = e[h];
+    let p, u, d = -1, f = 0;
+    for (; f < c.length && (r.lastIndex = f, u = r.exec(c), u !== null); ) f = r.lastIndex, r === V ? u[1] === "!--" ? r = Nt : u[1] !== void 0 ? r = Mt : u[2] !== void 0 ? (Vt.test(u[2]) && (n = RegExp("</" + u[2], "g")), r = E) : u[3] !== void 0 && (r = E) : r === E ? u[0] === ">" ? (r = n ?? V, d = -1) : u[1] === void 0 ? d = -2 : (d = r.lastIndex - u[2].length, p = u[1], r = u[3] === void 0 ? E : u[3] === '"' ? Ut : Tt) : r === Ut || r === Tt ? r = E : r === Nt || r === Mt ? r = V : (r = E, n = void 0);
+    const b = r === E && e[h + 1].startsWith("/>") ? " " : "";
+    i += r === V ? c + le : d >= 0 ? (s.push(p), c.slice(0, d) + Ft + c.slice(d) + P + b) : c + P + (d === -2 ? h : b);
+  }
+  return [Qt(e, i + (e[a] || "<?>") + (t === 2 ? "</svg>" : t === 3 ? "</math>" : "")), s];
+};
+class X {
+  constructor({ strings: t, _$litType$: a }, s) {
+    let n;
+    this.parts = [];
+    let i = 0, r = 0;
+    const h = t.length - 1, c = this.parts, [p, u] = he(t, a);
+    if (this.el = X.createElement(p, s), N.currentNode = this.el.content, a === 2 || a === 3) {
+      const d = this.el.content.firstChild;
+      d.replaceWith(...d.childNodes);
     }
-    this._bindActions(mc);
-    // Counts toward the opt-in report only; the backend ignores it when off.
-    if (this._view !== this._lastView) {
-      this._lastView = this._view;
-      if (this._report && this._report.enabled) this._ws("unifiblocker/report_view", { view: this._view });
-    }
-  }
-
-  _bindActions(mc) {
-    mc.querySelectorAll("[data-statview]").forEach(el => {
-      el.addEventListener("click", () => { this._view = el.dataset.statview; this._viewArg = null; this._render(); });
-    });
-    // Category grid items (in overview and detail views).
-    mc.querySelectorAll("[data-view='category']").forEach(el => {
-      el.addEventListener("click", () => { this._view = "category"; this._viewArg = el.dataset.arg; this._render(); });
-    });
-    mc.querySelectorAll("[data-action]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        if (!this._actionMode) { alert("Enable Action Mode first."); return; }
-        if (confirm(`${btn.dataset.action} device ${btn.dataset.mac}?`)) this._action(`unifiblocker/${btn.dataset.action}`, btn.dataset.mac);
-      });
-    });
-    const checkBtn = mc.querySelector("#checkIpBtn");
-    if (checkBtn) {
-      checkBtn.addEventListener("click", async () => {
-        const input = mc.querySelector("#checkIpInput");
-        const resultDiv = mc.querySelector("#checkIpResult");
-        if (!input || !resultDiv) return;
-        const ip = input.value.trim();
-        if (!ip) { resultDiv.innerHTML = '<p style="color:#f0a500">Enter an IP address</p>'; return; }
-        resultDiv.innerHTML = '<p>Checking...</p>';
-        const r = await this._ws("unifiblocker/check_ip", { ip });
-        if (r) {
-          resultDiv.innerHTML = `
-            <div style="font-size:14px;font-weight:700;margin-bottom:8px">${r.summary}</div>
-            <table class="data-table">
-              <thead><tr><th></th><th>Check</th><th>Result</th></tr></thead>
-              <tbody>
-                ${r.checks.map(c => `<tr>
-                  <td>${c.icon}</td>
-                  <td>${c.check}</td>
-                  <td>${c.result}</td>
-                </tr>`).join("")}
-              </tbody>
-            </table>`;
-        } else {
-          resultDiv.innerHTML = '<p style="color:#f0a500">Check failed. Is that a valid IPv4 address?</p>';
-        }
-      });
-    }
-    mc.querySelectorAll("[data-quantify]").forEach(btn => {
-      btn.addEventListener("click", () => this._quantify());
-    });
-    mc.querySelectorAll("[data-scanmac]").forEach(btn => {
-      btn.addEventListener("click", () => this._scanDevice(btn.dataset.scanmac));
-    });
-    mc.querySelectorAll("[data-blockport]").forEach(btn => {
-      btn.addEventListener("click", async () => {
-        if (!this._actionMode) { alert("Enable Action Mode first."); return; }
-        const port = parseInt(btn.dataset.blockport);
-        const mac = btn.dataset.blockmac;
-        if (confirm(`Block port ${port} for ${mac}? This creates a firewall rule on the UCG Max.`)) {
-          const r = await this._ws("unifiblocker/block_port", { mac, port });
-          if (r && r.ok) { alert(`Port ${port} blocked for ${mac}`); btn.textContent = "Blocked"; btn.disabled = true; }
-          else alert(`Failed: ${r?.error || "unknown error"}`);
-        }
-      });
-    });
-    mc.querySelectorAll("[data-localassign]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const mac = btn.dataset.mac; const cat = btn.dataset.localassign;
-        const nameInput = mc.querySelector(`#lname-${mac.replace(/:/g,"")}`);
-        this._assignLocal(mac, cat, nameInput ? nameInput.value : "");
-      });
-    });
-    mc.querySelectorAll("[data-localremove]").forEach(btn => {
-      btn.addEventListener("click", () => { if(confirm(`Remove local-only assignment for ${btn.dataset.mac}?`)) this._removeLocal(btn.dataset.mac); });
-    });
-    mc.querySelectorAll("[data-ensureFw]").forEach(btn => {
-      btn.addEventListener("click", () => this._ensureRule());
-    });
-    mc.querySelectorAll("[data-rulekind]").forEach(sel => {
-      sel.addEventListener("change", () => this._ruleUpdate(sel.dataset.rulekind, sel.dataset.rulekey, sel.value));
-    });
-    mc.querySelectorAll("[data-ruledel]").forEach(btn => {
-      btn.addEventListener("click", () => { if (confirm("Delete this learned rule?")) this._ruleUpdate(btn.dataset.ruledel, btn.dataset.rulekey, null); });
-    });
-    mc.querySelectorAll("[data-report]").forEach(btn => {
-      btn.addEventListener("click", () => this._reportAction(btn.dataset.report));
-    });
-    mc.querySelectorAll("[data-clearcat]").forEach(btn => {
-      btn.addEventListener("click", async () => {
-        if (!this._actionMode) { alert("Enable Action Mode first."); return; }
-        const r = await this._ws("unifiblocker/clear_category", { mac: btn.dataset.clearcat });
-        if (r && r.ok) { btn.disabled = true; setTimeout(() => this._fetchAll(), 800); }
-      });
-    });
-    mc.querySelectorAll("[data-setcat]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const mac = btn.dataset.mac;
-        const cat = btn.dataset.setcat;
-        const nameInput = mc.querySelector(`#name-${mac.replace(/:/g,"")}`);
-        const name = nameInput ? nameInput.value : "";
-        this._setCategory(mac, cat, name);
-      });
-    });
-    const fi = mc.querySelector("#clientFilter");
-    if (fi) { fi.value = this._filter; fi.addEventListener("input", e => { this._filter = e.target.value.toLowerCase(); this._updateMain(); }); }
-    mc.querySelectorAll("[data-sort]").forEach(th => {
-      th.addEventListener("click", () => { const c = th.dataset.sort; if (this._sortCol===c) this._sortAsc=!this._sortAsc; else { this._sortCol=c; this._sortAsc=true; } this._updateMain(); });
-    });
-  }
-
-  // ── Views ─────────────────────────────────────────────────────────
-
-  _vOverview() {
-    const o = this._overview; const h = o.health || {};
-    // Category summary
-    let catSummary = "";
-    const sorted = Object.entries(this._categories).sort((a,b) => b[1].count - a[1].count);
-    if (sorted.length) {
-      catSummary = `<div class="card"><h2>Device Categories</h2><div class="cat-grid">
-        ${sorted.map(([cat, info]) => `<div class="cat-item clickable" data-view="category" data-arg="${cat}"><span class="cat-icon">${info.icon}</span><span class="cat-count">${info.count}</span><span class="cat-label">${info.label}</span></div>`).join("")}
-      </div></div>`;
-    }
-    return `
-      <h1>Network Overview</h1>
-      <div class="stat-grid">
-        ${this._stat("Connected", o.total_clients||0, "📱", "", "detail_connected")}
-        ${this._stat("Wireless", o.wireless_count||0, "📶", "", "detail_wireless")}
-        ${this._stat("Wired", o.wired_count||0, "🔗", "", "detail_wired")}
-        ${this._stat("New", o.new_count||0, "🆕", o.new_count>0?"warn":"", "new")}
-        ${this._stat("Suspicious", o.suspicious_count||0, "⚠", o.suspicious_count>0?"danger":"", "suspicious")}
-        ${this._stat("Blocked", o.blocked_count||0, "🚫", "", "detail_blocked")}
-        ${this._stat("Trusted", o.trusted_count||0, "✅", "", "detail_trusted")}
-        ${this._stat("Threats", o.threat_events||0, "🐛", o.threat_events>0?"danger":"", "detail_threats")}
-      </div>
-      ${catSummary}
-      <div class="card"><h2>Controller</h2>
-        <table class="info-table">
-          <tr><td>Status</td><td>${h.connection_ok?'<span class="badge ok">Connected</span>':'<span class="badge danger">Disconnected</span>'}</td></tr>
-          <tr><td>Hostname</td><td>${h.hostname||"—"}</td></tr>
-          <tr><td>Firmware</td><td>${h.version||"—"}</td></tr>
-          <tr><td>Uptime</td><td>${h.uptime?(h.uptime/3600).toFixed(1)+" hrs":"—"}</td></tr>
-        </table>
-      </div>
-      ${this._actionMode?"":"<div class=\"ro-banner\">Read-only mode — enable Action Mode in the sidebar</div>"}
-      <div style="margin-top:16px;text-align:center">
-        <button class="btn btn-quantify" data-quantify="1">🔬 Quantify Unknown Devices</button>
-        <p style="font-size:10px;color:var(--secondary-text-color);margin-top:4px">Deep-scans all unknown devices using HTTP banners, TLS certs, SSH, DNS, NetBIOS, and TTL analysis</p>
-      </div>
-      ${this._vQuantifyResults()}
-      ${this._vReportCard()}`;
-  }
-
-  _vReportCard() {
-    const r = this._report;
-    if (!r) return "";
-    const p = this._reportPreview;
-    return `<div class="card"><h2>Help improve UniFi Blocker</h2>
-      <p>Off unless you turn it on. Once a day it sends counts and versions so problems on other networks can be found and fixed: how many clients, cameras and categories, which tools get used, poll times, controller API errors, and warnings logged by the integration.</p>
-      <p><strong>Never sent:</strong> MAC or IP addresses, hostnames, device names, vendor strings from your network, entity ids, your controller's address. A check refuses the whole report if anything like that is in it. Press Preview to see exactly what would go.</p>
-      <p>Status: ${r.enabled ? `<span class="badge ok">On</span>${r.last_day ? ` · last sent ${r.last_day}` : " · nothing sent yet"}` : '<span class="badge">Off</span>'}</p>
-      <div class="rec-actions">
-        ${r.enabled
-          ? `<button class="btn" data-report="off">Turn off</button><button class="btn" data-report="send">Send a report now</button><button class="btn" data-report="newid">New anonymous ID</button>`
-          : `<button class="btn btn-trust" data-report="on">Turn on</button>`}
-        <button class="btn" data-report="preview">${p ? "Refresh preview" : "Preview"}</button>
-      </div>
-      ${p ? `<p style="font-size:11px">${p.bytes} bytes to ${p.url}${p.problems.length ? ` · <span style="color:#e94560">would be refused: ${p.problems.join("; ")}</span>` : ""}</p>
-        <pre class="mono" style="max-height:320px;overflow:auto;font-size:10px;white-space:pre-wrap">${JSON.stringify(p.payload, null, 2)}</pre>` : ""}
-    </div>`;
-  }
-
-  async _reportAction(what) {
-    const cmd = { on: ["report_set", { enabled: true }], off: ["report_set", { enabled: false }],
-      send: ["report_send", {}], newid: ["report_new_id", {}], preview: ["report_preview", {}] }[what];
-    if (!cmd) return;
-    if (what === "newid" && !confirm("Replace the anonymous ID? Reports after this count as a new install.")) return;
-    const r = await this._ws(`unifiblocker/${cmd[0]}`, cmd[1]);
-    if (!r) return;
-    if (what === "preview") this._reportPreview = r;
-    else {
-      this._report = { ...this._report, ...r };
-      if (what === "send") alert(r.sent ? `Report sent (${r.bytes} bytes).` : `Not sent: ${r.reason}`);
-    }
-    this._updateMain();
-  }
-
-  _vQuantifyResults() {
-    const q = this._quantifyResults;
-    if (!q) return "";
-    const rows = Object.entries(q.results || {});
-    return `<div class="card"><h2>Quantify Results</h2>
-      <p class="subtitle">${q.scanned || 0} scanned · ${q.identified || 0} applied (high confidence) · ${q.suggested || 0} suggested. Suggestions only change anything when you accept them.</p>
-      ${rows.length ? `<table class="data-table">
-        <thead><tr><th>Device</th><th>IP</th><th>Best guess</th><th>Confidence</th><th>Based on</th><th></th></tr></thead>
-        <tbody>${rows.map(([mac, r]) => `<tr>
-          <td>${r.name || `<span class="mono">${mac}</span>`}</td>
-          <td class="mono">${r.ip || "—"}</td>
-          <td>${r.best_guess === "unknown" ? "Still unknown" : `<strong>${r.best_guess}</strong>${r.best_description ? `<div style="font-size:10px">${r.best_description}</div>` : ""}`}</td>
-          <td>${r.best_guess === "unknown" ? "—" : r.best_confidence}</td>
-          <td style="font-size:10px">${(r.techniques_used || []).join(", ") || "—"}</td>
-          <td>${r.best_guess === "unknown" ? "" : r.applied
-            ? `<span class="badge ok">Applied</span> <button class="btn" data-clearcat="${mac}">Undo</button>`
-            : `<button class="btn btn-trust" data-setcat="${r.best_guess}" data-mac="${mac}">Accept</button>`}</td>
-        </tr>`).join("")}</tbody>
-      </table>` : '<div class="empty">No unknown devices with an IP to scan.</div>'}
-    </div>`;
-  }
-
-  // ── Detail views (stat card click-through) ────────────────────────
-
-  _vRecommendations() {
-    const r = this._recs || {};
-    const netRecs = r.network_recs || [];
-    const devRecs = r.device_recs || {};
-    const totalDev = r.total_device_recs || 0;
-    const critical = r.critical_count || 0;
-    const high = r.high_count || 0;
-
-    // Get top device recommendations (flatten, sort by priority, take top 20).
-    const allDevRecs = [];
-    for (const [mac, recs] of Object.entries(devRecs)) {
-      for (const rec of recs) {
-        allDevRecs.push({ ...rec, mac });
-      }
-    }
-    const priOrder = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
-    allDevRecs.sort((a, b) => (priOrder[a.priority] ?? 5) - (priOrder[b.priority] ?? 5));
-
-    // Find the device name for each MAC.
-    const clients = this._data.clients || [];
-    const nameMap = {};
-    clients.forEach(c => { nameMap[c.mac.toLowerCase()] = c.name || c.hostname || c.vendor || c.mac; });
-
-    return `
-      <h1>🛡 Security Recommendations</h1>
-      <p class="subtitle">Prioritized security advice based on device analysis, port scans, vendor CVE history, and community best practices.</p>
-
-      <div class="stat-grid">
-        ${this._stat("Total Issues", totalDev, "📋", totalDev > 0 ? "warn" : "")}
-        ${this._stat("Critical", critical, "🔴", critical > 0 ? "danger" : "")}
-        ${this._stat("High", high, "🟠", high > 0 ? "warn" : "")}
-        ${this._stat("Devices Affected", Object.keys(devRecs).length, "📱")}
-      </div>
-
-      ${netRecs.length ? `
-        <div class="card"><h2>Network-Wide Recommendations</h2>
-          ${netRecs.map(r => this._recCard(r)).join("")}
-        </div>
-      ` : ""}
-
-      <div class="card"><h2>Per-Device Recommendations (top 30)</h2>
-        ${allDevRecs.length === 0 ? '<div class="empty">No device-specific recommendations. Run port scans to get detailed advice.</div>' : ""}
-        ${allDevRecs.slice(0, 30).map(r => `
-          <div class="rec-item rec-${r.priority}">
-            <div class="rec-header">
-              <span class="rec-priority">${r.priority_label}</span>
-              <span class="rec-device mono">${r.mac}</span>
-              <span class="rec-name">${nameMap[r.mac] || ""}</span>
-            </div>
-            <div class="rec-title">${r.title}</div>
-            <div class="rec-detail">${(r.detail || "").replace(/\n/g, "<br>")}</div>
-            ${r.action !== "info" && this._actionMode ? `
-              <div class="rec-actions">
-                ${r.action === "quarantine" ? `<button class="btn btn-quarantine" data-action="quarantine" data-mac="${r.mac}">🚫 Quarantine</button>` : ""}
-                ${r.action === "local_only" ? `<button class="btn btn-trust" data-localassign="${r.action_data?.category || "iot"}" data-mac="${r.mac}">🔒 Move to Local-Only</button>` : ""}
-                ${r.action === "block_port" && r.action_data?.ports ? r.action_data.ports.map(p => `<button class="btn-port-block" data-blockport="${p}" data-blockmac="${r.mac}">Block port ${p}</button>`).join(" ") : ""}
-                ${r.action === "review" ? this._scanSummary(r.mac) : ""}
-              </div>
-            ` : ""}
-          </div>
-        `).join("")}
-      </div>
-
-      <div class="card"><h2>About These Recommendations</h2>
-        <p>Recommendations are generated from:</p>
-        <ul style="font-size:12px;padding-left:20px;line-height:2">
-          <li><strong>Vendor CVE databases</strong> — known vulnerabilities in Hikvision, Dahua, XMEye, Reolink, EZVIZ, Imou, Foscam</li>
-          <li><strong>Port scan results</strong> — open ports mapped to security risks (Telnet, backdoors, exposed databases)</li>
-          <li><strong>Traffic analysis</strong> — suspicious behavior flags from the heuristic scoring engine</li>
-          <li><strong>Network placement</strong> — cameras on the main network that should be isolated</li>
-          <li><strong>Community best practices</strong> — consensus from r/homelab, r/unifi, r/homeassistant on IoT isolation</li>
-        </ul>
-        <p style="margin-top:8px">Run <strong>port scans</strong> on unknown devices to get the most detailed recommendations.</p>
-      </div>`;
-  }
-
-  _scanSummary(mac) {
-    const key = mac.toLowerCase();
-    if (this._scanning.has(key)) return '<span class="scan-loading">Scanning…</span>';
-    const scan = this._scanCache[key];
-    if (!scan || scan.status !== "complete") return `<button class="btn btn-scan" data-scanmac="${mac}">🔍 Scan Ports</button>`;
-    const op = scan.open_ports || [];
-    return `<span style="font-size:11px">${op.length ? `Open: <span class="mono">${op.join(", ")}</span>` : "No open ports"} · looks like <strong>${scan.guess_category}</strong> (${scan.guess_confidence})</span> <button class="btn btn-scan" data-scanmac="${mac}">Rescan</button>`;
-  }
-
-  _recCard(r) {
-    return `<div class="rec-item rec-${r.priority}">
-      <span class="rec-priority">${r.priority_label}</span>
-      <div class="rec-title">${r.title}</div>
-      <div class="rec-detail">${(r.detail || "").replace(/\n/g, "<br>")}</div>
-    </div>`;
-  }
-
-  _vDetailConnected() {
-    const clients = this._data.clients || [];
-    const o = this._overview;
-    const catCounts = o.category_counts || {};
-    const catLabels = o.category_labels || {};
-    const catIcons = o.category_icons || {};
-    const totalTx = clients.reduce((s,c) => s + (c.tx_bytes||0), 0);
-    const totalRx = clients.reduce((s,c) => s + (c.rx_bytes||0), 0);
-    const avgRssi = clients.filter(c=>c.rssi).reduce((s,c,_,a) => s + c.rssi/a.length, 0);
-
-    // Top talkers
-    const topTalkers = clients.slice().sort((a,b) => ((b.tx_bytes||0)+(b.rx_bytes||0)) - ((a.tx_bytes||0)+(a.rx_bytes||0))).slice(0, 10);
-
-    return `
-      <button class="btn-back" data-statview="overview">← Back to Overview</button>
-      <h1>📱 Connected Clients <span class="count">${clients.length}</span></h1>
-      <p class="subtitle">Every device currently on your network. Tap any column to sort.</p>
-
-      <div class="stat-grid">
-        ${this._stat("Total", clients.length, "📱")}
-        ${this._stat("Wireless", o.wireless_count||0, "📶")}
-        ${this._stat("Wired", o.wired_count||0, "🔗")}
-        ${this._stat("Total Upload", this._fmtB(totalTx), "⬆")}
-        ${this._stat("Total Download", this._fmtB(totalRx), "⬇")}
-        ${this._stat("Avg Signal", avgRssi?Math.round(avgRssi)+" dBm":"—", "📡")}
-      </div>
-
-      <div class="card"><h2>Category Breakdown</h2>
-        <div class="cat-grid">
-          ${Object.entries(catCounts).sort((a,b)=>b[1]-a[1]).map(([cat,cnt]) =>
-            `<div class="cat-item"><span class="cat-icon">${catIcons[cat]||"❓"}</span><span class="cat-count">${cnt}</span><span class="cat-label">${catLabels[cat]||cat}</span></div>`
-          ).join("")}
-        </div>
-      </div>
-
-      <div class="card"><h2>Top 10 Bandwidth Users</h2>
-        <table class="data-table"><thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>Category</th><th>Upload</th><th>Download</th><th>Total</th></tr></thead><tbody>
-          ${topTalkers.map(c => `<tr>
-            <td class="mono">${c.mac}</td><td>${c.name||"—"}</td><td>${c.vendor||"?"}</td>
-            <td>${c.category_icon||""} ${c.category_label||""}</td>
-            <td>${this._fmtB(c.tx_bytes)}</td><td>${this._fmtB(c.rx_bytes)}</td>
-            <td><strong>${this._fmtB((c.tx_bytes||0)+(c.rx_bytes||0))}</strong></td>
-          </tr>`).join("")}
-        </tbody></table>
-      </div>
-
-      <div class="card"><h2>All Connected (${clients.length})</h2>
-        ${clients.map((d,i) => this._deviceCard(d, i+1)).join("")}
-      </div>`;
-  }
-
-  _vDetailWireless() {
-    const clients = (this._data.clients || []).filter(c => !c.wired);
-    // Group by SSID
-    const ssidMap = {};
-    clients.forEach(c => { const s = c.essid||"Unknown"; ssidMap[s] = (ssidMap[s]||0)+1; });
-    // Group by channel
-    const chanMap = {};
-    clients.forEach(c => { if(c.channel) chanMap[c.channel] = (chanMap[c.channel]||0)+1; });
-    // Signal distribution
-    const sigBuckets = {"Excellent (>-50)":0, "Good (-50 to -65)":0, "Fair (-65 to -75)":0, "Weak (-75 to -85)":0, "Very Weak (<-85)":0, "Unknown":0};
-    clients.forEach(c => {
-      const r = c.rssi;
-      if(r==null) sigBuckets["Unknown"]++;
-      else if(r>-50) sigBuckets["Excellent (>-50)"]++;
-      else if(r>-65) sigBuckets["Good (-50 to -65)"]++;
-      else if(r>-75) sigBuckets["Fair (-65 to -75)"]++;
-      else if(r>-85) sigBuckets["Weak (-75 to -85)"]++;
-      else sigBuckets["Very Weak (<-85)"]++;
-    });
-
-    return `
-      <button class="btn-back" data-statview="overview">← Back to Overview</button>
-      <h1>📶 Wireless Clients <span class="count">${clients.length}</span></h1>
-      <p class="subtitle">All Wi-Fi connected devices with signal quality, SSID, channel, and radio band information.</p>
-
-      <div class="card"><h2>By SSID</h2>
-        <table class="data-table"><thead><tr><th>SSID</th><th>Clients</th></tr></thead><tbody>
-          ${Object.entries(ssidMap).sort((a,b)=>b[1]-a[1]).map(([s,n]) => `<tr><td><strong>${s}</strong></td><td>${n}</td></tr>`).join("")}
-        </tbody></table>
-      </div>
-
-      <div class="card"><h2>By Channel</h2>
-        <table class="data-table"><thead><tr><th>Channel</th><th>Clients</th></tr></thead><tbody>
-          ${Object.entries(chanMap).sort((a,b)=>a[0]-b[0]).map(([ch,n]) => `<tr><td>Channel ${ch}</td><td>${n}</td></tr>`).join("")}
-        </tbody></table>
-      </div>
-
-      <div class="card"><h2>Signal Quality Distribution</h2>
-        <table class="data-table"><thead><tr><th>Signal Level</th><th>Clients</th></tr></thead><tbody>
-          ${Object.entries(sigBuckets).filter(([,n])=>n>0).map(([lbl,n]) => `<tr><td>${lbl}</td><td>${n}</td></tr>`).join("")}
-        </tbody></table>
-      </div>
-
-      <div class="card"><h2>All Wireless Clients</h2>
-        <table class="data-table"><thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>IP</th><th>SSID</th><th>Ch</th><th>Radio</th><th>RSSI</th><th>TX/RX</th></tr></thead><tbody>
-          ${clients.sort((a,b)=>(a.rssi||0)-(b.rssi||0)).map(c => `<tr class="${c.rssi&&c.rssi<-80?"row-warn":""}">
-            <td class="mono">${c.mac}</td><td>${c.name||"—"}</td><td>${c.vendor||"?"}</td><td class="mono">${c.ip||"—"}</td>
-            <td>${c.essid||"—"}</td><td>${c.channel||"—"}</td><td>${c.radio||"—"}</td>
-            <td>${c.rssi!=null?c.rssi+" dBm":"—"}</td><td>${this._fmtB(c.tx_bytes)}/${this._fmtB(c.rx_bytes)}</td>
-          </tr>`).join("")}
-        </tbody></table>
-      </div>`;
-  }
-
-  _vDetailWired() {
-    const clients = (this._data.clients || []).filter(c => c.wired);
-    const totalTx = clients.reduce((s,c) => s + (c.tx_bytes||0), 0);
-    const totalRx = clients.reduce((s,c) => s + (c.rx_bytes||0), 0);
-
-    return `
-      <button class="btn-back" data-statview="overview">← Back to Overview</button>
-      <h1>🔗 Wired Clients <span class="count">${clients.length}</span></h1>
-      <p class="subtitle">Devices connected via Ethernet. These have stable, high-speed connections and no signal concerns.</p>
-
-      <div class="stat-grid">
-        ${this._stat("Wired Clients", clients.length, "🔗")}
-        ${this._stat("Total Upload", this._fmtB(totalTx), "⬆")}
-        ${this._stat("Total Download", this._fmtB(totalRx), "⬇")}
-      </div>
-
-      <div class="card"><h2>All Wired Clients</h2>
-        <table class="data-table"><thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>IP</th><th>Category</th><th>State</th><th>Upload</th><th>Download</th></tr></thead><tbody>
-          ${clients.map(c => `<tr>
-            <td class="mono">${c.mac}</td><td>${c.name||"—"}</td><td>${c.vendor||"?"}</td><td class="mono">${c.ip||"—"}</td>
-            <td>${c.category_icon||""} ${c.category_label||""}</td><td><span class="badge ${c.state}">${c.state}</span></td>
-            <td>${this._fmtB(c.tx_bytes)}</td><td>${this._fmtB(c.rx_bytes)}</td>
-          </tr>`).join("")}
-        </tbody></table>
-      </div>`;
-  }
-
-  _vDetailBlocked() {
-    const clients = (this._data.clients || []).filter(c => c.blocked);
-    const quarantined = (this._data.clients || []).filter(c => c.state === "quarantined");
-    const allBlocked = [...new Map([...clients, ...quarantined].map(c=>[c.mac,c])).values()];
-
-    return `
-      <button class="btn-back" data-statview="overview">← Back to Overview</button>
-      <h1>🚫 Blocked Devices <span class="count">${allBlocked.length}</span></h1>
-      <p class="subtitle">Devices currently blocked on the UniFi controller or quarantined by UniFi Blocker. These devices cannot access the network.</p>
-
-      <div class="card">
-        <h2>What "Blocked" Means</h2>
-        <p>A blocked device has its MAC address added to the controller's block list. It can still see your Wi-Fi network and attempt to connect, but the controller will reject the association. The device gets no IP address and cannot send or receive any traffic.</p>
-        <p style="margin-top:8px">To unblock a device, enable <strong>Action Mode</strong> and click the Trust button, or call <code>unifiblocker.unblock_device</code>.</p>
-      </div>
-
-      ${allBlocked.length === 0 ? '<div class="empty">No blocked devices. Your network is allowing all connected clients.</div>' : ''}
-      ${allBlocked.map((d,i) => this._deviceCard(d, i+1)).join("")}`;
-  }
-
-  _vDetailTrusted() {
-    const clients = (this._data.clients || []).filter(c => c.state === "trusted");
-
-    return `
-      <button class="btn-back" data-statview="overview">← Back to Overview</button>
-      <h1>✅ Trusted Devices <span class="count">${clients.length}</span></h1>
-      <p class="subtitle">Devices you have explicitly marked as trusted. They will not appear in the New Devices review queue and will be automatically unblocked if blocked.</p>
-
-      <div class="card">
-        <h2>What "Trusted" Means</h2>
-        <p>A trusted device is one you recognize and want on your network. When you trust a device:</p>
-        <ul style="font-size:12px;padding-left:20px;margin-top:6px;line-height:1.8">
-          <li>It's removed from the New Devices review queue</li>
-          <li>If it was blocked, it's automatically unblocked on the controller</li>
-          <li>It stays in your trusted list across restarts</li>
-          <li>It won't be flagged by suspicious traffic analysis (but still monitored)</li>
-        </ul>
-      </div>
-
-      <div class="card"><h2>Category Breakdown</h2>
-        <div class="cat-grid">
-          ${(() => {
-            const cats = {};
-            clients.forEach(c => { const k = c.category_label||"Unknown"; cats[k] = (cats[k]||0)+1; });
-            return Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([cat,n]) =>
-              `<div class="cat-item"><span class="cat-count">${n}</span><span class="cat-label">${cat}</span></div>`
-            ).join("");
-          })()}
-        </div>
-      </div>
-
-      <div class="card"><h2>All Trusted (${clients.length})</h2>
-        <table class="data-table"><thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>IP</th><th>Category</th><th>SSID</th><th>TX/RX</th></tr></thead><tbody>
-          ${clients.map(c => `<tr>
-            <td class="mono">${c.mac}</td><td>${c.name||"—"}</td><td>${c.vendor||"?"}</td><td class="mono">${c.ip||"—"}</td>
-            <td>${c.category_icon||""} ${c.category_label||""}</td><td>${c.essid||"—"}</td>
-            <td>${this._fmtB(c.tx_bytes)}/${this._fmtB(c.rx_bytes)}</td>
-          </tr>`).join("")}
-        </tbody></table>
-      </div>`;
-  }
-
-  _vDetailThreats() {
-    const o = this._overview;
-    const suspDevices = o.suspicious_devices || [];
-    const evts = o.security_events || [];
-    const hotspots = o.hotspots || [];
-    const cameras = (this._data.clients||[]).filter(c => c.is_camera);
-    const blocked = (this._data.clients||[]).filter(c => c.blocked);
-
-    return `
-      <button class="btn-back" data-statview="overview">← Back to Overview</button>
-      <h1>🐛 Threat Overview <span class="count">${o.threat_events||0} events</span></h1>
-      <p class="subtitle">Security events, suspicious devices, and potential threats detected on your network.</p>
-
-      <div class="stat-grid">
-        ${this._stat("Security Events", o.threat_events||0, "🛡", o.threat_events>0?"danger":"")}
-        ${this._stat("Blocked by Local-Only", o.contained_blocks_24h||0, "🔒")}
-        ${this._stat("Suspicious", o.suspicious_count||0, "⚠", o.suspicious_count>0?"danger":"")}
-        ${this._stat("Cameras", cameras.length, "📹", cameras.length>0?"warn":"")}
-        ${this._stat("Blocked", blocked.length, "🚫")}
-      </div>
-
-      <div class="card">
-        <h2>What to Watch For</h2>
-        <ul style="font-size:12px;padding-left:20px;line-height:2">
-          <li><strong>IDS/IPS Events</strong> — The UCG Max's built-in intrusion detection has flagged traffic patterns that match known attack signatures</li>
-          <li><strong>Suspicious Devices</strong> — Scored 3+ on our heuristic analysis: randomized MAC, unknown vendor, no hostname, camera phoning home, high bandwidth on guest network</li>
-          <li><strong>Cameras on Main Network</strong> — IP cameras that aren't isolated to an IoT VLAN can be used as a pivot point to reach other devices</li>
-          <li><strong>Devices Phoning Home</strong> — Cameras or IoT devices making outbound connections to cloud servers (ports 34567, 6789, 32100, etc.)</li>
-        </ul>
-      </div>
-
-      <div class="card"><h2>Security events, last 24 hours (${evts.length})</h2>
-        <p class="subtitle">From UniFi's security log. Blocks made by UniFi Blocker's own local-only rules aren't listed here; they're counted above and show on each device.</p>
-        ${evts.length ? `<table class="data-table"><thead><tr><th>When</th><th>What</th><th>Severity</th><th>Rule</th></tr></thead><tbody>
-          ${evts.slice(0, 50).map(e => `<tr><td class="mono">${e.time ? new Date(e.time).toLocaleString() : "—"}</td><td>${e.msg || e.title || e.key}</td><td>${e.inner_alert_severity || "—"}</td><td>${e.rule || e.catname || "—"}</td></tr>`).join("")}
-        </tbody></table>` : "<div class=\"empty\">Nothing in UniFi's security log.</div>"}
-      </div>
-
-      ${hotspots.length ? `<div class="card warn-card"><h2>📶 Camera Wi-Fi networks (${hotspots.length})</h2>
-        <p class="subtitle">Wi-Fi networks that belong to one of your cameras, or have a camera setup-network name.</p>
-        <table class="data-table"><thead><tr><th>Network</th><th>Why</th><th>Signal</th><th>Channel</th><th>Security</th></tr></thead><tbody>
-          ${hotspots.map(h => `<tr><td>${h.essid || "(hidden)"} <span class="mono" style="font-size:10px">${h.bssid}</span></td>
-            <td>${h.reason === "own_camera" ? `<span class="badge danger">your camera ${h.camera_name || h.camera_mac}</span>` : "camera setup name"}</td>
-            <td>${h.rssi != null ? h.rssi + " dBm" : "—"}</td><td>${h.channel ?? "—"}</td><td>${h.security || "open"}</td></tr>`).join("")}
-        </tbody></table></div>` : ""}
-
-      <div class="card danger-card"><h2>⚠ Suspicious Devices (${suspDevices.length})</h2>
-        ${suspDevices.length === 0 ? '<div class="empty">No suspicious devices — your network looks clean.</div>' : ''}
-        ${suspDevices.slice(0,10).map((d,i) => {
-          const flags = d.suspicion_flags||[];
-          return `<div style="padding:8px 0;border-bottom:1px solid var(--divider-color,#2a2a4a)">
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              <span class="mono" style="font-weight:600">${d.mac}</span>
-              <span>${d.name||"—"}</span>
-              <span style="color:var(--secondary-text-color)">${d.vendor||"?"}</span>
-              <span class="badge ${d.threat_level}">${d.threat_level} (${d.suspicion_score}pts)</span>
-              ${d.is_camera?'<span class="badge camera">📹</span>':""}
-            </div>
-            ${flags.length?`<div style="margin-top:4px;font-size:11px">${flags.map(f=>`<div>⚠ ${f}</div>`).join("")}</div>`:""}
-          </div>`;
-        }).join("")}
-      </div>
-
-      ${cameras.length?`<div class="card warn-card"><h2>📹 Cameras on Network (${cameras.length})</h2>
-        <p class="subtitle">Every detected camera. Consider isolating these to a local-only subnet (${this._lp()}.x) to prevent phone-home traffic.</p>
-        <table class="data-table"><thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>IP</th><th>State</th><th>Blocked</th><th>TX/RX</th></tr></thead><tbody>
-          ${cameras.map(c=>`<tr>
-            <td class="mono">${c.mac}</td><td>${c.name||"—"}</td><td>${c.vendor||"?"}</td><td class="mono">${c.ip||"—"}</td>
-            <td><span class="badge ${c.state}">${c.state}</span></td><td>${c.blocked?"🚫":""}</td>
-            <td>${this._fmtB(c.tx_bytes)}/${this._fmtB(c.rx_bytes)}</td>
-          </tr>`).join("")}
-        </tbody></table>
-      </div>`:""}
-
-      <div class="card">
-        <h2>Recommended Actions</h2>
-        <ol style="font-size:12px;padding-left:20px;line-height:2">
-          <li>Review all <strong>Suspicious</strong> devices — quarantine anything you don't recognize</li>
-          <li>Move cameras to the <strong>Local-Only</strong> subnet (🔒 in sidebar) to block internet access</li>
-          <li>Check the <strong>Port Guide</strong> (🔌 in sidebar) for phone-home port reference</li>
-          <li>Enable IDS/IPS on the UCG Max if not already active (Network → Security → Threat Management)</li>
-        </ol>
-      </div>`;
-  }
-
-  _vDeviceList(devices, title, subtitle) {
-    return `<h1>${title} <span class="count">${devices.length}</span></h1>
-      <p class="subtitle">${subtitle}</p>
-      ${devices.length===0?'<div class="empty">None.</div>':""}
-      ${devices.map((d,i) => this._deviceCard(d, i+1)).join("")}`;
-  }
-
-  _vClients() {
-    let clients = (this._data.clients || []).slice();
-    if (this._filter) clients = clients.filter(c => [c.mac,c.name,c.hostname,c.vendor,c.ip,c.essid,c.state,c.category,c.category_label].filter(Boolean).join(" ").toLowerCase().includes(this._filter));
-    const s = (col) => col===this._sortCol ? (this._sortAsc?" ▲":" ▼") : "";
-    clients.sort((a,b) => { let va=a[this._sortCol]||"", vb=b[this._sortCol]||""; if(typeof va==="number"&&typeof vb==="number") return this._sortAsc?va-vb:vb-va; return this._sortAsc?String(va).localeCompare(String(vb)):String(vb).localeCompare(String(va)); });
-
-    return `<h1>All Clients <span class="count">${clients.length}</span></h1>
-      <input type="text" id="clientFilter" class="filter-input" placeholder="Filter..." />
-      <div class="table-wrap"><table class="data-table"><thead><tr>
-        <th data-sort="category">Cat${s("category")}</th>
-        <th data-sort="mac">MAC${s("mac")}</th>
-        <th data-sort="name">Name${s("name")}</th>
-        <th data-sort="vendor">Vendor${s("vendor")}</th>
-        <th data-sort="ip">IP${s("ip")}</th>
-        <th data-sort="state">State${s("state")}</th>
-        <th data-sort="essid">SSID${s("essid")}</th>
-        <th data-sort="threat_level">Threat${s("threat_level")}</th>
-        ${this._actionMode?"<th>Actions</th>":""}
-      </tr></thead><tbody>
-        ${clients.map(c => `<tr class="${c.suspicious?"row-suspicious":""} ${c.is_camera?"row-camera":""}">
-          <td>${c.category_icon||"❓"}</td>
-          <td class="mono">${c.mac}</td>
-          <td>${c.name||"—"}</td>
-          <td>${c.vendor||"?"}</td>
-          <td class="mono">${c.ip||"—"}</td>
-          <td><span class="badge ${c.state}">${c.state}</span></td>
-          <td>${c.essid||"—"}</td>
-          <td>${c.threat_level!=="none"?`<span class="badge ${c.threat_level}">${c.threat_level}</span>`:""}</td>
-          ${this._actionMode?`<td class="actions">${this._actBtns(c.mac)}</td>`:""}
-        </tr>`).join("")}
-      </tbody></table></div>`;
-  }
-
-  _vIdentify() {
-    // Show devices that are "unknown" category or low confidence
-    const clients = (this._data.clients || []).filter(c => c.category === "unknown" || c.confidence === "low");
-    const catLabels = this._overview.category_labels || {};
-    const catOptions = Object.entries(catLabels).map(([k,v]) => `<option value="${k}">${v}</option>`).join("");
-
-    return `<h1>Identify Devices <span class="count">${clients.length}</span></h1>
-      <p class="subtitle">Devices that need manual identification. Set their category and optionally rename them.</p>
-      ${clients.length===0?'<div class="empty">All devices identified!</div>':""}
-      ${clients.map((d, i) => {
-        const mid = d.mac.replace(/:/g,"");
-        return `<div class="device-card ${d.suspicious?"device-suspicious":""}">
-          <div class="device-header">
-            <span class="device-num">#${i+1}</span>
-            <span class="device-mac mono">${d.mac}</span>
-            <span class="badge ${d.category}">${d.category_icon||"❓"} ${d.category_label||"Unknown"}</span>
-            ${d.confidence?`<span class="conf">${d.confidence} confidence</span>`:""}
-          </div>
-          <div class="device-body">
-            <div class="device-info">
-              <div class="info-row"><span class="info-label">Name</span><span>${d.name||"—"}</span></div>
-              <div class="info-row"><span class="info-label">Hostname</span><span>${d.hostname||"—"}</span></div>
-              <div class="info-row"><span class="info-label">Vendor</span><span>${d.vendor||"Unknown"}</span></div>
-              <div class="info-row"><span class="info-label">IP</span><span class="mono">${d.ip ? `<a href="http://${d.ip}" target="_blank" rel="noopener" class="ip-link">${d.ip}</a>` : "—"}</span></div>
-              <div class="info-row"><span class="info-label">SSID</span><span>${d.essid||"—"}</span></div>
-              <div class="info-row"><span class="info-label">Wired</span><span>${d.wired?"Yes":"No"}</span></div>
-              <div class="info-row"><span class="info-label">Signal</span><span>${d.rssi!=null?d.rssi+" dBm":"—"}</span></div>
-              <div class="info-row"><span class="info-label">TX/RX</span><span>${this._fmtB(d.tx_bytes)} / ${this._fmtB(d.rx_bytes)}</span></div>
-            </div>
-            <div class="id-tool">
-              <div class="id-title">Set Category:</div>
-              <input type="text" id="name-${mid}" class="id-name" placeholder="Device name (optional)" value="${d.name||""}" />
-              <div class="id-buttons">
-                ${Object.entries(catLabels).map(([k,v]) => `<button class="btn btn-cat" data-setcat="${k}" data-mac="${d.mac}">${(this._overview.category_icons||{})[k]||""} ${v}</button>`).join("")}
-              </div>
-            </div>
-          </div>
-        </div>`;
-      }).join("")}
-      ${this._vLearnedRules(catLabels)}`;
-  }
-
-  _vLearnedRules(catLabels) {
-    const L = this._learned || {};
-    const rows = [
-      ...Object.entries(L.vendor_rules || {}).map(([k, c]) => ["vendor", k, `vendor contains “${k}”`, c]),
-      ...Object.entries(L.hostname_rules || {}).map(([k, c]) => ["hostname", k, `hostname starts “${k}”`, c]),
-      ...Object.entries(L.mac_rules || {}).map(([k, c]) => ["mac", k, `MAC starts ${k}`, c]),
-      ...(L.port_rules || []).map(r => ["port", r.ports.join(","), `ports ${r.ports.join(", ")}`, r.category]),
-    ];
-    return `<div class="card"><h2>Learned rules <span class="count">${rows.length}</span></h2>
-      <p class="subtitle">Picked up from categories you set by hand, and used for devices nothing else can identify. Fix or delete any that are wrong.</p>
-      ${rows.length ? `<table class="data-table"><thead><tr><th>Rule</th><th>Category</th>${this._actionMode ? "<th></th>" : ""}</tr></thead><tbody>
-        ${rows.map(([kind, key, label, cat]) => `<tr>
-          <td>${label}</td>
-          <td>${this._actionMode
-            ? `<select data-rulekind="${kind}" data-rulekey="${key}">${Object.entries(catLabels).map(([k, v]) => `<option value="${k}"${k === cat ? " selected" : ""}>${v}</option>`).join("")}</select>`
-            : (catLabels[cat] || cat)}</td>
-          ${this._actionMode ? `<td><button class="btn" data-ruledel="${kind}" data-rulekey="${key}">Delete</button></td>` : ""}
-        </tr>`).join("")}
-      </tbody></table>` : '<div class="empty">No learned rules yet. Setting a device\'s category by hand teaches one.</div>'}
-    </div>`;
-  }
-
-  async _ruleUpdate(kind, key, category) {
-    // key comes from a data- attribute, which the browser has already turned
-    // back from &amp; etc. into the rule's real text.
-    const r = await this._ws("unifiblocker/learned_rule_update", { kind, key, category: category ?? null });
-    if (r && r.ok) { this._learned = r; this._updateMain(); }
-  }
-
-  _vCategory() {
-    const cat = this._viewArg;
-    const info = this._categories[cat] || {};
-
-    // Try filtering from clients list first.
-    let clients = (this._data.clients || []).filter(c => c.category === cat);
-
-    // If no matches but category says it has items, the clients WS
-    // might have failed or categories don't match. Fall back to
-    // fetching from the category-specific endpoint.
-    if (clients.length === 0 && info.count > 0) {
-      // Show loading and fetch directly.
-      if (!this._catCache) this._catCache = {};
-      if (this._catCache[cat]) {
-        clients = this._catCache[cat];
-      } else {
-        // Trigger async fetch.
-        this._ws("unifiblocker/category_clients", { category: cat }).then(r => {
-          if (r && r.clients) {
-            this._catCache[cat] = r.clients;
-            this._updateMain();
+    for (; (n = N.nextNode()) !== null && c.length < h; ) {
+      if (n.nodeType === 1) {
+        if (n.hasAttributes()) for (const d of n.getAttributeNames()) if (d.endsWith(Ft)) {
+          const f = u[r++], b = n.getAttribute(d).split(P), j = /([.?@])?(.*)/.exec(f);
+          c.push({ type: 1, index: i, name: j[2], strings: b, ctor: j[1] === "." ? ue : j[1] === "?" ? me : j[1] === "@" ? ve : rt }), n.removeAttribute(d);
+        } else d.startsWith(P) && (c.push({ type: 6, index: i }), n.removeAttribute(d));
+        if (Vt.test(n.tagName)) {
+          const d = n.textContent.split(P), f = d.length - 1;
+          if (f > 0) {
+            n.textContent = st ? st.emptyScript : "";
+            for (let b = 0; b < f; b++) n.append(d[b], Q()), N.nextNode(), c.push({ type: 2, index: ++i });
+            n.append(d[f], Q());
           }
-        });
-        return `<h1>${info.icon||""} ${info.label||cat} <span class="count">${info.count}</span></h1>
-          <div class="loading">Loading ${info.label || cat} devices...</div>`;
-      }
-    }
-
-    return `<h1>${info.icon||""} ${info.label||cat} <span class="count">${clients.length}</span></h1>
-      ${clients.map((d,i) => this._deviceCard(d, i+1)).join("")}
-      ${clients.length===0?'<div class="empty">No devices in this category.</div>':""}`;
-  }
-
-  _vNAS() {
-    const clients = this._data.clients || [];
-    const o = this._overview || {};
-    const ln = this._localnet || {};
-    const fw = ln.firewall || {};
-    const assignments = ln.assignments || {};
-    const assignedMacs = new Set(Object.keys(assignments));
-
-    // Group devices by access level.
-    const internetAccess = [];    // Normal DHCP, has internet
-    const localOnly = [];         // On ${this._lp()}.x, no internet
-    const blocked = [];           // Quarantined / blocked on controller
-    const unreviewed = [];        // State=new, no decision yet
-
-    clients.forEach(c => {
-      if (c.blocked || c.state === "quarantined") blocked.push(c);
-      else if (assignedMacs.has(c.mac.toLowerCase())) localOnly.push(c);
-      else if (c.state === "new") unreviewed.push(c);
-      else internetAccess.push(c);
-    });
-
-    // Cameras on main network (not local-only, not blocked).
-    const camerasExposed = clients.filter(c =>
-      c.is_camera && !assignedMacs.has(c.mac.toLowerCase()) && !c.blocked && c.state !== "quarantined"
-    );
-
-    // Risk summary.
-    const risks = [];
-    if (assignments && Object.keys(assignments).length > 0 && !fw.exists) risks.push({icon:"🟡", text:"Some local-only devices may not have internet blocking rules yet"});
-    if (camerasExposed.length) risks.push({icon:"🟠", text:`${camerasExposed.length} camera(s) have unrestricted internet access`});
-    if (unreviewed.length > 20) risks.push({icon:"🟡", text:`${unreviewed.length} devices haven't been reviewed yet`});
-    const suspCount = clients.filter(c => c.suspicious).length;
-    if (suspCount) risks.push({icon:"🟠", text:`${suspCount} device(s) flagged as suspicious`});
-
-    return `
-      <h1>🌐 Network Access Security</h1>
-      <p class="subtitle">Complete view of which devices can reach the internet, which are local-only, and which are blocked.</p>
-
-      ${risks.length ? `
-        <div class="card danger-card">
-          <h2>Action Required</h2>
-          ${risks.map(r => `<div style="padding:4px 0;font-size:13px">${r.icon} ${r.text}</div>`).join("")}
-        </div>
-      ` : '<div class="card" style="border-color:#4caf50"><h2 style="color:#4caf50">✅ Network looks good</h2><p>No immediate access control issues found.</p></div>'}
-
-      <div class="stat-grid">
-        ${this._stat("Internet Access", internetAccess.length, "🌍", "", "detail_connected")}
-        ${this._stat("Local Only", localOnly.length, "🔒")}
-        ${this._stat("Blocked", blocked.length, "🚫")}
-        ${this._stat("Unreviewed", unreviewed.length, "🆕", unreviewed.length > 10 ? "warn" : "", "new")}
-        ${this._stat("Cameras Exposed", camerasExposed.length, "📹", camerasExposed.length > 0 ? "danger" : "")}
-      </div>
-
-      <div class="card">
-        <h2>Internet Blocking</h2>
-        <table class="info-table">
-          <tr><td>Method</td><td><span class="badge ok">Per-device traffic rules</span></td></tr>
-          <tr><td>Status</td><td>${fw.blocked_count ? `<span class="badge ok">${fw.blocked_count}/${fw.total_devices} devices blocked</span>` : fw.total_devices ? '<span class="badge warn">Devices assigned but rules pending</span>' : '<span class="badge ok">No devices assigned yet</span>'}</td></tr>
-        </table>
-        <p style="margin-top:6px;font-size:11px;color:var(--secondary-text-color)">Internet access is blocked per-device automatically when you assign a device to Local Only. Each device gets its own traffic rule on the UCG Max.</p>
-      </div>
-
-      <div class="card">
-        <h2>Access Level Summary</h2>
-        <table class="data-table">
-          <thead><tr><th>Level</th><th>Description</th><th>Devices</th><th>Risk</th></tr></thead>
-          <tbody>
-            <tr><td>🌍 Internet</td><td>Full network + internet access (normal DHCP)</td><td>${internetAccess.length}</td><td>${camerasExposed.length ? '<span class="badge warn">Cameras exposed</span>' : '<span class="badge ok">OK</span>'}</td></tr>
-            <tr><td>🔒 Local Only</td><td>Network access but no internet (${this._lp()}.x)</td><td>${localOnly.length}</td><td><span class="badge ok">Isolated</span></td></tr>
-            <tr><td>🚫 Blocked</td><td>Quarantined — no network access at all</td><td>${blocked.length}</td><td><span class="badge ok">Contained</span></td></tr>
-            <tr><td>🆕 Unreviewed</td><td>Not yet classified — needs your decision</td><td>${unreviewed.length}</td><td>${unreviewed.length > 10 ? '<span class="badge warn">Review needed</span>' : '<span class="badge ok">OK</span>'}</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      ${camerasExposed.length ? `
-        <div class="card warn-card">
-          <h2>📹 Cameras With Internet Access (${camerasExposed.length})</h2>
-          <p class="subtitle">These cameras can phone home to cloud servers. Move them to Local Only to block internet while keeping local streaming.</p>
-          <table class="data-table">
-            <thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>IP</th><th>Threat</th>${this._actionMode ? '<th>Action</th>' : ''}</tr></thead>
-            <tbody>
-              ${camerasExposed.map(c => `<tr>
-                <td class="mono">${c.mac}</td>
-                <td>${c.name||"—"}</td>
-                <td>${c.vendor||"?"}</td>
-                <td class="mono">${c.ip||"—"}</td>
-                <td>${c.threat_level !== "none" ? `<span class="badge ${c.threat_level}">${c.threat_level}</span>` : ""}</td>
-                ${this._actionMode ? `<td>
-                  <button class="btn btn-trust" data-localassign="${c.category||'camera'}" data-mac="${c.mac}" style="font-size:10px">🔒 Local Only</button>
-                  <button class="btn btn-quarantine" data-action="quarantine" data-mac="${c.mac}" style="font-size:10px">🚫 Block</button>
-                </td>` : ''}
-              </tr>`).join("")}
-            </tbody>
-          </table>
-        </div>
-      ` : ''}
-
-      <div class="card">
-        <h2>🔒 Local Only Devices (${localOnly.length})</h2>
-        ${localOnly.length === 0 ? '<div class="empty">No devices assigned to local-only yet. Use the Local Only view to assign devices.</div>' : `
-          <table class="data-table">
-            <thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>IP</th><th>Category</th></tr></thead>
-            <tbody>
-              ${localOnly.map(c => {
-                const a = assignments[c.mac.toLowerCase()] || {};
-                return `<tr>
-                  <td class="mono">${c.mac}</td>
-                  <td>${c.name||"—"}</td>
-                  <td>${c.vendor||"?"}</td>
-                  <td class="mono">${a.ip || c.ip||"—"}</td>
-                  <td>${c.category_icon||""} ${c.category_label||""}</td>
-                </tr>`;
-              }).join("")}
-            </tbody>
-          </table>
-        `}
-      </div>
-
-      <div class="card">
-        <h2>🚫 Blocked / Quarantined (${blocked.length})</h2>
-        ${blocked.length === 0 ? '<div class="empty">No blocked devices.</div>' : `
-          <table class="data-table">
-            <thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>IP</th><th>State</th>${this._actionMode ? '<th>Action</th>' : ''}</tr></thead>
-            <tbody>
-              ${blocked.map(c => `<tr>
-                <td class="mono">${c.mac}</td>
-                <td>${c.name||"—"}</td>
-                <td>${c.vendor||"?"}</td>
-                <td class="mono">${c.ip||"—"}</td>
-                <td><span class="badge danger">${c.blocked ? "blocked" : c.state}</span></td>
-                ${this._actionMode ? `<td>
-                  <button class="btn btn-trust" data-action="trust" data-mac="${c.mac}" style="font-size:10px">✅ Trust</button>
-                  <button class="btn btn-ignore" data-action="unblock" data-mac="${c.mac}" style="font-size:10px">Unblock</button>
-                </td>` : ''}
-              </tr>`).join("")}
-            </tbody>
-          </table>
-        `}
-      </div>
-
-      <div class="card">
-        <h2>How Network Access Levels Work</h2>
-        <table class="data-table" style="font-size:12px">
-          <thead><tr><th>Level</th><th>Internet</th><th>Local Network</th><th>How to Assign</th></tr></thead>
-          <tbody>
-            <tr><td>🌍 Internet (default)</td><td>✅ Yes</td><td>✅ Yes</td><td>Default for all DHCP devices (192.168.3.x)</td></tr>
-            <tr><td>🔒 Local Only</td><td>🚫 No</td><td>✅ Yes</td><td>Assign in Local Only view → gets ${this._lp()}.x + firewall block</td></tr>
-            <tr><td>🚫 Blocked</td><td>🚫 No</td><td>🚫 No</td><td>Quarantine or Block → controller rejects all connections</td></tr>
-            <tr><td>✅ Trusted (reserved)</td><td>✅ Yes</td><td>✅ Yes</td><td>Trust + DHCP reservation in 192.168.1.x</td></tr>
-          </tbody>
-        </table>
-        <p style="margin-top:10px;font-size:12px">
-          <strong>Recommended workflow for cameras:</strong> Scan ports → review vendor/model → if it's a camera, move to <strong>Local Only</strong>.
-          The camera keeps working for local RTSP/ONVIF streaming but can't phone home to Chinese cloud servers.
-          If a device is actively malicious (backdoor ports, rogue DHCP), <strong>Block</strong> it entirely.
-        </p>
-      </div>
-
-      ${!this._actionMode ? '<div class="ro-banner">Read-only mode — enable Action Mode in the sidebar to change device access levels</div>' : ''}`;
-  }
-
-  _hasNasDevices() {
-    const cats = this._categories || {};
-    return (cats["nas"] && cats["nas"].count > 0);
-  }
-
-  _getNasDevices() {
-    return (this._data.clients || []).filter(c => c.category === "nas");
-  }
-
-  _vStorage() {
-    const nasDevices = this._getNasDevices();
-
-    // If no NAS from client list, try category cache.
-    let devices = nasDevices;
-    if (devices.length === 0 && this._catCache && this._catCache["nas"]) {
-      devices = this._catCache["nas"];
-    }
-    if (devices.length === 0 && this._hasNasDevices()) {
-      this._ws("unifiblocker/category_clients", { category: "nas" }).then(r => {
-        if (r && r.clients) {
-          if (!this._catCache) this._catCache = {};
-          this._catCache["nas"] = r.clients;
-          this._updateMain();
         }
-      });
-      return `<h1>💾 Storage / NAS</h1><div class="loading">Loading NAS devices...</div>`;
+      } else if (n.nodeType === 8) if (n.data === qt) c.push({ type: 2, index: i });
+      else {
+        let d = -1;
+        for (; (d = n.data.indexOf(P, d + 1)) !== -1; ) c.push({ type: 7, index: i }), d += P.length - 1;
+      }
+      i++;
     }
-
-    // Identify UNAS vs other NAS.
-    const unas = devices.filter(d => {
-      const v = (d.vendor || "").toLowerCase();
-      const h = (d.hostname || d.name || "").toLowerCase();
-      return v.includes("ubiquiti") || h.includes("unas") || h.includes("unifi-nas");
-    });
-    const otherNas = devices.filter(d => !unas.includes(d));
-
-    return `
-      <h1>💾 Storage / NAS <span class="count">${devices.length}</span></h1>
-      <p class="subtitle">Network-attached storage devices detected on your network.</p>
-
-      ${unas.length ? `
-        <div class="card" style="border-color:#0f9b8e">
-          <h2>UniFi NAS (UNAS)</h2>
-          ${unas.map(d => `
-            <div style="display:flex;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--divider-color,#2a2a4a)">
-              <span style="font-size:28px">💾</span>
-              <div>
-                <div style="font-weight:600">${d.name || d.hostname || "UniFi NAS"}</div>
-                <div class="mono" style="font-size:11px;color:var(--secondary-text-color)">${d.ip || "—"} • ${d.mac}</div>
-                <div style="font-size:11px;color:var(--secondary-text-color)">${d.vendor || "Ubiquiti"}</div>
-              </div>
-            </div>
-          `).join("")}
-
-          <div style="margin-top:12px">
-            <h3 style="font-size:13px;margin-bottom:8px">HA Backup to UNAS</h3>
-            <p style="font-size:12px;line-height:1.6">
-              The UniFi NAS can serve as your Home Assistant backup target.
-            </p>
-            <ol style="font-size:12px;padding-left:20px;line-height:2;margin-top:6px">
-              <li>On the UNAS, create an SMB share (e.g. <code>ha-backups</code>)</li>
-              <li>Create a user with write access to that share</li>
-              <li>In HA, install the <strong>Samba Backup</strong> add-on (Settings → Add-ons)</li>
-              <li>Configure it:
-                <ul style="padding-left:16px;line-height:1.8">
-                  <li>Host: <code>${unas[0]?.ip || "your-unas-ip"}</code></li>
-                  <li>Share: <code>ha-backups</code></li>
-                  <li>Username/Password: the user you created</li>
-                </ul>
-              </li>
-              <li>Set a backup schedule (daily recommended)</li>
-              <li>Test with a manual backup first</li>
-            </ol>
-          </div>
-
-          <div style="margin-top:12px">
-            <h3 style="font-size:13px;margin-bottom:8px">Network Recommendations</h3>
-            <ul style="font-size:12px;padding-left:20px;line-height:2">
-              <li>Keep the UNAS on your <strong>trusted network</strong> (192.168.1.x) with a reserved IP</li>
-              <li>The UNAS needs internet access for firmware updates and cloud features</li>
-              <li>Do <strong>NOT</strong> put it on the local-only subnet (${this._lp()}.x)</li>
-              <li>Consider giving it a static IP via DHCP reservation for reliable backups</li>
-            </ul>
-          </div>
-        </div>
-      ` : ""}
-
-      ${otherNas.length ? `
-        <div class="card">
-          <h2>Other NAS Devices (${otherNas.length})</h2>
-          <table class="data-table">
-            <thead><tr><th>Name</th><th>Vendor</th><th>IP</th><th>MAC</th><th>State</th></tr></thead>
-            <tbody>
-              ${otherNas.map(d => `<tr>
-                <td>${d.name || d.hostname || "—"}</td>
-                <td>${d.vendor || "?"}</td>
-                <td class="mono">${d.ip || "—"}</td>
-                <td class="mono">${d.mac}</td>
-                <td><span class="badge ${d.state || "new"}">${d.state || "new"}</span></td>
-              </tr>`).join("")}
-            </tbody>
-          </table>
-
-          <div style="margin-top:12px">
-            <h3 style="font-size:13px;margin-bottom:8px">Backup Options</h3>
-            <p style="font-size:12px;line-height:1.6">
-              These NAS devices can also be used for HA backups via SMB, NFS, or rsync.
-              Install the <strong>Samba Backup</strong> or <strong>Remote Backup</strong> add-on in HA.
-            </p>
-          </div>
-        </div>
-      ` : ""}
-
-      ${devices.length === 0 ? `
-        <div class="card">
-          <h2>No NAS Detected Yet</h2>
-          <p style="font-size:12px;line-height:1.6">No devices have been categorized as NAS yet. If you have a NAS on your network, you can:</p>
-          <ol style="font-size:12px;padding-left:20px;line-height:2;margin-top:6px">
-            <li>Go to <strong>Identify</strong> in the sidebar</li>
-            <li>Find your NAS device in the list</li>
-            <li>Click the <strong>NAS / Storage</strong> category button to categorize it</li>
-            <li>The system will learn the pattern and detect similar devices automatically</li>
-          </ol>
-          <p style="font-size:12px;margin-top:8px"><strong>Supported NAS devices:</strong> UniFi NAS (UNAS), Synology, QNAP, TrueNAS, Unraid, Western Digital MyCloud, Asustor, TerraMaster, Drobo, Buffalo LinkStation</p>
-        </div>
-      ` : ""}
-    `;
   }
-
-  _vNetMap() {
-    const clients = this._data.clients || [];
-    const o = this._overview || {};
-    const h = o.health || {};
-    const cats = this._categories || {};
-    const ln = this._localnet || {};
-    const assignments = ln.assignments || {};
-    const assignedMacs = new Set(Object.keys(assignments));
-
-    // Group by subnet.
-    const trusted = clients.filter(c => c.ip && c.ip.startsWith("192.168.1."));
-    const localOnly = clients.filter(c => c.ip && c.ip.startsWith(this._lp() + "."));
-    const dhcp = clients.filter(c => c.ip && c.ip.startsWith("192.168.3."));
-    const other = clients.filter(c => c.ip && !c.ip.startsWith("192.168.1.") && !c.ip.startsWith(this._lp() + ".") && !c.ip.startsWith("192.168.3."));
-
-    // Category counts per zone.
-    const countCats = (list) => {
-      const m = {};
-      list.forEach(c => { const k = c.category_icon || "❓"; m[k] = (m[k]||0)+1; });
-      return Object.entries(m).map(([i,n]) => `${i}${n}`).join(" ");
+  static createElement(t, a) {
+    const s = T.createElement("template");
+    return s.innerHTML = t, s;
+  }
+}
+function z(e, t, a = e, s) {
+  if (t === B) return t;
+  let n = s !== void 0 ? a._$Co?.[s] : a._$Cl;
+  const i = K(t) ? void 0 : t._$litDirective$;
+  return n?.constructor !== i && (n?._$AO?.(!1), i === void 0 ? n = void 0 : (n = new i(e), n._$AT(e, a, s)), s !== void 0 ? (a._$Co ??= [])[s] = n : a._$Cl = n), n !== void 0 && (t = z(e, n._$AS(e, t.values), n, s)), t;
+}
+class pe {
+  constructor(t, a) {
+    this._$AV = [], this._$AN = void 0, this._$AD = t, this._$AM = a;
+  }
+  get parentNode() {
+    return this._$AM.parentNode;
+  }
+  get _$AU() {
+    return this._$AM._$AU;
+  }
+  u(t) {
+    const { el: { content: a }, parts: s } = this._$AD, n = (t?.creationScope ?? T).importNode(a, !0);
+    N.currentNode = n;
+    let i = N.nextNode(), r = 0, h = 0, c = s[0];
+    for (; c !== void 0; ) {
+      if (r === c.index) {
+        let p;
+        c.type === 2 ? p = new J(i, i.nextSibling, this, t) : c.type === 1 ? p = new c.ctor(i, c.name, c.strings, this, t) : c.type === 6 && (p = new be(i, this, t)), this._$AV.push(p), c = s[++h];
+      }
+      r !== c?.index && (i = N.nextNode(), r++);
+    }
+    return N.currentNode = T, n;
+  }
+  p(t) {
+    let a = 0;
+    for (const s of this._$AV) s !== void 0 && (s.strings !== void 0 ? (s._$AI(t, s, a), a += s.strings.length - 2) : s._$AI(t[a])), a++;
+  }
+}
+class J {
+  get _$AU() {
+    return this._$AM?._$AU ?? this._$Cv;
+  }
+  constructor(t, a, s, n) {
+    this.type = 2, this._$AH = l, this._$AN = void 0, this._$AA = t, this._$AB = a, this._$AM = s, this.options = n, this._$Cv = n?.isConnected ?? !0;
+  }
+  get parentNode() {
+    let t = this._$AA.parentNode;
+    const a = this._$AM;
+    return a !== void 0 && t?.nodeType === 11 && (t = a.parentNode), t;
+  }
+  get startNode() {
+    return this._$AA;
+  }
+  get endNode() {
+    return this._$AB;
+  }
+  _$AI(t, a = this) {
+    t = z(this, t, a), K(t) ? t === l || t == null || t === "" ? (this._$AH !== l && this._$AR(), this._$AH = l) : t !== this._$AH && t !== B && this._(t) : t._$litType$ !== void 0 ? this.$(t) : t.nodeType !== void 0 ? this.T(t) : ce(t) ? this.k(t) : this._(t);
+  }
+  O(t) {
+    return this._$AA.parentNode.insertBefore(t, this._$AB);
+  }
+  T(t) {
+    this._$AH !== t && (this._$AR(), this._$AH = this.O(t));
+  }
+  _(t) {
+    this._$AH !== l && K(this._$AH) ? this._$AA.nextSibling.data = t : this.T(T.createTextNode(t)), this._$AH = t;
+  }
+  $(t) {
+    const { values: a, _$litType$: s } = t, n = typeof s == "number" ? this._$AC(t) : (s.el === void 0 && (s.el = X.createElement(Qt(s.h, s.h[0]), this.options)), s);
+    if (this._$AH?._$AD === n) this._$AH.p(a);
+    else {
+      const i = new pe(n, this), r = i.u(this.options);
+      i.p(a), this.T(r), this._$AH = i;
+    }
+  }
+  _$AC(t) {
+    let a = Rt.get(t.strings);
+    return a === void 0 && Rt.set(t.strings, a = new X(t)), a;
+  }
+  k(t) {
+    gt(this._$AH) || (this._$AH = [], this._$AR());
+    const a = this._$AH;
+    let s, n = 0;
+    for (const i of t) n === a.length ? a.push(s = new J(this.O(Q()), this.O(Q()), this, this.options)) : s = a[n], s._$AI(i), n++;
+    n < a.length && (this._$AR(s && s._$AB.nextSibling, n), a.length = n);
+  }
+  _$AR(t = this._$AA.nextSibling, a) {
+    for (this._$AP?.(!1, !0, a); t !== this._$AB; ) {
+      const s = Ot(t).nextSibling;
+      Ot(t).remove(), t = s;
+    }
+  }
+  setConnected(t) {
+    this._$AM === void 0 && (this._$Cv = t, this._$AP?.(t));
+  }
+}
+class rt {
+  get tagName() {
+    return this.element.tagName;
+  }
+  get _$AU() {
+    return this._$AM._$AU;
+  }
+  constructor(t, a, s, n, i) {
+    this.type = 1, this._$AH = l, this._$AN = void 0, this.element = t, this.name = a, this._$AM = n, this.options = i, s.length > 2 || s[0] !== "" || s[1] !== "" ? (this._$AH = Array(s.length - 1).fill(new String()), this.strings = s) : this._$AH = l;
+  }
+  _$AI(t, a = this, s, n) {
+    const i = this.strings;
+    let r = !1;
+    if (i === void 0) t = z(this, t, a, 0), r = !K(t) || t !== this._$AH && t !== B, r && (this._$AH = t);
+    else {
+      const h = t;
+      let c, p;
+      for (t = i[0], c = 0; c < i.length - 1; c++) p = z(this, h[s + c], a, c), p === B && (p = this._$AH[c]), r ||= !K(p) || p !== this._$AH[c], p === l ? t = l : t !== l && (t += (p ?? "") + i[c + 1]), this._$AH[c] = p;
+    }
+    r && !n && this.j(t);
+  }
+  j(t) {
+    t === l ? this.element.removeAttribute(this.name) : this.element.setAttribute(this.name, t ?? "");
+  }
+}
+class ue extends rt {
+  constructor() {
+    super(...arguments), this.type = 3;
+  }
+  j(t) {
+    this.element[this.name] = t === l ? void 0 : t;
+  }
+}
+class me extends rt {
+  constructor() {
+    super(...arguments), this.type = 4;
+  }
+  j(t) {
+    this.element.toggleAttribute(this.name, !!t && t !== l);
+  }
+}
+class ve extends rt {
+  constructor(t, a, s, n, i) {
+    super(t, a, s, n, i), this.type = 5;
+  }
+  _$AI(t, a = this) {
+    if ((t = z(this, t, a, 0) ?? l) === B) return;
+    const s = this._$AH, n = t === l && s !== l || t.capture !== s.capture || t.once !== s.once || t.passive !== s.passive, i = t !== l && (s === l || n);
+    n && this.element.removeEventListener(this.name, this, s), i && this.element.addEventListener(this.name, this, t), this._$AH = t;
+  }
+  handleEvent(t) {
+    typeof this._$AH == "function" ? this._$AH.call(this.options?.host ?? this.element, t) : this._$AH.handleEvent(t);
+  }
+}
+class be {
+  constructor(t, a, s) {
+    this.element = t, this.type = 6, this._$AN = void 0, this._$AM = a, this.options = s;
+  }
+  get _$AU() {
+    return this._$AM._$AU;
+  }
+  _$AI(t) {
+    z(this, t);
+  }
+}
+const $e = $t.litHtmlPolyfillSupport;
+$e?.(X, J), ($t.litHtmlVersions ??= []).push("3.3.3");
+const ge = (e, t, a) => {
+  const s = a?.renderBefore ?? t;
+  let n = s._$litPart$;
+  if (n === void 0) {
+    const i = a?.renderBefore ?? null;
+    s._$litPart$ = n = new J(t.insertBefore(Q(), i), i, void 0, a ?? {});
+  }
+  return n._$AI(e), n;
+};
+/**
+ * @license
+ * Copyright 2017 Google LLC
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+const ft = globalThis;
+class $ extends H {
+  constructor() {
+    super(...arguments), this.renderOptions = { host: this }, this._$Do = void 0;
+  }
+  createRenderRoot() {
+    const t = super.createRenderRoot();
+    return this.renderOptions.renderBefore ??= t.firstChild, t;
+  }
+  update(t) {
+    const a = this.render();
+    this.hasUpdated || (this.renderOptions.isConnected = this.isConnected), super.update(t), this._$Do = ge(a, this.renderRoot, this.renderOptions);
+  }
+  connectedCallback() {
+    super.connectedCallback(), this._$Do?.setConnected(!0);
+  }
+  disconnectedCallback() {
+    super.disconnectedCallback(), this._$Do?.setConnected(!1);
+  }
+  render() {
+    return B;
+  }
+}
+$._$litElement$ = !0, $.finalized = !0, ft.litElementHydrateSupport?.({ LitElement: $ });
+const fe = ft.litElementPolyfillSupport;
+fe?.({ LitElement: $ });
+(ft.litElementVersions ??= []).push("4.2.2");
+/**
+ * @license
+ * Copyright 2017 Google LLC
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+const x = (e) => (t, a) => {
+  a !== void 0 ? a.addInitializer(() => {
+    customElements.define(e, t);
+  }) : customElements.define(e, t);
+};
+/**
+ * @license
+ * Copyright 2017 Google LLC
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+const ye = { attribute: !0, type: String, converter: et, reflect: !1, hasChanged: bt }, we = (e = ye, t, a) => {
+  const { kind: s, metadata: n } = a;
+  let i = globalThis.litPropertyMetadata.get(n);
+  if (i === void 0 && globalThis.litPropertyMetadata.set(n, i = /* @__PURE__ */ new Map()), s === "setter" && ((e = Object.create(e)).wrapped = !0), i.set(a.name, e), s === "accessor") {
+    const { name: r } = a;
+    return { set(h) {
+      const c = t.get.call(this);
+      t.set.call(this, h), this.requestUpdate(r, c, e, !0, h);
+    }, init(h) {
+      return h !== void 0 && this.C(r, void 0, e, h), h;
+    } };
+  }
+  if (s === "setter") {
+    const { name: r } = a;
+    return function(h) {
+      const c = this[r];
+      t.call(this, h), this.requestUpdate(r, c, e, !0, h);
     };
+  }
+  throw Error("Unsupported decorator location: " + s);
+};
+function g(e) {
+  return (t, a) => typeof a == "object" ? we(e, t, a) : ((s, n, i) => {
+    const r = n.hasOwnProperty(i);
+    return n.constructor.createProperty(i, s), r ? Object.getOwnPropertyDescriptor(n, i) : void 0;
+  })(e, t, a);
+}
+/**
+ * @license
+ * Copyright 2017 Google LLC
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+function v(e) {
+  return g({ ...e, state: !0, attribute: !1 });
+}
+class pt extends Error {
+  constructor(t, a) {
+    super(a), this.code = t;
+  }
+}
+async function _(e, t, a = {}) {
+  try {
+    return await e.callWS({ type: `unifiblocker/${t}`, ...a });
+  } catch (s) {
+    throw new pt(s?.code ?? "error", s?.message ?? String(s));
+  }
+}
+async function S(e, t) {
+  try {
+    return await e;
+  } catch {
+    return t;
+  }
+}
+async function _e(e) {
+  const [t, a, s, n, i, r, h, c] = await Promise.all([
+    S(_(e, "overview"), {}),
+    S(_(e, "clients"), { clients: [] }),
+    S(_(e, "recommendations"), {}),
+    S(_(e, "localnet_status"), {}),
+    S(_(e, "miners"), { rigs: [], summary: {} }),
+    S(_(e, "scan_results"), { results: {} }),
+    S(_(e, "report_status"), null),
+    S(_(e, "learned_rules"), null)
+  ]);
+  return {
+    overview: t,
+    clients: a.clients || [],
+    recs: s,
+    localnet: n,
+    miners: i,
+    scans: r.results || {},
+    report: h,
+    learned: c,
+    loaded: !0,
+    error: "",
+    updated: Date.now()
+  };
+}
+const k = vt`
+  :host {
+    --ub-ok: var(--success-color, #43a047);
+    --ub-warn: var(--warning-color, #ffa000);
+    --ub-bad: var(--error-color, #db4437);
+    --ub-info: var(--info-color, #039be5);
+    --ub-muted: var(--secondary-text-color);
+    --ub-line: var(--divider-color, rgba(127, 127, 127, 0.25));
+    --ub-card: var(--card-background-color, var(--ha-card-background, #fff));
+    --ub-radius: var(--ha-card-border-radius, 12px);
+    color: var(--primary-text-color);
+    font-family: var(--paper-font-body1_-_font-family, Roboto, system-ui, sans-serif);
+  }
+  h1 { font-size: 22px; font-weight: 500; margin: 0 0 4px; }
+  h2 { font-size: 16px; font-weight: 500; margin: 0 0 12px; }
+  h3 { font-size: 14px; font-weight: 500; margin: 12px 0 6px; }
+  p { margin: 0 0 8px; line-height: 1.45; }
+  .sub { color: var(--ub-muted); font-size: 13px; margin-bottom: 16px; }
+  .muted { color: var(--ub-muted); }
+  .small { font-size: 12px; }
+  .mono { font-family: var(--code-font-family, ui-monospace, Consolas, monospace); font-size: 12px; }
+  .card {
+    background: var(--ub-card);
+    border-radius: var(--ub-radius);
+    box-shadow: var(--ha-card-box-shadow, none);
+    border: 1px solid var(--ha-card-border-color, var(--ub-line));
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .grid { display: grid; gap: 16px; }
+  .grid.two { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tile {
+    background: var(--ub-card); border: 1px solid var(--ha-card-border-color, var(--ub-line));
+    border-radius: var(--ub-radius); padding: 12px 14px; text-align: left; color: inherit; font: inherit;
+  }
+  button.tile { cursor: pointer; }
+  button.tile:hover, button.tile:focus-visible { border-color: var(--primary-color); outline: none; }
+  .tile .n { font-size: 26px; font-weight: 500; line-height: 1.2; }
+  .tile .l { color: var(--ub-muted); font-size: 12px; }
+  .tile.bad .n { color: var(--ub-bad); }
+  .tile.warn .n { color: var(--ub-warn); }
+  .tile.ok .n { color: var(--ub-ok); }
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 10px;
+    font-size: 11px; font-weight: 500; line-height: 18px; white-space: nowrap;
+    background: color-mix(in srgb, var(--ub-muted) 18%, transparent); color: var(--primary-text-color);
+  }
+  .badge.ok { background: color-mix(in srgb, var(--ub-ok) 20%, transparent); }
+  .badge.warn { background: color-mix(in srgb, var(--ub-warn) 25%, transparent); }
+  .badge.bad { background: color-mix(in srgb, var(--ub-bad) 22%, transparent); }
+  .badge.info { background: color-mix(in srgb, var(--ub-info) 20%, transparent); }
+  button.btn, a.btn {
+    display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--ub-line); border-radius: 8px;
+    background: transparent; color: var(--primary-text-color); padding: 6px 12px; font: inherit; font-size: 13px;
+    cursor: pointer; text-decoration: none;
+  }
+  button.btn:hover, button.btn:focus-visible { border-color: var(--primary-color); outline: none; }
+  button.btn.primary { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); }
+  button.btn.danger { color: var(--ub-bad); border-color: color-mix(in srgb, var(--ub-bad) 50%, transparent); }
+  button.btn:disabled { opacity: 0.5; cursor: default; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .spacer { flex: 1; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--ub-line); vertical-align: top; }
+  th { color: var(--ub-muted); font-weight: 500; font-size: 12px; white-space: nowrap; }
+  th button { all: unset; cursor: pointer; }
+  th button:focus-visible { outline: 2px solid var(--primary-color); }
+  tbody tr.click { cursor: pointer; }
+  tbody tr.click:hover, tbody tr.click:focus-visible { background: color-mix(in srgb, var(--primary-color) 7%, transparent); outline: none; }
+  .scroll { overflow-x: auto; }
+  .empty { color: var(--ub-muted); padding: 16px 0; text-align: center; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .chip {
+    border: 1px solid var(--ub-line); border-radius: 16px; padding: 4px 12px; background: transparent;
+    color: inherit; font: inherit; font-size: 13px; cursor: pointer;
+  }
+  .chip[aria-pressed="true"] { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); }
+  input[type="search"], input[type="text"], select {
+    font: inherit; font-size: 14px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--ub-line);
+    background: var(--ub-card); color: var(--primary-text-color);
+  }
+  .kv { display: grid; grid-template-columns: 120px 1fr; gap: 4px 12px; font-size: 13px; }
+  .kv > :nth-child(odd) { color: var(--ub-muted); }
+  .rec { border-left: 4px solid var(--ub-line); padding: 8px 12px; margin-bottom: 10px; }
+  .rec.critical { border-color: var(--ub-bad); }
+  .rec.high { border-color: var(--ub-warn); }
+  .rec.medium { border-color: var(--ub-info); }
+  .rec .t { font-weight: 500; }
+  .rec .d { color: var(--ub-muted); font-size: 13px; white-space: pre-line; margin: 4px 0; }
+  button.linkish { all: unset; cursor: pointer; color: var(--primary-color); }
+  button.linkish:focus-visible { outline: 2px solid var(--primary-color); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+`;
+function L(e) {
+  if (!e) return "0 B";
+  const t = ["B", "KB", "MB", "GB", "TB"];
+  let a = 0, s = e;
+  for (; s >= 1e3 && a < t.length - 1; )
+    s /= 1e3, a++;
+  return `${s >= 100 || a === 0 ? Math.round(s) : s.toFixed(1)} ${t[a]}`;
+}
+function y(e, t, a = `${t}s`) {
+  return `${e} ${e === 1 ? t : a}`;
+}
+function Kt(e) {
+  if (!e) return "—";
+  const t = Math.floor(e / 86400), a = Math.floor(e % 86400 / 3600), s = Math.floor(e % 3600 / 60);
+  return t ? `${t}d ${a}h` : a ? `${a}h ${s}m` : `${s}m`;
+}
+function Dt(e) {
+  if (!e) return "—";
+  const t = ["H/s", "kH/s", "MH/s", "GH/s", "TH/s", "PH/s"];
+  let a = 0, s = e;
+  for (; s >= 1e3 && a < t.length - 1; )
+    s /= 1e3, a++;
+  return `${s.toFixed(s >= 100 ? 0 : 1)} ${t[a]}`;
+}
+const I = (e) => e == null ? "—" : `$${e.toFixed(2)}`;
+function m(e) {
+  return e.name || e.hostname || e.mac;
+}
+function yt(e, t = 3, a = 22) {
+  if (!e || !e.length) return l;
+  const s = Math.max(...e, 1), n = e.reduce((i, r) => i + r, 0);
+  return o`<svg width=${e.length * (t + 1)} height=${a} role="img"
+    aria-label="Traffic per hour over 24 hours, ${L(n)} total" style="vertical-align:middle;color:var(--primary-color)">
+    ${e.map((i, r) => {
+    const h = Math.max(1, Math.round(a * i / s));
+    return de`<rect x=${r * (t + 1)} y=${a - h} width=${t} height=${h} fill="currentColor" opacity=${r === e.length - 1 ? 1 : 0.55}></rect>`;
+  })}
+  </svg>`;
+}
+const xe = { new: "warn", trusted: "ok", ignored: "", quarantined: "bad" };
+function wt(e) {
+  return e.blocked && e.state !== "quarantined" ? o`<span class="badge bad">blocked</span>` : o`<span class="badge ${xe[e.state] ?? ""}">${e.state}</span>`;
+}
+function M(e) {
+  switch (e.containment) {
+    case "holding":
+      return o`<span class="badge ok">contained</span>`;
+    case "quiet":
+      return o`<span class="badge ok">contained · quiet</span>`;
+    case "leaking":
+      return o`<span class="badge bad">NOT contained</span>`;
+    default:
+      return e.is_camera ? o`<span class="badge warn">internet open</span>` : l;
+  }
+}
+function lt(e) {
+  const t = e.vulns?.worst;
+  return t === "affected" ? o`<span class="badge bad">exploited bug</span>` : t === "likely" ? o`<span class="badge bad">likely exploited bug</span>` : t === "check" ? o`<span class="badge warn">check firmware</span>` : (e.vulns?.firmware_age_years ?? 0) >= 5 ? o`<span class="badge warn">firmware ${e.vulns.firmware_age_years}y old</span>` : l;
+}
+function ct(e) {
+  const t = e.overview.category_labels || {};
+  return Object.entries(t).sort((a, s) => a[1].localeCompare(s[1]));
+}
+const jt = { critical: 0, high: 1, medium: 2, low: 3, info: 4 }, _t = (e, t) => (jt[e.priority] ?? 5) - (jt[t.priority] ?? 5);
+function ke(e, t, a) {
+  const s = t.action_data?.mac || a;
+  if (!s) return l;
+  const n = e.snap.clients.find((r) => r.mac.toLowerCase() === s.toLowerCase()), i = n ? m(n) : s;
+  switch (t.action) {
+    case "local_only":
+      return o`<button class="btn primary" @click=${() => e.act(
+        "localnet_assign",
+        { mac: s, category: t.action_data?.category || n?.category || "iot" },
+        { confirm: `Put ${i} on local-only? It gets a ${e.snap.localnet.prefix || "192.168.2"}.x address and is blocked from the internet. It reconnects to pick up the new address.`, done: `${i} is now local-only` }
+      )}>Make local-only</button>`;
+    case "block_internet":
+      return o`<button class="btn primary" @click=${() => e.act(
+        "block_internet",
+        { mac: s },
+        { confirm: `Block ${i} from the internet? It keeps its address and keeps working on your network.`, done: `${i} blocked from the internet` }
+      )}>Block internet</button>`;
+    case "quarantine":
+      return o`<button class="btn danger" @click=${() => e.act("quarantine", { mac: s }, { confirm: `Quarantine ${i}? It's blocked on the controller and can't use the network at all.`, danger: !0, done: `${i} quarantined` })}>Quarantine</button>`;
+    case "review":
+      return o`<button class="btn" @click=${() => e.open(s)}>Open device</button>`;
+    default:
+      return n ? o`<button class="btn" @click=${() => e.open(s)}>Open device</button>` : l;
+  }
+}
+function xt(e, t, a) {
+  const s = a ? e.snap.clients.find((n) => n.mac.toLowerCase() === a.toLowerCase()) : void 0;
+  return o`<div class="rec ${t.priority}">
+    <div class="row">
+      <span class="badge ${t.priority === "critical" ? "bad" : t.priority === "high" ? "warn" : t.priority === "medium" ? "info" : ""}">${t.priority}</span>
+      <span class="t">${t.title}</span>
+      ${s ? o`<span class="muted small">· ${m(s)}</span>` : l}
+    </div>
+    <div class="d">${t.detail}</div>
+    <div class="row">${ke(e, t, a)}</div>
+  </div>`;
+}
+var Ce = Object.defineProperty, Ae = Object.getOwnPropertyDescriptor, dt = (e, t, a, s) => {
+  for (var n = s > 1 ? void 0 : s ? Ae(t, a) : t, i = e.length - 1, r; i >= 0; i--)
+    (r = e[i]) && (n = (s ? r(t, a, n) : r(n)) || n);
+  return s && n && Ce(t, a, n), n;
+};
+let F = class extends $ {
+  constructor() {
+    super(...arguments), this.quantify = null, this.running = !1;
+  }
+  async runQuantify() {
+    this.running = !0;
+    const e = await this.ctx.act("deep_scan_unknowns", {}, { confirm: "Deep-scan every device that's still unknown? It probes each one (web, TLS, SSH, mDNS, NetBIOS) and takes a few minutes." });
+    this.running = !1, e && (this.quantify = e);
+  }
+  render() {
+    const { snap: e } = this.ctx;
+    if (!e.loaded) return o`<div class="empty">Loading…</div>`;
+    const t = e.overview, a = e.clients.filter((c) => c.is_camera), s = a.filter((c) => c.containment === "holding" || c.containment === "quiet").length, n = e.clients.filter((c) => c.containment === "leaking"), i = e.clients.filter((c) => c.vulns?.worst === "affected" || c.vulns?.worst === "likely").length, r = e.clients.filter((c) => c.category === "unknown").length, h = [
+      ...(e.recs.network_recs || []).map((c) => ({ r: c })),
+      ...Object.entries(e.recs.device_recs || {}).flatMap(([c, p]) => p.map((u) => ({ r: u, mac: c })))
+    ].filter((c) => c.r.priority === "critical" || c.r.priority === "high").sort((c, p) => _t(c.r, p.r));
+    return o`
+      <h1>Overview</h1>
+      <p class="sub">${t.health?.connection_ok === !1 ? "Can't reach the controller." : `Connected to ${t.health?.hostname || "the controller"}${t.health?.version ? ` (UniFi Network ${t.health.version})` : ""}.`}</p>
 
-    // Build SVG network diagram.
-    const svgW = 800, svgH = 520;
+      <div class="tiles">
+        <button class="tile" @click=${() => this.ctx.go("devices", "all")}><div class="n">${t.total_clients ?? 0}</div><div class="l">devices online</div></button>
+        <button class="tile ${t.new_count ? "warn" : ""}" @click=${() => this.ctx.go("devices", "new")}><div class="n">${t.new_count ?? 0}</div><div class="l">waiting for review</div></button>
+        <button class="tile ${a.length && s < a.length ? "warn" : "ok"}" @click=${() => this.ctx.go("cameras")}><div class="n">${s}/${a.length}</div><div class="l">cameras contained</div></button>
+        <button class="tile ${n.length ? "bad" : ""}" @click=${() => this.ctx.go("cameras")}><div class="n">${n.length}</div><div class="l">not contained</div></button>
+        <button class="tile ${i ? "bad" : ""}" @click=${() => this.ctx.go("cameras")}><div class="n">${i}</div><div class="l">with exploited bugs</div></button>
+        <button class="tile ${t.threat_events ? "warn" : ""}" @click=${() => this.ctx.go("security")}><div class="n">${t.threat_events ?? 0}</div><div class="l">security events (24 h)</div></button>
+        <button class="tile ${t.suspicious_count ? "warn" : ""}" @click=${() => this.ctx.go("devices", "suspicious")}><div class="n">${t.suspicious_count ?? 0}</div><div class="l">suspicious</div></button>
+        <button class="tile" @click=${() => this.ctx.go("devices", "unknown")}><div class="n">${r}</div><div class="l">not identified</div></button>
+      </div>
 
-    return `
-      <h1>🗺 Network Map</h1>
-      <p class="subtitle">Visual layout of your network — devices grouped by subnet and access level.</p>
+      <div class="grid two">
+        <div class="card">
+          <h2>Needs attention</h2>
+          ${h.length ? h.slice(0, 6).map((c) => xt(this.ctx, c.r, c.mac)) : o`<div class="empty">Nothing critical or high right now.</div>`}
+          ${h.length > 6 ? o`<button class="btn" @click=${() => this.ctx.go("security")}>All ${h.length} on the Security page</button>` : l}
+        </div>
 
-      <div class="netmap-container">
-        <svg viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg" class="netmap-svg">
-          <defs>
-            <linearGradient id="grd1" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#0f9b8e" stop-opacity="0.15"/>
-              <stop offset="100%" stop-color="#0f9b8e" stop-opacity="0.05"/>
-            </linearGradient>
-            <linearGradient id="grd2" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#e94560" stop-opacity="0.12"/>
-              <stop offset="100%" stop-color="#e94560" stop-opacity="0.04"/>
-            </linearGradient>
-            <linearGradient id="grd3" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#42a5f5" stop-opacity="0.12"/>
-              <stop offset="100%" stop-color="#42a5f5" stop-opacity="0.04"/>
-            </linearGradient>
-            <filter id="shadow"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.3"/></filter>
-          </defs>
-
-          <!-- Internet cloud -->
-          <ellipse cx="400" cy="45" rx="90" ry="30" fill="#1a1a2e" stroke="#e94560" stroke-width="2" filter="url(#shadow)"/>
-          <text x="400" y="50" text-anchor="middle" fill="#e94560" font-size="14" font-weight="bold">🌍 Internet</text>
-
-          <!-- Router -->
-          <rect x="330" y="95" width="140" height="50" rx="10" fill="#16213e" stroke="#0f9b8e" stroke-width="2" filter="url(#shadow)"/>
-          <text x="400" y="118" text-anchor="middle" fill="#0f9b8e" font-size="12" font-weight="bold">🌐 UCG Max</text>
-          <text x="400" y="135" text-anchor="middle" fill="#888" font-size="9">${h.hostname || "192.168.1.1"}</text>
-
-          <!-- Connection: Internet to Router -->
-          <line x1="400" y1="75" x2="400" y2="95" stroke="#e94560" stroke-width="2" stroke-dasharray="6,3"/>
-
-          <!-- Connection lines: Router to zones -->
-          <line x1="350" y1="145" x2="140" y2="190" stroke="#4caf50" stroke-width="2"/>
-          <line x1="400" y1="145" x2="400" y2="190" stroke="#e94560" stroke-width="2"/>
-          <line x1="450" y1="145" x2="660" y2="190" stroke="#42a5f5" stroke-width="2"/>
-
-          <!-- Zone 1: Trusted (192.168.1.x) -->
-          <rect x="20" y="190" width="240" height="${Math.max(180, 100 + trusted.length * 4)}" rx="12" fill="url(#grd1)" stroke="#4caf50" stroke-width="1.5"/>
-          <text x="140" y="215" text-anchor="middle" fill="#4caf50" font-size="13" font-weight="bold">✅ Trusted — 192.168.1.x</text>
-          <text x="140" y="233" text-anchor="middle" fill="#888" font-size="10">Reserved IPs • Full Internet</text>
-          <text x="140" y="253" text-anchor="middle" fill="#ccc" font-size="22" font-weight="bold">${trusted.length}</text>
-          <text x="140" y="268" text-anchor="middle" fill="#888" font-size="10">devices</text>
-          <text x="140" y="290" text-anchor="middle" fill="#aaa" font-size="10">${countCats(trusted)}</text>
-
-          <!-- Zone 2: Local Only (${this._lp()}.x) -->
-          <rect x="280" y="190" width="240" height="${Math.max(180, 100 + localOnly.length * 4)}" rx="12" fill="url(#grd2)" stroke="#e94560" stroke-width="1.5"/>
-          <text x="400" y="215" text-anchor="middle" fill="#e94560" font-size="13" font-weight="bold">🔒 Local Only — ${this._lp()}.x</text>
-          <text x="400" y="233" text-anchor="middle" fill="#888" font-size="10">Reserved IPs • NO Internet</text>
-          <text x="400" y="253" text-anchor="middle" fill="#ccc" font-size="22" font-weight="bold">${localOnly.length}</text>
-          <text x="400" y="268" text-anchor="middle" fill="#888" font-size="10">devices</text>
-          <text x="400" y="290" text-anchor="middle" fill="#aaa" font-size="10">${countCats(localOnly)}</text>
-          <!-- Firewall icon -->
-          <text x="400" y="175" text-anchor="middle" fill="#e94560" font-size="16">🛡</text>
-
-          <!-- Zone 3: DHCP (192.168.3.x) -->
-          <rect x="540" y="190" width="240" height="${Math.max(180, 100 + dhcp.length * 4)}" rx="12" fill="url(#grd3)" stroke="#42a5f5" stroke-width="1.5"/>
-          <text x="660" y="215" text-anchor="middle" fill="#42a5f5" font-size="13" font-weight="bold">📱 DHCP — 192.168.3.x</text>
-          <text x="660" y="233" text-anchor="middle" fill="#888" font-size="10">Dynamic IPs • Full Internet</text>
-          <text x="660" y="253" text-anchor="middle" fill="#ccc" font-size="22" font-weight="bold">${dhcp.length}</text>
-          <text x="660" y="268" text-anchor="middle" fill="#888" font-size="10">devices</text>
-          <text x="660" y="290" text-anchor="middle" fill="#aaa" font-size="10">${countCats(dhcp)}</text>
-
-          <!-- Blocked indicator on local-only zone -->
-          <line x1="395" y1="160" x2="395" y2="190" stroke="#e94560" stroke-width="2"/>
-          <line x1="405" y1="160" x2="405" y2="190" stroke="#e94560" stroke-width="2"/>
-          <line x1="388" y1="170" x2="412" y2="170" stroke="#e94560" stroke-width="2"/>
-
-          <!-- Legend -->
-          <rect x="20" y="${svgH - 60}" width="760" height="50" rx="8" fill="#16213e" stroke="#2a2a4a" stroke-width="1"/>
-          <circle cx="50" cy="${svgH - 35}" r="6" fill="#4caf50"/><text x="62" y="${svgH - 31}" fill="#aaa" font-size="10">Internet Access</text>
-          <circle cx="200" cy="${svgH - 35}" r="6" fill="#e94560"/><text x="212" y="${svgH - 31}" fill="#aaa" font-size="10">No Internet (Blocked)</text>
-          <circle cx="380" cy="${svgH - 35}" r="6" fill="#42a5f5"/><text x="392" y="${svgH - 31}" fill="#aaa" font-size="10">Dynamic / Unmanaged</text>
-          <text x="560" y="${svgH - 31}" fill="#666" font-size="10">Total: ${clients.length} devices</text>
-        </svg>
+        <div>
+          <div class="card">
+            <h2>Cameras</h2>
+            ${a.length ? o`<div class="scroll"><table>
+              <tbody>${a.map((c) => o`<tr class="click" tabindex="0" @click=${() => this.ctx.open(c.mac)} @keydown=${(p) => p.key === "Enter" && this.ctx.open(c.mac)}>
+                <td>${m(c)}<div class="muted small">${c.ip}</div></td>
+                <td>${M(c)} ${lt(c)}</td>
+                <td class="small muted">${c.phone_home ? `${y(c.phone_home.attempts, "attempt")} blocked${c.phone_home.window_minutes ? ` in ${c.phone_home.window_minutes < 120 ? `${c.phone_home.window_minutes} min` : `${Math.round(c.phone_home.window_minutes / 60)} h`}` : ""}` : ""}</td>
+              </tr>`)}</tbody></table></div>` : o`<div class="empty">No cameras found.</div>`}
+          </div>
+          <div class="card">
+            <h2>Controller</h2>
+            <div class="kv">
+              <span>Status</span><span>${t.health?.connection_ok === !1 ? o`<span class="badge bad">unreachable</span>` : o`<span class="badge ok">connected</span>`}</span>
+              <span>Host</span><span>${t.health?.hostname || "—"}</span>
+              <span>Version</span><span>${t.health?.version || "—"}</span>
+              <span>Uptime</span><span>${Kt(t.health?.uptime)}</span>
+              <span>Wi-Fi / wired</span><span>${t.wireless_count ?? 0} / ${t.wired_count ?? 0}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="card">
-        <h2>Zone Details</h2>
-        <table class="data-table">
-          <thead><tr><th>Zone</th><th>Subnet</th><th>IP Type</th><th>Internet</th><th>Devices</th><th>Cameras</th></tr></thead>
+        <div class="row"><h2 style="margin:0">Quantify unknown devices</h2><span class="spacer"></span>
+          <button class="btn primary" ?disabled=${this.running} @click=${() => this.runQuantify()}>${this.running ? "Scanning… (a few minutes)" : `Scan ${y(r, "unknown device")}`}</button>
+        </div>
+        <p class="sub" style="margin:8px 0 0">Probes each unknown device to work out what it is. High-confidence results are applied; the rest become suggestions you can accept.</p>
+        ${this.quantify ? this.renderQuantify() : l}
+      </div>
+    `;
+  }
+  renderQuantify() {
+    const e = this.quantify, t = Object.entries(e.results || {});
+    return o`<p class="small">${e.scanned} scanned · ${e.identified} applied · ${e.suggested} suggested</p>
+      <div class="scroll"><table>
+        <thead><tr><th>Device</th><th>Best guess</th><th>Confidence</th><th>Based on</th><th></th></tr></thead>
+        <tbody>${t.map(([a, s]) => o`<tr>
+          <td>${s.name || o`<span class="mono">${a}</span>`}<div class="muted small">${s.ip}</div></td>
+          <td>${s.best_guess === "unknown" ? o`<span class="muted">still unknown</span>` : o`${s.best_guess}<div class="muted small">${s.best_description}</div>`}</td>
+          <td>${s.best_guess === "unknown" ? "—" : s.best_confidence}</td>
+          <td class="small">${(s.techniques_used || []).join(", ") || "—"}</td>
+          <td>${s.best_guess === "unknown" ? l : s.applied ? o`<span class="badge ok">applied</span> <button class="btn" @click=${() => this.ctx.act("clear_category", { mac: a }, { done: "Undone" })}>Undo</button>` : o`<button class="btn" @click=${() => this.ctx.act("set_category", { mac: a, category: s.best_guess }, { done: `Set to ${s.best_guess}` })}>Accept</button>`}</td>
+        </tr>`)}</tbody>
+      </table></div>`;
+  }
+};
+F.styles = [k];
+dt([
+  g({ attribute: !1 })
+], F.prototype, "ctx", 2);
+dt([
+  v()
+], F.prototype, "quantify", 2);
+dt([
+  v()
+], F.prototype, "running", 2);
+F = dt([
+  x("ub-overview")
+], F);
+var Se = Object.defineProperty, Pe = Object.getOwnPropertyDescriptor, D = (e, t, a, s) => {
+  for (var n = s > 1 ? void 0 : s ? Pe(t, a) : t, i = e.length - 1, r; i >= 0; i--)
+    (r = e[i]) && (n = (s ? r(t, a, n) : r(n)) || n);
+  return s && n && Se(t, a, n), n;
+};
+const It = [
+  ["all", "All", () => !0],
+  ["new", "To review", (e) => e.state === "new"],
+  ["unknown", "Not identified", (e) => e.category === "unknown" || e.confidence === "low"],
+  ["suspicious", "Suspicious", (e) => e.suspicious],
+  ["cameras", "Cameras", (e) => e.is_camera],
+  ["home", "Home automation", (e) => !!e.home_automation],
+  ["contained", "Off the internet", (e) => !!e.containment],
+  ["blocked", "Blocked", (e) => e.blocked || e.state === "quarantined"],
+  ["trusted", "Trusted", (e) => e.state === "trusted"],
+  ["wireless", "Wi-Fi", (e) => !e.wired],
+  ["wired", "Wired", (e) => e.wired]
+], Ht = (e) => (e.traffic_24h || []).reduce((t, a) => t + a, 0) || (e.tx_bytes || 0) + (e.rx_bytes || 0);
+let C = class extends $ {
+  constructor() {
+    super(...arguments), this.filter = "all", this.q = "", this.category = "", this.sort = "name", this.asc = !0;
+  }
+  setFilter(e) {
+    this.dispatchEvent(new CustomEvent("filter", { detail: e }));
+  }
+  sortBy(e) {
+    this.sort === e ? this.asc = !this.asc : (this.sort = e, this.asc = e !== "traffic");
+  }
+  rows() {
+    const e = It.find((s) => s[0] === this.filter)?.[2] ?? (() => !0), t = this.q.trim().toLowerCase(), a = (s) => {
+      switch (this.sort) {
+        case "name":
+          return m(s).toLowerCase();
+        case "category":
+          return s.category_label || s.category;
+        case "ip":
+          return (s.ip || "").split(".").map((n) => n.padStart(3, "0")).join(".");
+        case "vendor":
+          return (s.vendor || "").toLowerCase();
+        case "state":
+          return s.state;
+        case "traffic":
+          return Ht(s);
+        case "signal":
+          return s.rssi ?? -999;
+      }
+    };
+    return this.ctx.snap.clients.filter(e).filter((s) => !this.category || s.category === this.category).filter((s) => !t || [
+      s.mac,
+      s.name,
+      s.hostname,
+      s.ip,
+      s.vendor,
+      s.essid,
+      s.category_label,
+      s.state,
+      s.home_automation?.brand,
+      s.onvif_manufacturer
+    ].some((n) => (n || "").toLowerCase().includes(t))).sort((s, n) => {
+      const i = a(s), r = a(n), h = typeof i == "number" && typeof r == "number" ? i - r : String(i).localeCompare(String(r));
+      return this.asc ? h : -h;
+    });
+  }
+  th(e, t) {
+    const a = this.sort === e;
+    return o`<th aria-sort=${a ? this.asc ? "ascending" : "descending" : "none"}>
+      <button @click=${() => this.sortBy(e)}>${t}${a ? this.asc ? " ▲" : " ▼" : ""}</button></th>`;
+  }
+  render() {
+    const { snap: e } = this.ctx, t = this.rows(), a = e.clients;
+    return o`
+      <h1>Devices</h1>
+      <p class="sub">Everything the controller sees right now. Select a device for details and actions.</p>
+      <div class="chips" role="group" aria-label="Filter devices">
+        ${It.map(([s, n, i]) => o`<button class="chip" aria-pressed=${this.filter === s ? "true" : "false"} @click=${() => this.setFilter(s)}>${n} ${a.filter(i).length}</button>`)}
+      </div>
+      <div class="row" style="margin-bottom:12px">
+        <input type="search" placeholder="Search name, IP, MAC, maker…" aria-label="Search devices" .value=${this.q} @input=${(s) => this.q = s.target.value} style="flex:1;min-width:200px">
+        <select aria-label="Category" @change=${(s) => this.category = s.target.value}>
+          <option value="">All categories</option>
+          ${ct(e).map(([s, n]) => o`<option value=${s} ?selected=${this.category === s}>${n} (${a.filter((i) => i.category === s).length})</option>`)}
+        </select>
+      </div>
+      ${this.filter === "wireless" ? this.wifiSummary(t) : this.filter === "wired" ? this.wiredSummary(t) : l}
+      <div class="card scroll" style="padding:0">
+        <table>
+          <thead><tr>
+            ${this.th("name", "Device")}${this.th("category", "Category")}${this.th("ip", "IP")}${this.th("vendor", "Maker")}
+            ${this.th("state", "Status")}<th>Internet</th>${this.th("traffic", "24 h")}${this.filter === "wireless" ? this.th("signal", "Signal") : l}
+          </tr></thead>
           <tbody>
-            <tr>
-              <td>✅ Trusted</td><td class="mono">192.168.1.0/24</td><td>Reserved</td>
-              <td><span class="badge ok">Yes</span></td><td>${trusted.length}</td>
-              <td>${trusted.filter(c=>c.is_camera).length}</td>
-            </tr>
-            <tr>
-              <td>🔒 Local Only</td><td class="mono">${this._lcidr()}</td><td>Reserved</td>
-              <td><span class="badge danger">Blocked</span></td><td>${localOnly.length}</td>
-              <td>${localOnly.filter(c=>c.is_camera).length}</td>
-            </tr>
-            <tr>
-              <td>📱 DHCP</td><td class="mono">192.168.3.0/24</td><td>Dynamic</td>
-              <td><span class="badge ok">Yes</span></td><td>${dhcp.length}</td>
-              <td>${dhcp.filter(c=>c.is_camera).length}</td>
-            </tr>
-            ${other.length ? `<tr>
-              <td>❓ Other</td><td class="mono">Various</td><td>Mixed</td>
-              <td>—</td><td>${other.length}</td>
-              <td>${other.filter(c=>c.is_camera).length}</td>
-            </tr>` : ""}
+            ${t.map((s) => o`<tr class="click" tabindex="0" @click=${() => this.ctx.open(s.mac)} @keydown=${(n) => n.key === "Enter" && this.ctx.open(s.mac)}>
+              <td><strong>${m(s)}</strong>${s.suspicious ? o` <span class="badge warn">suspicious</span>` : l}<div class="mono muted">${s.mac}</div></td>
+              <td>${s.category_icon} ${s.category_label}${s.confidence === "low" ? o` <span class="muted small">(guess)</span>` : l}</td>
+              <td class="mono">${s.ip || "—"}</td>
+              <td class="small">${s.home_automation?.brand || s.onvif_manufacturer || s.vendor || "—"}</td>
+              <td>${wt(s)}</td>
+              <td>${M(s)} ${lt(s)}</td>
+              <td>${yt(s.traffic_24h)}${s.traffic_spike ? o` <span class="badge bad">spike</span>` : l}</td>
+              ${this.filter === "wireless" ? o`<td class=${(s.rssi ?? 0) < -80 ? "bad" : ""}>${s.rssi != null ? `${s.rssi} dBm` : "—"}</td>` : l}
+            </tr>`)}
           </tbody>
         </table>
+        ${t.length ? l : o`<div class="empty">No devices match.</div>`}
       </div>
-
-      ${trusted.filter(c=>c.is_camera).length ? `
-        <div class="card warn-card">
-          <h2>⚠ Cameras on Trusted Network</h2>
-          <p class="subtitle">${trusted.filter(c=>c.is_camera).length} camera(s) are on the trusted subnet with full internet access. Consider moving them to Local Only.</p>
-          <table class="data-table">
-            <thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>IP</th></tr></thead>
-            <tbody>${trusted.filter(c=>c.is_camera).map(c => `<tr>
-              <td class="mono">${c.mac}</td><td>${c.name||"—"}</td><td>${c.vendor||"?"}</td><td class="mono">${c.ip}</td>
-            </tr>`).join("")}</tbody>
-          </table>
-        </div>
-      ` : ""}
-
-      ${dhcp.filter(c=>c.is_camera).length ? `
-        <div class="card danger-card">
-          <h2>🚨 Cameras on DHCP (Unsecured)</h2>
-          <p class="subtitle">${dhcp.filter(c=>c.is_camera).length} camera(s) are on the DHCP pool with full internet. They can phone home freely.</p>
-          <table class="data-table">
-            <thead><tr><th>MAC</th><th>Name</th><th>Vendor</th><th>IP</th></tr></thead>
-            <tbody>${dhcp.filter(c=>c.is_camera).map(c => `<tr>
-              <td class="mono">${c.mac}</td><td>${c.name||"—"}</td><td>${c.vendor||"?"}</td><td class="mono">${c.ip}</td>
-            </tr>`).join("")}</tbody>
-          </table>
-        </div>
-      ` : ""}
     `;
   }
-
-  _vLocalNet() {
-    const ln = this._localnet || {};
-    const assignments = ln.assignments || {};
-    const ranges = ln.ranges || [];
-    const fw = ln.firewall || {};
-    const assignArr = Object.entries(assignments);
-    const catLabels = this._overview.category_labels || {};
-    const catIcons = this._overview.category_icons || {};
-
-    // Find devices that could be assigned (cameras, IoT, etc. that aren't already assigned)
-    const assignedMacs = new Set(Object.keys(assignments));
-    const candidates = (this._data.clients || []).filter(c => {
-      const cat = c.category || "unknown";
-      return !assignedMacs.has(c.mac.toLowerCase()) && cat !== "unknown" && c.state !== "quarantined";
-    });
-
-    return `<h1>🔒 Local-Only Network</h1>
-      <p class="subtitle">Devices on ${this._lp()}.x have no internet access. They work locally only.</p>
-
-      <div class="card">
-        <h2>Internet Blocking</h2>
-        <table class="info-table">
-          <tr><td>Method</td><td>Per-device traffic rules on UCG Max</td></tr>
-          <tr><td>Status</td><td>${fw.blocked_count ? `<span class="badge ok">${fw.blocked_count}/${fw.total_devices} devices blocked</span>` : fw.total_devices ? '<span class="badge warn">Rules pending</span>' : '<span class="badge ok">No devices assigned yet</span>'}</td></tr>
-        </table>
-        ${fw.total_devices && fw.blocked_count < fw.total_devices ? '<button class="btn" data-ensureFw="1">Create Missing Rules</button>' : ""}
-        <p style="margin-top:6px;font-size:11px;color:var(--secondary-text-color)">When you assign a device to Local Only, a traffic rule is automatically created on the UCG Max blocking that device's MAC from the internet. No separate firewall setup needed.</p>
-      </div>
-
-      <div class="card">
-        <h2>IP Range Allocation</h2>
-        <table class="data-table"><thead><tr><th>Category</th><th>Range</th><th>Used</th><th>Available</th></tr></thead><tbody>
-          ${ranges.map(r => `<tr>
-            <td>${catIcons[r.category]||''} ${catLabels[r.category]||r.category}</td>
-            <td class="mono">${r.range}</td>
-            <td>${r.used}</td>
-            <td>${r.available}</td>
-          </tr>`).join('')}
-        </tbody></table>
-      </div>
-
-      <div class="card">
-        <h2>Current Assignments <span class="count">${assignArr.length}</span></h2>
-        ${assignArr.length === 0 ? '<div class="empty">No local-only assignments yet.</div>' : `
-          <table class="data-table"><thead><tr><th>MAC</th><th>IP</th><th>Category</th><th>Name</th>${this._actionMode?'<th>Remove</th>':''}</tr></thead><tbody>
-            ${assignArr.map(([mac, info]) => `<tr>
-              <td class="mono">${mac}</td>
-              <td class="mono">${info.ip}</td>
-              <td>${catIcons[info.category]||''} ${catLabels[info.category]||info.category}</td>
-              <td>${info.name||'—'}</td>
-              ${this._actionMode?`<td><button class="btn btn-quarantine" data-localremove="1" data-mac="${mac}">Remove</button></td>`:''}
-            </tr>`).join('')}
-          </tbody></table>
-        `}
-      </div>
-
-      <div class="card">
-        <h2>Assign Device to Local-Only</h2>
-        <p class="subtitle">Pick a device and its category. An IP will be auto-assigned from the category range.</p>
-        ${candidates.length === 0 ? '<div class="empty">No unassigned devices available.</div>' : `
-          ${candidates.slice(0, 30).map(d => {
-            const mid = d.mac.replace(/:/g,'');
-            return `<div class="device-card" style="padding:10px;margin-bottom:6px">
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                <span class="mono" style="font-weight:600">${d.mac}</span>
-                <span>${d.name||d.hostname||'—'}</span>
-                <span style="color:var(--secondary-text-color)">${d.vendor||'?'}</span>
-                <span class="badge ${d.category}">${d.category_icon||''} ${d.category_label||''}</span>
-                <span class="mono" style="color:var(--secondary-text-color)">${d.ip||''}</span>
-              </div>
-              ${this._actionMode ? `<div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;align-items:center">
-                <input type="text" id="lname-${mid}" class="id-name" placeholder="Name (optional)" value="${d.name||''}" style="width:160px;padding:4px 6px;font-size:11px" />
-                <button class="btn btn-trust" data-localassign="${d.category||'iot'}" data-mac="${d.mac}">Assign as ${d.category_label||'IoT'}</button>
-              </div>` : '<div style="font-size:10px;color:var(--secondary-text-color);margin-top:4px">Enable Action Mode to assign</div>'}
-            </div>`;
-          }).join('')}
-        `}
-      </div>
-
-      <div class="card">
-        <h2>Check IP Availability</h2>
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
-          <input type="text" id="checkIpInput" class="filter-input" placeholder="e.g. ${this._lp()}.35" style="width:200px;margin:0" />
-          <button class="btn btn-scan" id="checkIpBtn">🔍 Check</button>
-        </div>
-        <div id="checkIpResult"></div>
-      </div>
-
-      <div class="card">
-        <h2>Setup Guide</h2>
-        <p>This system manages the <strong>${this._lcidr()}</strong> subnet on your flat network.<br/>
-        Devices assigned here get a DHCP reservation in the ${this._lp()}.x range and a per-device traffic rule on the UCG Max that blocks their MAC address from reaching the internet.</p>
-        <p style="margin-top:8px"><strong>How it works:</strong></p>
-        <ol style="font-size:12px;padding-left:20px;margin-top:4px;line-height:1.8">
-          <li>Enable <strong>Action Mode</strong> in the sidebar</li>
-          <li>Find a device above and click <strong>"Assign"</strong></li>
-          <li>The device gets a reserved IP in its category range (e.g. cameras → .30-.50)</li>
-          <li>A traffic rule is created on the UCG Max blocking that device's internet</li>
-          <li>After the device renews its DHCP lease, it moves to the new IP</li>
-          <li>The device can still talk locally (RTSP, ONVIF, etc.) but cannot reach the internet</li>
-        </ol>
-        <p style="margin-top:8px;font-size:11px;color:var(--secondary-text-color)">
-          IP ranges are configurable. Default layout: cameras .30-.50, ESPHome .51-.70, lights .71-.90, speakers .91-.100, IoT .101-.120, streaming .121-.130, printers .131-.140, gaming .141-.150, crypto .151-.160, NAS .161-.170, HA .171-.180, networking .181-.190, computers .191-.210, phones .211-.220, tablets .221-.230.
-        </p>
-      </div>`;
+  wifiSummary(e) {
+    const t = (s) => Object.entries(e.reduce((n, i) => ({ ...n, [s(i)]: (n[s(i)] || 0) + 1 }), {})).sort((n, i) => i[1] - n[1]), a = (s) => s == null ? "unknown" : s > -50 ? "excellent" : s > -65 ? "good" : s > -75 ? "fair" : s > -85 ? "weak" : "very weak";
+    return o`<div class="grid two">
+      <div class="card"><h3>By network</h3>${t((s) => s.essid || "unknown").map(([s, n]) => o`<div class="row small"><span>${s}</span><span class="spacer"></span><span>${n}</span></div>`)}</div>
+      <div class="card"><h3>Signal</h3>${t((s) => a(s.rssi)).map(([s, n]) => o`<div class="row small"><span>${s}</span><span class="spacer"></span><span>${n}</span></div>`)}
+        <h3>By channel</h3><div class="small">${t((s) => String(s.channel ?? "?")).sort((s, n) => Number(s[0]) - Number(n[0])).map(([s, n]) => o`<span class="badge" style="margin:2px">ch ${s}: ${n}</span>`)}</div></div>
+    </div>`;
   }
+  wiredSummary(e) {
+    return o`<div class="tiles">
+      <div class="tile"><div class="n">${e.length}</div><div class="l">wired devices</div></div>
+      <div class="tile"><div class="n">${L(e.reduce((t, a) => t + Ht(a), 0))}</div><div class="l">moved in 24 h</div></div>
+    </div>`;
+  }
+};
+C.styles = [k];
+D([
+  g({ attribute: !1 })
+], C.prototype, "ctx", 2);
+D([
+  g()
+], C.prototype, "filter", 2);
+D([
+  v()
+], C.prototype, "q", 2);
+D([
+  v()
+], C.prototype, "category", 2);
+D([
+  v()
+], C.prototype, "sort", 2);
+D([
+  v()
+], C.prototype, "asc", 2);
+C = D([
+  x("ub-devices")
+], C);
+var Oe = Object.defineProperty, Ee = Object.getOwnPropertyDescriptor, Z = (e, t, a, s) => {
+  for (var n = s > 1 ? void 0 : s ? Ee(t, a) : t, i = e.length - 1, r; i >= 0; i--)
+    (r = e[i]) && (n = (s ? r(t, a, n) : r(n)) || n);
+  return s && n && Oe(t, a, n), n;
+};
+let U = class extends $ {
+  constructor() {
+    super(...arguments), this.scanning = !1, this.newName = "", this.onKey = (e) => e.key === "Escape" && this.close(), this.close = () => this.dispatchEvent(new CustomEvent("close"));
+  }
+  connectedCallback() {
+    super.connectedCallback(), window.addEventListener("keydown", this.onKey);
+  }
+  disconnectedCallback() {
+    super.disconnectedCallback(), window.removeEventListener("keydown", this.onKey);
+  }
+  firstUpdated() {
+    this.renderRoot.querySelector(".close")?.focus();
+  }
+  async scan() {
+    this.scanning = !0, await this.ctx.act("scan_device", { mac: this.client.mac }, { done: "Port scan finished" }), this.scanning = !1;
+  }
+  render() {
+    const e = this.client, { act: t, snap: a } = this.ctx, s = m(e), n = !!a.localnet.assignments?.[e.mac.toLowerCase()], i = [...a.recs.device_recs?.[e.mac.toLowerCase()] || []].sort(_t);
+    return o`
+      <div class="scrim" @click=${this.close}></div>
+      <aside role="dialog" aria-modal="true" aria-label="Device ${s}">
+        <header>
+          <div style="flex:1;min-width:0">
+            <h1>${e.category_icon} ${s}</h1>
+            <div class="row small">${wt(e)} ${M(e)} ${lt(e)}
+              ${e.suspicious ? o`<span class="badge warn">suspicious · ${e.suspicion_score}</span>` : l}
+              <span class="mono muted">${e.mac}</span></div>
+          </div>
+          <button class="close btn" aria-label="Close" @click=${this.close}>✕</button>
+        </header>
 
-  _vMining() {
-    const rigs = (this._miners && this._miners.rigs) || [];
-    const s = (this._miners && this._miners.summary) || {};
-    const fmtHr = hs => {
-      if (!hs) return "—";
-      if (hs >= 1e12) return (hs/1e12).toFixed(2) + " TH/s";
-      if (hs >= 1e9)  return (hs/1e9).toFixed(2) + " GH/s";
-      if (hs >= 1e6)  return (hs/1e6).toFixed(2) + " MH/s";
-      if (hs >= 1e3)  return (hs/1e3).toFixed(2) + " kH/s";
-      return Math.round(hs) + " H/s";
-    };
-    const profit = s.profit_usd_day || 0;
-    const profitClass = profit > 0 ? "ok" : profit < 0 ? "danger" : "medium";
+        <div class="actions row">
+          ${e.state !== "trusted" ? o`<button class="btn" @click=${() => t("trust", { mac: e.mac }, { done: `${s} trusted` })}>Trust</button>` : l}
+          ${e.state === "new" ? o`<button class="btn" @click=${() => t("ignore", { mac: e.mac }, { done: `${s} ignored` })}>Ignore</button>` : l}
+          ${e.internet_blocked ? o`<button class="btn" @click=${() => t("allow_internet", { mac: e.mac }, { confirm: `Let ${s} reach the internet again?`, done: `${s} can reach the internet again` })}>Allow internet again</button>` : o`<button class="btn primary" @click=${() => t("block_internet", { mac: e.mac }, { confirm: `Block ${s} from the internet? It keeps its address and keeps working on your network.`, done: `${s} blocked from the internet` })}>Block internet</button>`}
+          ${n ? o`<button class="btn" @click=${() => t("localnet_remove", { mac: e.mac }, { confirm: `Take ${s} off local-only? It gets internet access again.`, done: `${s} is no longer local-only` })}>Remove local-only</button>` : o`<button class="btn" @click=${() => t(
+      "localnet_assign",
+      { mac: e.mac, category: e.category === "unknown" ? "iot" : e.category },
+      { confirm: `Put ${s} on local-only? It gets a ${a.localnet.prefix || "192.168.2"}.x address and is blocked from the internet, but keeps working on your network. It reconnects to pick up the new address.`, done: `${s} is now local-only` }
+    )}>Make local-only</button>`}
+          ${e.state === "quarantined" || e.blocked ? o`<button class="btn" @click=${() => t("unblock", { mac: e.mac }, { done: `${s} unblocked` })}>Unblock</button>` : o`<button class="btn danger" @click=${() => t("quarantine", { mac: e.mac }, { confirm: `Quarantine ${s}? It's blocked on the controller and can't use the network at all.`, danger: !0, done: `${s} quarantined` })}>Quarantine</button>`}
+          <button class="btn" @click=${() => t("reconnect", { mac: e.mac }, { confirm: `Disconnect ${s} so it reconnects?`, done: "Reconnect sent" })}>Reconnect</button>
+        </div>
 
-    let body;
-    if (!rigs.length) {
-      body = `<div class="card"><h2>No miners discovered</h2>
-        <p>Detection runs on every coordinator poll and triggers when:</p>
-        <ul>
-          <li>The port scanner tags a device as <strong>crypto</strong> (cgminer 4028, Antminer web 8081, Stratum, blockchain P2P)</li>
-          <li>The vendor OUI matches a known ASIC brand (<strong>Goldshell</strong>, Bitmain, MicroBT, Canaan, Innosilicon, IceRiver)</li>
-        </ul>
-        <p>If a rig is missing, run <strong>Quantify Unknown Devices</strong> from the Overview tab to populate the port-scan cache.</p>
-      </div>`;
-    } else {
-      body = `
-        <div class="stat-grid">
-          ${this._stat("Rigs", s.rig_count || 0, "⛏")}
-          ${this._stat("Reachable", `${s.reachable || 0} / ${s.rig_count || 0}`, "📡")}
-          ${this._stat("Hashrate", fmtHr(s.total_hashrate_hs), "⚡")}
-          ${this._stat("Power", `${s.total_power_w || 0} W`, "🔌")}
-          ${this._stat("Revenue/day", `$${(s.revenue_usd_day || 0).toFixed(2)}`, "💵")}
-          ${this._stat("Cost/day", `$${(s.cost_usd_day || 0).toFixed(2)}`, "💸")}
-          ${this._stat("Net profit/day", `$${profit.toFixed(2)}`, profit >= 0 ? "📈" : "📉", profitClass)}
+        ${i.length ? o`<section><h2>Recommendations</h2>${i.map((r) => xt(this.ctx, r, e.mac))}</section>` : l}
+
+        <section>
+          <h2>Internet</h2>
+          ${this.internet(e)}
+        </section>
+
+        <section>
+          <h2>Summary</h2>
+          <div class="kv">
+            <span>IP</span><span class="mono">${e.ip ? o`<a href="http://${e.ip}" target="_blank" rel="noopener noreferrer">${e.ip}</a>` : "—"}</span>
+            <span>Maker</span><span>${e.vendor || "—"}</span>
+            ${e.hostname && e.hostname !== e.name ? o`<span>Hostname</span><span>${e.hostname}</span>` : l}
+            <span>Connection</span><span>${e.wired ? "wired" : `Wi-Fi${e.essid ? ` · ${e.essid}` : ""}${e.channel ? ` · ch ${e.channel}` : ""}${e.rssi != null ? ` · ${e.rssi} dBm` : ""}`}</span>
+            <span>Uptime</span><span>${Kt(e.uptime_seconds)}</span>
+            <span>Total traffic</span><span>${L(e.tx_bytes)} / ${L(e.rx_bytes)}</span>
+            ${e.unifi_fingerprint ? o`<span>UniFi ID</span><span>category ${e.unifi_fingerprint.dev_cat ?? "?"}${e.unifi_fingerprint.os_name ? `, ${e.unifi_fingerprint.os_name}` : ""}${e.unifi_fingerprint.camera ? o` <span class="badge info">camera</span>` : l}</span>` : l}
+            ${e.home_automation ? o`<span>Home</span><span>${e.home_automation.brand || "unknown brand"} · ${e.home_automation.tier_label}</span>` : l}
+          </div>
+          ${e.home_automation?.local_option ? o`<p class="small" style="margin-top:8px">${e.home_automation.local_option}</p>` : l}
+        </section>
+
+        <section>
+          <h2>Category</h2>
+          <p class="small muted">${e.category_label} · ${e.confidence} confidence · from ${e.source}${e.manual_category ? " (set by hand)" : ""}</p>
+          ${e.suggested_category && !e.manual_category ? o`<p class="small">Quantify suggests <strong>${e.suggested_category.category}</strong> (${e.suggested_category.confidence}).
+            <button class="btn" @click=${() => t("set_category", { mac: e.mac, category: e.suggested_category.category }, { done: "Category set" })}>Accept</button></p>` : l}
+          <div class="row">
+            <select aria-label="Category" id="cat">
+              ${ct(a).map(([r, h]) => o`<option value=${r} ?selected=${r === e.category}>${h}</option>`)}
+            </select>
+            <input type="text" placeholder="Rename (optional)" aria-label="New name" .value=${this.newName} @input=${(r) => this.newName = r.target.value}>
+            <button class="btn primary" @click=${() => t("set_category", { mac: e.mac, category: this.renderRoot.querySelector("#cat").value, ...this.newName ? { name: this.newName } : {} }, { done: "Saved" })}>Save</button>
+            ${e.manual_category ? o`<button class="btn" @click=${() => t("clear_category", { mac: e.mac }, { done: "Back to automatic" })}>Clear override</button>` : l}
+          </div>
+        </section>
+
+        ${e.vulns || e.onvif?.onvif || e.onvif_manufacturer ? o`<section>
+          <h2>Firmware &amp; ONVIF</h2>
+          ${e.onvif?.onvif ? o`<p class="small"><span class="badge ok">ONVIF</span> ${e.onvif.manufacturer} ${e.onvif.model}${e.onvif.auth_required ? o` <span class="badge">login needed</span>` : l}</p>` : l}
+          <div class="kv">
+            ${e.vulns?.family ? o`<span>Firmware by</span><span>${e.vulns.family}</span>` : l}
+            <span>Firmware</span><span class="mono">${e.vulns?.firmware || e.onvif_firmware || "not reported"}</span>
+            <span>Built</span><span>${e.vulns?.firmware_date ? `${e.vulns.firmware_date} (${e.vulns.firmware_age_years} years ago)` : "unknown"}</span>
+            ${e.onvif_serial ? o`<span>Serial</span><span class="mono">${e.onvif_serial}</span>` : l}
+          </div>
+          ${(e.vulns?.findings || []).map((r) => o`<div class="rec ${r.status === "check" ? "high" : "critical"}">
+            <div class="row"><span class="badge ${r.status === "check" ? "warn" : "bad"}">${r.status === "affected" ? "affected" : r.status === "likely" ? "probably affected" : "couldn't check"}</span>
+              <span class="t">${r.cve}</span>${r.kev ? o`<span class="badge">exploited (CISA)</span>` : l}</div>
+            <div class="d">${r.detail}</div><div class="small muted">${r.source}</div></div>`)}
+        </section>` : l}
+
+        <section>
+          <div class="row"><h2 style="margin:0">Open ports</h2><span class="spacer"></span>
+            <button class="btn" ?disabled=${this.scanning || !e.ip} @click=${() => this.scan()}>${this.scanning ? "Scanning…" : a.scans[e.mac.toLowerCase()] ? "Scan again" : "Scan ports"}</button></div>
+          ${this.ports(e)}
+        </section>
+
+        ${e.ip_history && e.ip_history.length > 1 ? o`<section><h2>IP history</h2>
+          ${e.ip_history.map((r) => o`<div class="mono">${r.ip} <span class="muted">${r.type === "current" ? "now" : `until ${r.until} (${r.type})`}</span></div>`)}</section>` : l}
+
+        ${e.suspicion_flags?.length ? o`<section><h2>Why it's flagged</h2><ul class="small">${e.suspicion_flags.map((r) => o`<li>${r}</li>`)}</ul></section>` : l}
+      </aside>
+    `;
+  }
+  internet(e) {
+    const t = e.phone_home, a = t?.window_minutes ? t.window_minutes < 120 ? `${t.window_minutes} min` : `${Math.round(t.window_minutes / 60)} h` : "";
+    return o`
+      <div class="row small" style="margin-bottom:8px">
+        ${yt(e.traffic_24h, 5, 32)}
+        <span>${e.traffic_24h ? `${L(e.traffic_24h.reduce((s, n) => s + n, 0))} in the last 24 h` : "No traffic history yet"}</span>
+        ${e.traffic_spike ? o`<span class="badge bad">spike: ${L(e.traffic_spike.last_hour_bytes)} last hour</span>` : l}
+      </div>
+      ${t ? o`
+        <p>${M(e)} ${y(t.attempts, "connection attempt")}${a ? ` in ${a}` : ""}, ${t.allowed ? o`<strong>${t.allowed} let through</strong>` : "all blocked"}${t.blocked_by_our_rule ? ` (${t.blocked_by_our_rule} by its local-only rule)` : ""}.</p>
+        ${Object.keys(t.clouds).length ? o`<p class="small">Calls home to: <strong>${Object.keys(t.clouds).join(", ")}</strong></p>` : l}
+        ${t.port_sweep ? o`<p class="small"><span class="badge warn">probing</span> tried ${t.port_sweep.ports} ports on ${t.port_sweep.host}</p>` : l}
+        ${Object.keys(t.dns_bypass).length ? o`<p class="small"><span class="badge warn">own DNS</span> ${Object.keys(t.dns_bypass).join(", ")}</p>` : l}
+        <div class="scroll"><table class="small"><thead><tr><th>Tries to reach</th><th>Port</th><th>Country</th><th>Times</th></tr></thead>
+          <tbody>${t.top_destinations.map((s) => o`<tr><td class="mono">${s.host}</td><td>${s.port ?? s.protocol}</td><td>${s.region || "—"}</td><td>${s.count}</td></tr>`)}</tbody></table></div>` : e.containment ? o`<p>${M(e)} No connection attempts logged.</p>` : e.is_camera || e.home_automation?.tier === "cloud" || e.home_automation?.tier === "cloud_local" ? o`<p class="small muted">UniFi only logs blocked connections, so what this device reaches on the internet isn't visible. Block its internet to see what it tries.</p>` : l}
+      ${e.security_events_24h ? o`<p class="small"><span class="badge warn">${y(e.security_events_24h, "security event")}</span> in UniFi's log today.</p>` : l}
+    `;
+  }
+  ports(e) {
+    const t = this.ctx.snap.scans[e.mac.toLowerCase()];
+    return !t || t.status !== "complete" ? o`<p class="small muted">Not scanned yet.</p>` : o`
+      <p class="small">${t.guess_description || ""} <span class="muted">(${t.guess_category}, ${t.guess_confidence} confidence${t.scan_time ? `, ${new Date(t.scan_time * 1e3).toLocaleDateString()}` : ""})</span></p>
+      ${t.port_details?.length ? o`<div class="row">${t.port_details.map((a) => o`<span class="badge ${/insecure|backdoor|xmeye/.test(a.group) ? "bad" : /cloud/.test(a.group) ? "warn" : ""}" title=${a.group}>${a.port} ${a.name}</span>`)}</div>` : o`<p class="small muted">No open ports.</p>`}
+      ${(t.warnings || []).map((a) => o`<p class="small"><span class="badge bad">!</span> ${a}</p>`)}
+    `;
+  }
+};
+U.styles = [k, vt`
+    .scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.35); z-index: 5; }
+    aside {
+      position: fixed; z-index: 6; top: 0; right: 0; bottom: 0; width: min(640px, 100vw); overflow-y: auto;
+      background: var(--primary-background-color); box-shadow: -8px 0 30px rgba(0, 0, 0, 0.25); padding: 20px; box-sizing: border-box;
+    }
+    header { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+    h1 { font-size: 20px; word-break: break-word; }
+    .actions { margin-bottom: 16px; }
+    section { background: var(--ub-card); border: 1px solid var(--ha-card-border-color, var(--ub-line)); border-radius: var(--ub-radius); padding: 14px; margin-bottom: 12px; }
+    a { color: var(--primary-color); }
+  `];
+Z([
+  g({ attribute: !1 })
+], U.prototype, "ctx", 2);
+Z([
+  g({ attribute: !1 })
+], U.prototype, "client", 2);
+Z([
+  v()
+], U.prototype, "scanning", 2);
+Z([
+  v()
+], U.prototype, "newName", 2);
+U = Z([
+  x("ub-device-detail")
+], U);
+var Ne = Object.defineProperty, Me = Object.getOwnPropertyDescriptor, Xt = (e, t, a, s) => {
+  for (var n = s > 1 ? void 0 : s ? Me(t, a) : t, i = e.length - 1, r; i >= 0; i--)
+    (r = e[i]) && (n = (s ? r(t, a, n) : r(n)) || n);
+  return s && n && Ne(t, a, n), n;
+};
+let at = class extends $ {
+  render() {
+    const { snap: e } = this.ctx, t = e.clients.filter((n) => n.is_camera).sort((n, i) => +!i.containment - +!n.containment || m(n).localeCompare(m(i))), a = t.filter((n) => !n.containment), s = e.overview.hotspots || [];
+    return o`
+      <h1>Cameras</h1>
+      <p class="sub">Each camera's containment, what it tries to reach, and whether its firmware has known-exploited bugs.</p>
+      <div class="tiles">
+        <div class="tile ${a.length ? "warn" : "ok"}"><div class="n">${t.length - a.length}/${t.length}</div><div class="l">off the internet</div></div>
+        <div class="tile ${t.some((n) => n.containment === "leaking") ? "bad" : ""}"><div class="n">${t.filter((n) => n.containment === "leaking").length}</div><div class="l">not contained</div></div>
+        <div class="tile"><div class="n">${t.reduce((n, i) => n + (i.phone_home?.attempts || 0), 0)}</div><div class="l">blocked attempts (recent)</div></div>
+        <div class="tile ${t.some((n) => n.vulns?.worst === "affected" || n.vulns?.worst === "likely") ? "bad" : ""}"><div class="n">${t.filter((n) => n.vulns?.findings?.length).length}</div><div class="l">firmware warnings</div></div>
+      </div>
+      ${a.length ? o`<div class="card"><div class="row">
+        <span>${y(a.length, "camera")} can still reach the internet.</span><span class="spacer"></span>
+        <button class="btn primary" @click=${() => this.containAll(a.map((n) => n.mac))}>Block internet for all ${a.length}</button></div></div>` : l}
+      <div class="card scroll" style="padding:0">
+        <table>
+          <thead><tr><th>Camera</th><th>Internet</th><th>Calls home to</th><th>Firmware</th><th>ONVIF</th><th></th></tr></thead>
+          <tbody>${t.map((n) => o`<tr>
+            <td><button class="linkish" @click=${() => this.ctx.open(n.mac)}><strong>${m(n)}</strong></button><div class="muted small">${n.ip} · ${n.vulns?.family || n.onvif_manufacturer || n.vendor}</div></td>
+            <td>${M(n)}${n.phone_home ? o`<div class="small muted">${y(n.phone_home.attempts, "attempt")}${n.phone_home.allowed ? `, ${n.phone_home.allowed} through` : ", all blocked"}</div>` : l}
+              ${n.phone_home?.port_sweep ? o`<div class="small"><span class="badge warn">probing ${n.phone_home.port_sweep.ports} ports</span></div>` : l}</td>
+            <td class="small">${n.phone_home ? Object.keys(n.phone_home.clouds).join(", ") || Object.keys(n.phone_home.regions).join(", ") || "—" : o`<span class="muted">not visible</span>`}</td>
+            <td>${lt(n)}<div class="small muted">${n.vulns?.firmware_date || ""}</div></td>
+            <td>${n.onvif?.onvif ? o`<span class="badge ok">yes</span>${n.onvif.auth_required ? o` <span class="small muted">login</span>` : l}` : o`<span class="muted small">—</span>`}</td>
+            <td>${n.containment ? l : o`<button class="btn" @click=${() => this.ctx.act("block_internet", { mac: n.mac }, { confirm: `Block ${m(n)} from the internet? It keeps its address, so recording keeps working.`, done: `${m(n)} blocked from the internet` })}>Block internet</button>`}</td>
+          </tr>`)}</tbody>
+        </table>
+        ${t.length ? l : o`<div class="empty">No cameras found yet. Run ONVIF discovery or Quantify from Tools.</div>`}
+      </div>
+      ${s.length ? o`<div class="card"><h2>Camera Wi-Fi networks</h2>
+        <p class="sub">A camera running its own Wi-Fi access point can be reached by anyone nearby, around your firewall. Turn that mode off in the camera's settings.</p>
+        <table><thead><tr><th>Network</th><th>Why it's listed</th><th>Signal</th><th>Channel</th><th>Security</th></tr></thead>
+        <tbody>${s.map((n) => o`<tr><td>${n.essid || "(hidden)"}<div class="mono muted">${n.bssid}</div></td>
+          <td>${n.reason === "own_camera" ? o`<span class="badge bad">your camera ${n.camera_name || n.camera_mac}</span>` : "camera setup name"}</td>
+          <td>${n.rssi != null ? `${n.rssi} dBm` : "—"}</td><td>${n.channel ?? "—"}</td><td>${n.security || "open"}</td></tr>`)}</tbody></table></div>` : l}
+      <div class="card small muted">
+        UniFi only logs blocked connections, so a camera's internet use shows up once it's blocked: every attempt it makes is then blocked and listed. "Not contained" means UniFi logged traffic it let through from a camera that should be cut off.
+      </div>
+    `;
+  }
+  async containAll(e) {
+    if (!await this.ctx.confirm(`Block ${y(e.length, "camera")} from the internet? They keep their addresses, so your recorder keeps working.`)) return;
+    let a = 0;
+    for (const s of e)
+      await this.ctx.act("block_internet", { mac: s }, { refresh: !1 }) && a++;
+    this.ctx.say(`${y(a, "camera")} blocked from the internet`), this.ctx.reload();
+  }
+};
+at.styles = [k];
+Xt([
+  g({ attribute: !1 })
+], at.prototype, "ctx", 2);
+at = Xt([
+  x("ub-cameras")
+], at);
+var Te = Object.defineProperty, Ue = Object.getOwnPropertyDescriptor, Gt = (e, t, a, s) => {
+  for (var n = s > 1 ? void 0 : s ? Ue(t, a) : t, i = e.length - 1, r; i >= 0; i--)
+    (r = e[i]) && (n = (s ? r(t, a, n) : r(n)) || n);
+  return s && n && Te(t, a, n), n;
+};
+const Lt = [
+  { id: "cloud", title: "Cloud only", text: "Only work through the maker's servers. Cutting them off breaks them, so local-only isn't an option; if that worries you, look for a local alternative." },
+  { id: "cloud_local", title: "Cloud, with a local option", text: "Ship talking to a cloud but can be controlled locally. Switch Home Assistant to the local route first, then they can go on local-only without breaking." },
+  { id: "unknown", title: "Not sure", text: "Home automation devices we can't place yet. Set their category or brand by hand from the device's page." },
+  { id: "local", title: "Local", text: "Firmware you control or no cloud at all (ESPHome, WLED, Tasmota, Zigbee coordinators). Nothing to do." }
+];
+let nt = class extends $ {
+  render() {
+    const e = this.ctx.snap.clients.filter((a) => a.home_automation), t = (a) => e.filter((s) => s.home_automation.tier === a).sort((s, n) => (s.home_automation.brand || "~").localeCompare(n.home_automation.brand || "~") || m(s).localeCompare(m(n)));
+    return o`
+      <h1>Home automation</h1>
+      <p class="sub">Smart home devices, sorted by how much they depend on someone else's cloud. Cheap cloud-tied gear has the same problems as cheap cameras.</p>
+      <div class="tiles">${Lt.map((a) => o`<div class="tile ${a.id === "cloud" && t(a.id).length ? "warn" : ""}"><div class="n">${t(a.id).length}</div><div class="l">${a.title.toLowerCase()}</div></div>`)}</div>
+      ${Lt.map((a) => {
+      const s = t(a.id);
+      return s.length ? o`<div class="card"><h2>${a.title} (${s.length})</h2><p class="sub">${a.text}</p>
+          <div class="scroll"><table><thead><tr><th>Device</th><th>Brand</th><th>Internet</th><th>24 h</th>${a.id === "cloud_local" ? o`<th>Local option</th>` : l}</tr></thead>
+          <tbody>${s.map((n) => this.row(n, a.id === "cloud_local"))}</tbody></table></div></div>` : l;
+    })}
+      ${e.length ? l : o`<div class="empty">No home automation devices found.</div>`}
+    `;
+  }
+  row(e, t) {
+    const a = e.phone_home;
+    return o`<tr class="click" tabindex="0" @click=${() => this.ctx.open(e.mac)} @keydown=${(s) => s.key === "Enter" && this.ctx.open(e.mac)}>
+      <td><strong>${m(e)}</strong><div class="muted small">${e.ip}</div></td>
+      <td>${e.home_automation.brand || o`<span class="muted">—</span>`}</td>
+      <td>${M(e)}${a ? o`<div class="small muted">${a.attempts} attempts${Object.keys(a.clouds).length ? ` to ${Object.keys(a.clouds).join(", ")}` : ""}</div>` : l}</td>
+      <td>${yt(e.traffic_24h)}</td>
+      ${t ? o`<td class="small">${e.home_automation.local_option}</td>` : l}
+    </tr>`;
+  }
+};
+nt.styles = [k];
+Gt([
+  g({ attribute: !1 })
+], nt.prototype, "ctx", 2);
+nt = Gt([
+  x("ub-home")
+], nt);
+var Re = Object.defineProperty, De = Object.getOwnPropertyDescriptor, kt = (e, t, a, s) => {
+  for (var n = s > 1 ? void 0 : s ? De(t, a) : t, i = e.length - 1, r; i >= 0; i--)
+    (r = e[i]) && (n = (s ? r(t, a, n) : r(n)) || n);
+  return s && n && Re(t, a, n), n;
+};
+const je = ["critical", "high", "medium", "low", "info"];
+let G = class extends $ {
+  constructor() {
+    super(...arguments), this.show = /* @__PURE__ */ new Set(["critical", "high", "medium"]);
+  }
+  toggle(e) {
+    const t = new Set(this.show);
+    t.has(e) ? t.delete(e) : t.add(e), this.show = t;
+  }
+  render() {
+    const { snap: e } = this.ctx, t = [
+      ...(e.recs.network_recs || []).map((i) => ({ r: i })),
+      ...Object.entries(e.recs.device_recs || {}).flatMap(([i, r]) => r.map((h) => ({ r: h, mac: i })))
+    ].sort((i, r) => _t(i.r, r.r)), a = t.filter((i) => this.show.has(i.r.priority)), s = e.overview.security_events || [], n = e.clients.filter((i) => i.suspicious).sort((i, r) => r.suspicion_score - i.suspicion_score);
+    return o`
+      <h1>Security</h1>
+      <p class="sub">What to fix, most urgent first, plus UniFi's security log and devices that behave oddly.</p>
+      <div class="chips" role="group" aria-label="Show priorities">
+        ${je.map((i) => o`<button class="chip" aria-pressed=${this.show.has(i) ? "true" : "false"} @click=${() => this.toggle(i)}>${i} ${t.filter((r) => r.r.priority === i).length}</button>`)}
+      </div>
+      <div class="card">
+        <h2>Recommendations (${a.length})</h2>
+        ${a.length ? a.slice(0, 80).map((i) => xt(this.ctx, i.r, i.mac)) : o`<div class="empty">Nothing at these levels.</div>`}
+        ${a.length > 80 ? o`<p class="small muted">Showing the first 80.</p>` : l}
+      </div>
+      <div class="grid two">
+        <div class="card"><h2>UniFi security log, last 24 h (${s.length})</h2>
+          <p class="sub">Blocks made by UniFi Blocker's own local-only rules aren't listed here; they show on each camera as proof the rule works (${e.overview.contained_blocks_24h ?? 0} today).</p>
+          ${s.length ? o`<div class="scroll"><table class="small"><thead><tr><th>When</th><th>What</th><th>Rule</th></tr></thead>
+            <tbody>${s.map((i) => o`<tr><td class="mono">${i.time ? new Date(i.time).toLocaleString() : "—"}</td><td>${i.msg || i.title || i.key}</td><td>${i.rule || i.catname || "—"}</td></tr>`)}</tbody></table></div>` : o`<div class="empty">Nothing in UniFi's security log.</div>`}
+        </div>
+        <div class="card"><h2>Suspicious devices (${n.length})</h2>
+          ${n.length ? n.slice(0, 20).map((i) => o`<div style="padding:6px 0;border-bottom:1px solid var(--ub-line)">
+            <div class="row"><button class="linkish" @click=${() => this.ctx.open(i.mac)}>${m(i)}</button>
+              <span class="badge ${i.threat_level === "high" ? "bad" : "warn"}">${i.threat_level} · ${i.suspicion_score}</span><span class="muted small">${i.vendor}</span></div>
+            <ul class="small" style="margin:4px 0 0 0;padding-left:18px">${i.suspicion_flags.map((r) => o`<li>${r}</li>`)}</ul></div>`) : o`<div class="empty">No device is acting suspiciously.</div>`}
+        </div>
+      </div>
+    `;
+  }
+};
+G.styles = [k];
+kt([
+  g({ attribute: !1 })
+], G.prototype, "ctx", 2);
+kt([
+  v()
+], G.prototype, "show", 2);
+G = kt([
+  x("ub-security")
+], G);
+var Ie = Object.defineProperty, He = Object.getOwnPropertyDescriptor, q = (e, t, a, s) => {
+  for (var n = s > 1 ? void 0 : s ? He(t, a) : t, i = e.length - 1, r; i >= 0; i--)
+    (r = e[i]) && (n = (s ? r(t, a, n) : r(n)) || n);
+  return s && n && Ie(t, a, n), n;
+};
+function Le(e, t) {
+  const [a, s] = t.split("/"), n = Number(s), i = (h) => h.split(".").reduce((c, p) => c * 256 + Number(p), 0);
+  if (!a || !(n >= 0 && n <= 32) || a.split(".").length !== 4) return !1;
+  const r = n === 0 ? 0 : 2 ** 32 - 2 ** (32 - n);
+  return (i(e) & r) >>> 0 === (i(a) & r) >>> 0;
+}
+let O = class extends $ {
+  constructor() {
+    super(...arguments), this.ipResult = null, this.ip = "", this.showCandidates = !1, this.cidr = "";
+  }
+  async checkIp() {
+    this.ip.trim() && (this.ipResult = await this.ctx.act("check_ip", { ip: this.ip.trim() }, { refresh: !1 }));
+  }
+  rangeCard(e) {
+    const { snap: t, act: a } = this.ctx, s = t.localnet.range_block;
+    if (!s) return l;
+    const n = this.cidr || s.cidr || `${e}.0/24`, i = t.clients.filter((h) => h.ip && Le(h.ip, n)), r = i.filter((h) => !h.is_camera && ["nas", "computer", "phone", "tablet", "networking", "crypto", "streaming", "gaming"].includes(h.category));
+    return o`<div class="card">
+      <h2>Block the whole range</h2>
+      <p>Two firewall rules on the gateway cut every address in a range off from the internet, including devices added later. Time sync (NTP) stays allowed so camera timestamps and light schedules stay right. Nothing on your own network is affected.</p>
+      ${s.supported ? s.enabled ? o`<div class="row"><span class="badge ok">on</span><span class="mono">${s.cidr}</span>
+            <span class="small muted">${y(i.length, "device")} online in it${s.ntp_allowed ? ", time sync allowed" : ""}</span><span class="spacer"></span>
+            <button class="btn" @click=${() => a("localnet_range_block", { enabled: !1 }, { confirm: `Remove the block on ${s.cidr}? Devices in it get internet access again unless they have their own rule.`, done: "Range block removed" })}>Turn off</button></div>` : o`<div class="row">
+            <label class="small" for="cidr">Range</label>
+            <input id="cidr" class="mono" style="width:150px" .value=${n} @input=${(h) => this.cidr = h.target.value.trim()}>
+            <span class="small muted">${y(i.length, "device")} online in it</span><span class="spacer"></span>
+            <button class="btn primary" @click=${() => a(
+      "localnet_range_block",
+      { enabled: !0, cidr: n },
+      { confirm: `Block every address in ${n} from the internet? ${y(i.length, "device")} online now${r.length ? `, including ${r.map(m).join(", ")}` : ""}.`, danger: r.length > 0, done: `${n} blocked from the internet` }
+    )}>Block this range</button></div>
+          ${r.length ? o`<p class="small"><span class="badge warn">check</span> ${r.map(m).join(", ")} ${r.length === 1 ? "is in this range and probably needs" : "are in this range and probably need"} the internet. Use a smaller range (e.g. ${e}.0/25 covers .0–.127) to leave ${r.length === 1 ? "it" : "them"} out.</p>` : l}` : o`<p><span class="badge warn">not available</span> ${s.reason}</p>`}
+    </div>`;
+  }
+  render() {
+    const { snap: e, act: t } = this.ctx, a = e.localnet, s = a.prefix || "192.168.2", n = a.assignments || {}, i = (d) => !!n[d.mac.toLowerCase()], r = {
+      blocked: e.clients.filter((d) => d.blocked || d.state === "quarantined"),
+      local: e.clients.filter((d) => !(d.blocked || d.state === "quarantined") && i(d)),
+      review: e.clients.filter((d) => !(d.blocked || d.state === "quarantined") && !i(d) && d.state === "new"),
+      internet: e.clients.filter((d) => !(d.blocked || d.state === "quarantined") && !i(d) && d.state !== "new")
+    }, h = a.firewall || {}, c = (h.total_devices || 0) - (h.blocked_count || 0), p = e.clients.filter((d) => !i(d) && d.category !== "unknown" && d.state !== "quarantined" && !d.blocked), u = e.clients.filter((d) => d.category === "nas");
+    return o`
+      <h1>Network</h1>
+      <p class="sub">Who can reach what, and the local-only setup.</p>
+      <div class="tiles">
+        <div class="tile"><div class="n">${r.internet.length}</div><div class="l">internet access</div></div>
+        <div class="tile ok"><div class="n">${r.local.length}</div><div class="l">local-only</div></div>
+        <div class="tile"><div class="n">${r.blocked.length}</div><div class="l">blocked</div></div>
+        <button class="tile ${r.review.length > 10 ? "warn" : ""}" @click=${() => this.ctx.go("devices", "new")}><div class="n">${r.review.length}</div><div class="l">not reviewed yet</div></button>
+      </div>
+
+      ${this.rangeCard(s)}
+
+      <div class="card">
+        <h2>Local-only</h2>
+        <p>Local-only devices get an address in <span class="mono">${a.subnet || `${s}.0/24`}</span> and a per-device traffic rule on the gateway that blocks them from the internet. They keep working on your network.</p>
+        <p class="small muted">Local-only stops internet access, not access to the rest of your LAN: those addresses are on the same network as everything else. Keeping a camera away from your other devices takes a separate VLAN.</p>
+        <div class="row" style="margin:8px 0">
+          ${h.total_devices ? o`<span class="badge ${c ? "warn" : "ok"}">${h.blocked_count}/${h.total_devices} rules in place</span>` : o`<span class="badge">no devices yet</span>`}
+          ${c > 0 ? o`<button class="btn primary" @click=${() => t("localnet_ensure_rule", {}, { done: "Missing rules created" })}>Create ${y(c, "missing rule")}</button>` : l}
+        </div>
+        ${Object.keys(n).length ? o`<div class="scroll"><table>
+          <thead><tr><th>Device</th><th>Address</th><th>Category</th><th>Internet</th><th></th></tr></thead>
+          <tbody>${Object.entries(n).map(([d, f]) => {
+      const b = e.clients.find((j) => j.mac.toLowerCase() === d);
+      return o`<tr><td>${b ? o`<button class="linkish" @click=${() => this.ctx.open(d)}>${m(b)}</button>` : o`${f.name || d} <span class="muted small">(offline)</span>`}</td>
+              <td class="mono">${f.ip}</td><td>${f.category}</td>
+              <td>${b?.phone_home ? o`<span class="small">${b.phone_home.attempts} attempts blocked</span>` : o`<span class="muted small">—</span>`}</td>
+              <td><button class="btn" @click=${() => t("localnet_remove", { mac: d }, { confirm: `Take ${b ? m(b) : d} off local-only? It gets internet access again.`, done: "Removed from local-only" })}>Remove</button></td></tr>`;
+    })}</tbody></table></div>` : l}
+        <button class="btn" style="margin-top:12px" aria-expanded=${this.showCandidates ? "true" : "false"} @click=${() => this.showCandidates = !this.showCandidates}>${this.showCandidates ? "Hide" : "Add devices"}</button>
+        ${this.showCandidates ? o`<div class="scroll" style="margin-top:8px"><table><thead><tr><th>Device</th><th>Category</th><th></th></tr></thead>
+          <tbody>${p.slice(0, 60).map((d) => o`<tr><td>${m(d)}<div class="muted small">${d.ip} · ${d.vendor}</div></td><td>${d.category_label}</td>
+            <td><button class="btn" @click=${() => t("localnet_assign", { mac: d.mac, category: d.category }, { confirm: `Put ${m(d)} on local-only?`, done: `${m(d)} is now local-only` })}>Make local-only</button></td></tr>`)}</tbody></table></div>` : l}
+        ${(a.ranges || []).length ? o`<details style="margin-top:12px"><summary class="small">Address ranges by category</summary>
+          <table class="small"><thead><tr><th>Category</th><th>Range</th><th>Used</th></tr></thead>
+          <tbody>${(a.ranges || []).map((d) => o`<tr><td>${Object.fromEntries(ct(e))[d.category] || d.category}</td><td class="mono">${d.range}</td><td>${d.used}/${d.total}</td></tr>`)}</tbody></table></details>` : l}
+      </div>
+
+      <div class="grid two">
+        <div class="card">
+          <h2>Is this address free?</h2>
+          <p class="sub">Checks clients, offline devices, UniFi devices, reservations and local-only assignments before you hand an address out.</p>
+          <div class="row"><input type="text" placeholder="${s}.35" aria-label="IP address" .value=${this.ip} @input=${(d) => this.ip = d.target.value} @keydown=${(d) => d.key === "Enter" && this.checkIp()}>
+            <button class="btn primary" @click=${() => this.checkIp()}>Check</button></div>
+          ${this.ipResult ? o`<p style="margin-top:10px"><strong>${this.ipResult.summary}</strong></p>
+            <table class="small"><tbody>${(this.ipResult.checks || []).map((d) => o`<tr><td>${d.icon}</td><td>${d.check}</td><td>${d.result}</td></tr>`)}</tbody></table>` : l}
+        </div>
+        <div class="card">
+          <h2>Storage (${u.length})</h2>
+          ${u.length ? o`<table class="small"><tbody>${u.map((d) => o`<tr class="click" @click=${() => this.ctx.open(d.mac)}><td>${m(d)}</td><td class="mono">${d.ip}</td><td>${d.vendor}</td><td>${wt(d)}</td></tr>`)}</tbody></table>
+            <p class="small muted" style="margin-top:8px">A NAS should stay on your main network with internet for updates and cloud backup. Don't put it on local-only.</p>` : o`<div class="empty">No NAS found.</div>`}
+        </div>
+      </div>
+    `;
+  }
+};
+O.styles = [k];
+q([
+  g({ attribute: !1 })
+], O.prototype, "ctx", 2);
+q([
+  v()
+], O.prototype, "ipResult", 2);
+q([
+  v()
+], O.prototype, "ip", 2);
+q([
+  v()
+], O.prototype, "showCandidates", 2);
+q([
+  v()
+], O.prototype, "cidr", 2);
+O = q([
+  x("ub-network")
+], O);
+var Be = Object.defineProperty, ze = Object.getOwnPropertyDescriptor, Jt = (e, t, a, s) => {
+  for (var n = s > 1 ? void 0 : s ? ze(t, a) : t, i = e.length - 1, r; i >= 0; i--)
+    (r = e[i]) && (n = (s ? r(t, a, n) : r(n)) || n);
+  return s && n && Be(t, a, n), n;
+};
+let it = class extends $ {
+  render() {
+    const { rigs: e, summary: t } = this.ctx.snap.miners, a = t.profit_usd_day ?? 0;
+    return o`
+      <h1>Mining</h1>
+      <p class="sub">Crypto miners found on the network, with live profitability at $${(t.electricity_usd_per_kwh ?? 0.08).toFixed(3)}/kWh.</p>
+      <div class="tiles">
+        <div class="tile"><div class="n">${t.rig_count ?? 0}</div><div class="l">rigs</div></div>
+        <div class="tile"><div class="n">${t.reachable ?? 0}/${t.rig_count ?? 0}</div><div class="l">answering</div></div>
+        <div class="tile"><div class="n">${Dt(t.total_hashrate_hs)}</div><div class="l">hashrate</div></div>
+        <div class="tile"><div class="n">${Math.round(t.total_power_w ?? 0)} W</div><div class="l">power</div></div>
+        <div class="tile"><div class="n">${I(t.revenue_usd_day)}</div><div class="l">revenue / day</div></div>
+        <div class="tile"><div class="n">${I(t.cost_usd_day)}</div><div class="l">power cost / day</div></div>
+        <div class="tile ${a > 0 ? "ok" : a < 0 ? "bad" : ""}"><div class="n">${I(a)}</div><div class="l">profit / day</div></div>
+      </div>
+      ${e.length ? o`<div class="card scroll" style="padding:0"><table>
+        <thead><tr><th>Rig</th><th>Model</th><th>Coin</th><th>Hashrate</th><th>Temp</th><th>Power</th><th>Revenue</th><th>Cost</th><th>Profit</th></tr></thead>
+        <tbody>${e.map((s) => o`<tr>
+          <td class="mono"><a href="http://${s.ip}" target="_blank" rel="noopener noreferrer" style="color:var(--primary-color)">${s.ip}</a></td>
+          <td>${s.model || "—"}${s.reachable ? o` <span class="badge info">${s.source || "api"}</span>` : o` <span class="badge warn">no API</span>`}</td>
+          <td>${s.coin || "—"}</td><td>${s.hashrate_display || Dt(s.hashrate_hs)}</td>
+          <td>${s.extras?.temp_c != null ? `${s.extras.temp_c} °C` : "—"}</td>
+          <td>${s.power_w != null ? `${Math.round(s.power_w)} W${s.power_source === "rated" ? " (rated)" : ""}` : "—"}</td>
+          <td>${I(s.revenue_usd_day)}</td><td>${I(s.cost_usd_day)}</td>
+          <td class=${(s.profit_usd_day ?? 0) < 0 ? "bad" : ""}>${I(s.profit_usd_day)}</td>
+        </tr>`)}</tbody></table></div>` : o`<div class="card empty">No miners found. They're picked up from port scans (CGMiner API on 4028) and known miner makers' MAC addresses.</div>`}
+      ${(t.revenue_usd_day ?? 0) === 0 && e.length ? o`<p class="small muted">Revenue shows $0 when coin prices can't be fetched (minerstat.com now needs an API key).</p>` : l}
+    `;
+  }
+};
+it.styles = [k];
+Jt([
+  g({ attribute: !1 })
+], it.prototype, "ctx", 2);
+it = Jt([
+  x("ub-mining")
+], it);
+var Fe = Object.defineProperty, qe = Object.getOwnPropertyDescriptor, Y = (e, t, a, s) => {
+  for (var n = s > 1 ? void 0 : s ? qe(t, a) : t, i = e.length - 1, r; i >= 0; i--)
+    (r = e[i]) && (n = (s ? r(t, a, n) : r(n)) || n);
+  return s && n && Fe(t, a, n), n;
+};
+const Ve = [
+  [34567, "XMEye / Xiongmai", "DVR protocol; these phone home to Xiongmai's cloud", "bad"],
+  [34568, "XMEye media", "XMEye video stream", "bad"],
+  [9530, "Dahua debug", "debug service on older Dahua firmware", "bad"],
+  ["6789, 32100, 19000", "P2P relays", "camera cloud relays (P2P)", "bad"],
+  [554, "RTSP", "camera video stream (local use is fine)", ""],
+  [8e3, "Hikvision SDK", "Hikvision management, also used by other things", ""],
+  [37777, "Dahua TCP", "Dahua NVR/DVR protocol", ""],
+  [23, "Telnet", "unencrypted remote shell; Mirai's way in", "warn"],
+  [21, "FTP", "unencrypted file transfer", "warn"],
+  [445, "SMB", "file sharing; lateral movement", "warn"],
+  [1900, "UPnP", "can open ports on your router by itself", "warn"]
+];
+let R = class extends $ {
+  constructor() {
+    super(...arguments), this.preview = null, this.discovering = !1, this.debug = null;
+  }
+  async discover() {
+    this.discovering = !0;
+    const e = await this.ctx.act("onvif_discover", {}, { refresh: !0 });
+    this.discovering = !1, e && this.ctx.say(`ONVIF discovery found ${e.count ?? 0} camera${e.count === 1 ? "" : "s"}`);
+  }
+  async showDebug(e) {
+    const t = await this.ctx.act(e, {}, { refresh: !1 });
+    t && (this.debug = JSON.stringify(t, null, 2));
+  }
+  render() {
+    const { snap: e, act: t } = this.ctx, a = e.report, s = e.learned, n = ct(e), i = s ? [
+      ...Object.entries(s.vendor_rules || {}).map(([r, h]) => ["vendor", r, `maker contains “${r}”`, h]),
+      ...Object.entries(s.hostname_rules || {}).map(([r, h]) => ["hostname", r, `name starts “${r}”`, h]),
+      ...Object.entries(s.mac_rules || {}).map(([r, h]) => ["mac", r, `MAC starts ${r}`, h]),
+      ...(s.port_rules || []).map((r) => ["port", r.ports.join(","), `ports ${r.ports.join(", ")}`, r.category])
+    ] : [];
+    return o`
+      <h1>Tools</h1>
+      <p class="sub">Scans, learned rules, and settings for the usage report.</p>
+      <div class="grid two">
+        <div class="card">
+          <h2>Find cameras</h2>
+          <p class="sub">ONVIF discovery runs at startup and every 6 hours. Run it now after adding a camera. Quantify (on Overview) deep-scans everything still unknown.</p>
+          <div class="row"><button class="btn primary" ?disabled=${this.discovering} @click=${() => this.discover()}>${this.discovering ? "Looking…" : "Run ONVIF discovery"}</button>
+            <button class="btn" @click=${() => this.ctx.go("overview")}>Quantify…</button></div>
         </div>
 
         <div class="card">
-          <h2>Discovered Rigs</h2>
-          <p class="subtitle">Electricity priced at <strong>$${(s.electricity_usd_per_kwh || 0.08).toFixed(2)}/kWh</strong>. Live profitability uses minerstat.com prices (10-min cache). Power marked <em>(rated)</em> is the manufacturer spec — Goldshell rigs don't report wall power.</p>
-          <div class="table-wrap"><table class="data-table">
-            <thead><tr>
-              <th>IP</th><th>Model</th><th>API</th><th>Coin</th><th>Hashrate</th><th>Temp</th><th>Power</th>
-              <th>Rev/day</th><th>Cost/day</th><th>Profit/day</th>
-            </tr></thead>
-            <tbody>
-              ${rigs.map(r => {
-                const reach = r.reachable ? "" : ' <span class="badge danger">no API</span>';
-                const temp = (r.extras && r.extras.temp_c) ? r.extras.temp_c + "°C" : "—";
-                const powerSrc = r.power_source === "rated" ? ' <span class="conf">(rated)</span>' : "";
-                const apiBadge = r.source === "goldshell" ? '<span class="badge ok">goldshell</span>'
-                              : r.source === "cgminer" ? '<span class="badge ok">cgminer</span>'
-                              : "—";
-                const pc = (r.profit_usd_day || 0) >= 0 ? "" : "row-warn";
-                return `<tr class="${pc}">
-                  <td class="mono">${r.ip ? `<a href="http://${r.ip}" target="_blank" rel="noopener" class="ip-link">${r.ip}</a>` : "—"}</td>
-                  <td>${r.model || "—"}${reach}</td>
-                  <td>${apiBadge}</td>
-                  <td>${r.coin || "—"}</td>
-                  <td>${r.hashrate_display || "—"}</td>
-                  <td>${temp}</td>
-                  <td>${r.power_w || 0} W${powerSrc}</td>
-                  <td>$${(r.revenue_usd_day || 0).toFixed(2)}</td>
-                  <td>$${(r.cost_usd_day || 0).toFixed(2)}</td>
-                  <td><strong>$${(r.profit_usd_day || 0).toFixed(2)}</strong></td>
-                </tr>`;
-              }).join("")}
-            </tbody>
-          </table></div>
-        </div>`;
-    }
-
-    return `<h1>⛏ Crypto Miner Profitability</h1>${body}`;
-  }
-
-  _vPorts() {
-    return `<h1>Port & Protocol Guide</h1>
-      <div class="card danger-card"><h2>📹 Camera Phone-Home (RED FLAG)</h2><table class="data-table"><thead><tr><th>Port</th><th>Protocol</th><th>Meaning</th></tr></thead><tbody>
-        <tr class="row-danger"><td>34567</td><td>XMEye</td><td>Chinese DVR phoning home</td></tr>
-        <tr class="row-danger"><td>34568</td><td>XMEye Media</td><td>DVR sending video to China</td></tr>
-        <tr class="row-danger"><td>9530</td><td>Dahua</td><td>Dahua debug/backdoor</td></tr>
-        <tr class="row-danger"><td>6789</td><td>P2P Cloud</td><td>Camera calling home</td></tr>
-        <tr class="row-danger"><td>32100</td><td>Reolink P2P</td><td>Reolink cloud</td></tr>
-        <tr class="row-danger"><td>19000</td><td>EZVIZ</td><td>EZVIZ/Hikvision cloud</td></tr>
-      </tbody></table></div>
-      <div class="card"><h2>📹 Camera Ports</h2><table class="data-table"><thead><tr><th>Port</th><th>Protocol</th><th>Meaning</th></tr></thead><tbody>
-        <tr><td>554</td><td>RTSP</td><td>Live video stream</td></tr><tr><td>8000</td><td>Hikvision</td><td>SDK management</td></tr><tr><td>37777</td><td>Dahua</td><td>DVR connection</td></tr>
-      </tbody></table></div>
-      <div class="card warn-card"><h2>⚠ Risky</h2><table class="data-table"><thead><tr><th>Port</th><th>Protocol</th><th>Meaning</th></tr></thead><tbody>
-        <tr class="row-warn"><td>23</td><td>Telnet</td><td>Insecure access — backdoor</td></tr><tr class="row-warn"><td>21</td><td>FTP</td><td>Insecure file transfer</td></tr><tr class="row-warn"><td>445</td><td>SMB</td><td>File sharing — lateral movement</td></tr><tr class="row-warn"><td>1900</td><td>UPnP</td><td>Auto-open firewall</td></tr>
-      </tbody></table></div>`;
-  }
-
-  // ── Components ────────────────────────────────────────────────────
-  _stat(l,v,i,t="",click="") { return `<div class="stat-card ${t} ${click?"clickable":""}" ${click?`data-statview="${click}"`:``}><div class="stat-icon">${i}</div><div class="stat-value">${v}</div><div class="stat-label">${l}</div></div>`; }
-
-  _deviceCard(d, num) {
-    const flags = d.suspicion_flags||[]; const dpi = d.dpi||{}; const cats = dpi.top_categories||[];
-    const scan = this._scanCache[d.mac.toLowerCase()] || null;
-    const mid = d.mac.replace(/:/g,"");
-
-    let scanHtml = "";
-    if (scan && scan.status === "complete") {
-      const op = scan.open_ports || [];
-      const pd = scan.port_details || [];
-      const w = scan.warnings || [];
-      const rec = scan.recommendations || [];
-      scanHtml = `
-        <div class="scan-result">
-          <div class="scan-header">
-            <span class="scan-title">🔍 Port Scan Results</span>
-            <span class="badge ${scan.guess_risk==="critical"?"danger":scan.guess_risk==="high"?"danger":scan.guess_risk==="medium"?"medium":"ok"}">${scan.guess_risk} risk</span>
-            <span class="badge ${scan.guess_category}">${scan.guess_category}</span>
-            <span class="conf">${scan.guess_confidence} confidence</span>
-          </div>
-          <div class="scan-guess">${scan.guess_description}</div>
-          <div class="scan-ports">
-            <div class="scan-subtitle">${op.length} open port${op.length!==1?"s":""}</div>
-            ${pd.length?`<table class="dpi-table">
-              <tr><th>Port</th><th>Service</th><th>Type</th>${this._actionMode?"<th></th>":""}</tr>
-              ${pd.map(p => `<tr class="${p.group.includes("insecure")||p.group.includes("backdoor")||p.group.includes("xmeye")?"row-danger":p.group.includes("cloud")?"row-warn":""}">
-                <td>${p.port}</td><td>${p.name}</td><td>${p.group}</td>
-                ${this._actionMode?`<td><button class="btn-port-block" data-blockport="${p.port}" data-blockmac="${d.mac}">Block</button></td>`:""}
-              </tr>`).join("")}
-            </table>`:"<div>No ports responded.</div>"}
-          </div>
-          ${w.length?`<div class="scan-warnings"><div class="flags-title">⚠ Warnings:</div>${w.map(x=>`<div class="flag-item" style="color:#e94560">🔴 ${x}</div>`).join("")}</div>`:""}
-          ${rec.length?`<div class="scan-recs"><div class="scan-subtitle">Recommendations:</div>${rec.map(x=>`<div class="flag-item">💡 ${x}</div>`).join("")}</div>`:""}
-        </div>`;
-    }
-
-    return `<div class="device-card ${d.suspicious?"device-suspicious":""} ${d.is_camera?"device-camera":""}">
-      <div class="device-header">
-        <span class="device-num">#${num}</span>
-        <span class="device-mac mono">${d.mac}</span>
-        <span class="badge ${d.category}">${d.category_icon||"❓"} ${d.category_label||""}</span>
-        ${d.is_camera?'<span class="badge camera">📹 CAM</span>':""}
-        ${d.suspicious?`<span class="badge ${d.threat_level}">${d.threat_level.toUpperCase()}</span>`:""}
-        <span class="badge ${d.state}">${d.state}</span>
-      </div>
-      <div class="device-body">
-        <div class="device-info">
-          <div class="info-row"><span class="info-label">Name</span><span>${d.name||"—"}</span></div>
-          <div class="info-row"><span class="info-label">Vendor</span><span>${d.vendor||"Unknown"}</span></div>
-          <div class="info-row"><span class="info-label">IP</span><span class="mono">${d.ip ? `<a href="http://${d.ip}" target="_blank" rel="noopener" class="ip-link">${d.ip}</a>` : "—"}</span></div>
-          <div class="info-row"><span class="info-label">SSID</span><span>${d.essid||"—"}</span></div>
-          <div class="info-row"><span class="info-label">Signal</span><span>${d.rssi!=null?d.rssi+" dBm":"—"}</span></div>
-          <div class="info-row"><span class="info-label">TX/RX</span><span>${this._fmtB(d.tx_bytes)} / ${this._fmtB(d.rx_bytes)}</span></div>
-          ${d.onvif_manufacturer?`<div class="info-row"><span class="info-label">Make</span><span><strong>${d.onvif_manufacturer}</strong></span></div>`:""}
-          ${d.onvif_model?`<div class="info-row"><span class="info-label">Model</span><span><strong>${d.onvif_model}</strong></span></div>`:""}
-          ${d.onvif_firmware?`<div class="info-row"><span class="info-label">Firmware</span><span>${d.onvif_firmware}</span></div>`:""}
-          ${d.onvif_serial?`<div class="info-row"><span class="info-label">Serial</span><span class="mono">${d.onvif_serial}</span></div>`:""}
-        </div>
-        ${d.manual_category && this._actionMode ? `<div style="font-size:11px;margin:4px 0">Category set by hand. <button class="btn" data-clearcat="${d.mac}">Clear override</button></div>` : ""}
-        ${d.suggested_category && !d.manual_category ? `<div style="font-size:11px;margin:4px 0">Quantify suggests <strong>${d.suggested_category.category}</strong> (${d.suggested_category.confidence})${this._actionMode ? ` <button class="btn btn-trust" data-setcat="${d.suggested_category.category}" data-mac="${d.mac}">Accept</button>` : ""}</div>` : ""}
-        ${d.onvif && d.onvif.onvif ? `<div class="onvif-badge"><span class="badge ok">ONVIF Confirmed</span> ${d.onvif.manufacturer||""} ${d.onvif.model||""}${d.onvif.auth_required ? ' <span class="badge">login needed</span>' : ""}</div>` : ""}
-        ${this._vulnBlock(d.vulns)}
-        ${this._insightBlock(d)}
-        ${d.ip_history && d.ip_history.length > 1 ? `
-          <div class="ip-history">
-            <div style="font-size:10px;font-weight:600;color:var(--secondary-text-color);margin-bottom:3px">IP History:</div>
-            ${d.ip_history.map(h => `<div style="font-size:10px" class="mono">${h.ip} ${h.type === "current" ? '<span class="badge ok">current</span>' : `→ ${h.until || "?"} (${h.type})`}</div>`).join("")}
-          </div>
-        ` : ""}
-        ${flags.length?`<div class="flags"><div class="flags-title">Flags:</div>${flags.map(f=>`<div class="flag-item">⚠ ${f}</div>`).join("")}</div>`:""}
-        ${cats.length?`<div class="dpi"><div class="dpi-title">Traffic (DPI):</div><table class="dpi-table"><tr><th>Category</th><th>↓</th><th>↑</th></tr>${cats.map(c=>`<tr><td>${c.category}</td><td>${c.rx_mb}MB</td><td>${c.tx_mb}MB</td></tr>`).join("")}</table></div>`:""}
-        <div id="scan-${mid}" class="scan-section">
-          ${scanHtml || `<button class="btn btn-scan" data-scanmac="${d.mac}">🔍 Scan Ports</button>`}
+          <h2>Help improve UniFi Blocker</h2>
+          ${a ? o`
+            <p>Off unless you turn it on. Once a day it sends counts and versions so problems on other networks can be found: device counts by category, which tools get used, poll times, API errors, warnings logged. <strong>Never</strong> MAC or IP addresses, names, vendor strings from your network, or entity ids, and the whole report is refused if anything like that is in it.</p>
+            <div class="row">
+              ${a.enabled ? o`<span class="badge ok">on</span><span class="small muted">${a.last_day ? `last sent ${a.last_day}` : "nothing sent yet"}</span>` : o`<span class="badge">off</span>`}
+              <span class="spacer"></span>
+              ${a.enabled ? o`<button class="btn" @click=${() => t("report_set", { enabled: !1 }, { done: "Usage report off" })}>Turn off</button>
+                       <button class="btn" @click=${async () => {
+      const r = await t("report_send", {}, { refresh: !0 });
+      r && this.ctx.say(r.sent ? `Report sent (${r.bytes} bytes)` : `Not sent: ${r.reason}`, !r.sent);
+    }}>Send now</button>
+                       <button class="btn" @click=${() => t("report_new_id", {}, { confirm: "Replace the anonymous ID? Reports after this count as a new install.", done: "New ID made" })}>New ID</button>` : o`<button class="btn primary" @click=${() => t("report_set", { enabled: !0 }, { done: "Usage report on" })}>Turn on</button>`}
+              <button class="btn" @click=${async () => this.preview = await t("report_preview", {}, { refresh: !1 })}>Preview</button>
+            </div>
+            ${this.preview ? o`<p class="small" style="margin-top:8px">${this.preview.bytes} bytes to ${this.preview.url}${this.preview.problems?.length ? o` · <span class="badge bad">would be refused: ${this.preview.problems.join("; ")}</span>` : l}</p>
+              <pre class="mono" style="max-height:300px;overflow:auto;white-space:pre-wrap">${JSON.stringify(this.preview.payload, null, 2)}</pre>` : l}
+          ` : o`<p class="muted">Not available.</p>`}
         </div>
       </div>
-      ${this._actionMode?`<div class="device-actions">
-        ${this._actBtns(d.mac, d.category)}
-        <div class="cat-assign">
-          <span style="font-size:10px;color:var(--secondary-text-color);margin-right:4px">Set category:</span>
-          ${this._catBtns(d.mac)}
-        </div>
-      </div>`:""}
-    </div>`;
+
+      <div class="card">
+        <h2>Learned rules (${i.length})</h2>
+        <p class="sub">Picked up when you set a device's category by hand, and used for devices nothing else identifies. Fix or delete wrong ones.</p>
+        ${i.length ? o`<div class="scroll"><table><thead><tr><th>Rule</th><th>Category</th><th></th></tr></thead>
+          <tbody>${i.map(([r, h, c, p]) => o`<tr><td>${c}</td>
+            <td><select aria-label="Category for ${c}" @change=${(u) => t("learned_rule_update", { kind: r, key: h, category: u.target.value }, { done: "Rule updated" })}>
+              ${n.map(([u, d]) => o`<option value=${u} ?selected=${u === p}>${d}</option>`)}</select></td>
+            <td><button class="btn" @click=${() => t("learned_rule_update", { kind: r, key: h, category: null }, { confirm: `Delete the rule “${c}”?`, done: "Rule deleted" })}>Delete</button></td></tr>`)}</tbody></table></div>` : o`<div class="empty">No learned rules yet.</div>`}
+      </div>
+
+      <div class="card">
+        <h2>Port reference</h2>
+        <table class="small"><thead><tr><th>Port</th><th>What</th><th>Why it matters</th></tr></thead>
+          <tbody>${Ve.map(([r, h, c, p]) => o`<tr><td class="mono">${r}</td><td>${p ? o`<span class="badge ${p}">${h}</span>` : h}</td><td>${c}</td></tr>`)}</tbody></table>
+      </div>
+
+      <details class="card"><summary>Troubleshooting</summary>
+        <div class="row" style="margin-top:8px"><button class="btn" @click=${() => this.showDebug("traffic_rules_debug")}>Show traffic rules</button>
+          <button class="btn" @click=${() => this.showDebug("firewall_rules_debug")}>Show firewall rules</button></div>
+        ${this.debug ? o`<pre class="mono" style="max-height:400px;overflow:auto;white-space:pre-wrap">${this.debug}</pre>` : l}
+      </details>
+    `;
   }
-
-  // Local-only subnet from the integration options (defaults to 192.168.2.0/24).
-  _lp() { return (this._localnet && this._localnet.prefix) || "192.168.2"; }
-  _lcidr() { return (this._localnet && this._localnet.subnet) || "192.168.2.0/24"; }
-
-  _sparkline(series) {
-    if (!series || !series.length) return "";
-    const max = Math.max(...series, 1);
-    const w = 3, h = 24;
-    const bars = series.map((v, i) => `<rect x="${i * (w + 1)}" y="${h - Math.max(1, Math.round(h * v / max))}" width="${w}" height="${Math.max(1, Math.round(h * v / max))}" fill="currentColor" opacity="${i === series.length - 1 ? 1 : 0.55}"></rect>`).join("");
-    return `<svg width="${series.length * (w + 1)}" height="${h}" role="img" aria-label="Traffic per hour, last 24 hours" style="color:var(--primary-color,#42a5f5);vertical-align:middle">${bars}</svg>`;
+};
+R.styles = [k];
+Y([
+  g({ attribute: !1 })
+], R.prototype, "ctx", 2);
+Y([
+  v()
+], R.prototype, "preview", 2);
+Y([
+  v()
+], R.prototype, "discovering", 2);
+Y([
+  v()
+], R.prototype, "debug", 2);
+R = Y([
+  x("ub-tools")
+], R);
+var We = Object.defineProperty, Qe = Object.getOwnPropertyDescriptor, A = (e, t, a, s) => {
+  for (var n = s > 1 ? void 0 : s ? Qe(t, a) : t, i = e.length - 1, r; i >= 0; i--)
+    (r = e[i]) && (n = (s ? r(t, a, n) : r(n)) || n);
+  return s && n && We(t, a, n), n;
+};
+const Ke = "0.3.61", Bt = [
+  { id: "overview", label: "Overview", icon: "M12 3 2 12h3v8h6v-6h2v6h6v-8h3z" },
+  { id: "devices", label: "Devices", icon: "M4 6h16v10H4zM2 18h20v2H2z" },
+  { id: "cameras", label: "Cameras", icon: "M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11z" },
+  { id: "home", label: "Home", icon: "M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" },
+  { id: "security", label: "Security", icon: "M12 1 3 5v6c0 5.6 3.8 10.7 9 12 5.2-1.3 9-6.4 9-12V5z" },
+  { id: "network", label: "Network", icon: "M17 16l-4-4V8.8a3 3 0 1 0-2 0V12l-4 4H3v5h5v-3.1l4-4.1 4 4.1V21h5v-5z" },
+  { id: "mining", label: "Mining", icon: "M14.8 2.2 13.4 3.6l7 7 1.4-1.4zM12 5 2 15l7 7 10-10z" },
+  { id: "tools", label: "Tools", icon: "M22.7 19 13.6 9.9a6.4 6.4 0 0 0-8.4-8.4l4.3 4.3-3 3-4.4-4.3a6.4 6.4 0 0 0 8.4 8.4l9.1 9.1z" }
+];
+let w = class extends $ {
+  constructor() {
+    super(...arguments), this.narrow = !1, this.view = "overview", this.snap = {
+      overview: {},
+      clients: [],
+      recs: {},
+      localnet: {},
+      miners: { rigs: [], summary: {} },
+      scans: {},
+      report: null,
+      learned: null,
+      loaded: !1,
+      error: "",
+      updated: 0
+    }, this.toast = null, this.ask = null, this.openMac = null, this.devicesFilter = "all", this.lastReportedView = "", this.onVisibility = () => {
+      document.visibilityState === "visible" ? this.schedule(0) : window.clearTimeout(this.timer);
+    }, this.act = async (e, t = {}, a = {}) => {
+      if (a.confirm && !await this.confirm(a.confirm, a.danger)) return null;
+      try {
+        const s = await _(this.hass, e, t);
+        if (s && s.ok === !1) throw new pt("failed", s.error || "The controller refused it");
+        return a.done && this.say(a.done), a.refresh !== !1 && this.schedule(800), s ?? {};
+      } catch (s) {
+        return this.say(s instanceof pt ? s.message : String(s), !0), null;
+      }
+    }, this.say = (e, t = !1) => {
+      this.toast = { text: e, bad: t }, window.clearTimeout(this.toastTimer), this.toastTimer = window.setTimeout(() => this.toast = null, t ? 8e3 : 4e3);
+    }, this.confirm = (e, t = !1) => new Promise((a) => this.ask = { text: e, danger: t, resolve: a }), this.openDevice = (e) => this.openMac = e.toLowerCase(), this.go = (e, t) => {
+      this.view = e, t && (this.devicesFilter = t), this.renderRoot.querySelector("main")?.scrollTo?.(0, 0);
+    };
   }
-
-  _insightBlock(d) {
-    const parts = [];
-    if (d.traffic_24h) {
-      const total = d.traffic_24h.reduce((a, b) => a + b, 0);
-      parts.push(`<div class="info-row"><span class="info-label">Last 24 h</span><span>${this._sparkline(d.traffic_24h)} ${this._fmtB(total)}${d.traffic_spike ? ' <span class="badge danger">spike</span>' : ""}</span></div>`);
+  connectedCallback() {
+    super.connectedCallback();
+    const e = new URLSearchParams(location.search).get("view");
+    e && Bt.some((t) => t.id === e) && (this.view = e), document.addEventListener("visibilitychange", this.onVisibility), this.schedule(0);
+  }
+  disconnectedCallback() {
+    super.disconnectedCallback(), document.removeEventListener("visibilitychange", this.onVisibility), window.clearTimeout(this.timer);
+  }
+  schedule(e) {
+    window.clearTimeout(this.timer), this.timer = window.setTimeout(() => this.load(), e);
+  }
+  async load() {
+    if (!this.hass) return this.schedule(500);
+    try {
+      this.snap = await _e(this.hass);
+    } catch (e) {
+      this.snap = { ...this.snap, error: e?.message ?? String(e) };
     }
-    if (d.blocked_by_rule_24h) parts.push(`<div class="info-row"><span class="info-label">Local-only</span><span><span class="badge ok">working</span> blocked ${d.blocked_by_rule_24h} internet attempt${d.blocked_by_rule_24h === 1 ? "" : "s"} today</span></div>`);
-    if (d.security_events_24h) parts.push(`<div class="info-row"><span class="info-label">UniFi log</span><span><span class="badge warn">${d.security_events_24h} security event${d.security_events_24h === 1 ? "" : "s"}</span></span></div>`);
-    const ph = d.phone_home;
-    const cs = { holding: ["ok", "contained"], quiet: ["ok", "contained, no attempts seen"], leaking: ["danger", "NOT contained"] }[d.containment];
-    if (cs || ph) {
-      const span = ph && ph.window_minutes ? ` in ${ph.window_minutes < 120 ? ph.window_minutes + " min" : Math.round(ph.window_minutes / 60) + " h"}` : "";
-      parts.push(`<div class="info-row"><span class="info-label">Internet</span><span>${cs ? `<span class="badge ${cs[0]}">${cs[1]}</span> ` : ""}${ph ? `${ph.attempts} attempt${ph.attempts === 1 ? "" : "s"}${span}${ph.allowed ? `, <strong>${ph.allowed} let through</strong>` : ", all blocked"}` : ""}</span></div>`);
-      if (ph && Object.keys(ph.clouds || {}).length) parts.push(`<div class="info-row"><span class="info-label">Calls</span><span>${Object.keys(ph.clouds).join(", ")} cloud</span></div>`);
-      if (ph && (ph.top_destinations || []).length) parts.push(`<div class="info-row"><span class="info-label">Tries</span><span class="mono" style="font-size:10px">${ph.top_destinations.slice(0, 4).map(t => `${t.host}:${t.port ?? "-"}${t.region ? " (" + t.region + ")" : ""} ×${t.count}`).join("<br>")}</span></div>`);
-      if (ph && ph.port_sweep) parts.push(`<div class="info-row"><span class="info-label">Probing</span><span><span class="badge warn">${ph.port_sweep.ports} ports</span> on ${ph.port_sweep.host}</span></div>`);
-      if (ph && Object.keys(ph.dns_bypass || {}).length) parts.push(`<div class="info-row"><span class="info-label">DNS</span><span><span class="badge warn">own DNS</span> ${Object.keys(ph.dns_bypass).join(", ")}</span></div>`);
-    } else if (d.is_camera) {
-      parts.push(`<div class="info-row"><span class="info-label">Internet</span><span style="font-size:11px">Not visible: UniFi only logs blocked traffic. Put it on local-only to see what it tries to reach.</span></div>`);
+    document.visibilityState === "visible" && this.schedule(3e4);
+  }
+  updated() {
+    this.snap.report?.enabled && this.view !== this.lastReportedView && (this.lastReportedView = this.view, _(this.hass, "report_view", { view: this.view }).catch(() => {
+    }));
+  }
+  ctxObj() {
+    return {
+      hass: this.hass,
+      snap: this.snap,
+      act: this.act,
+      open: this.openDevice,
+      go: this.go,
+      say: this.say,
+      confirm: this.confirm,
+      reload: () => this.schedule(800)
+    };
+  }
+  answer(e) {
+    this.ask?.resolve(e), this.ask = null;
+  }
+  renderView() {
+    const e = this.ctxObj();
+    switch (this.view) {
+      case "overview":
+        return o`<ub-overview .ctx=${e}></ub-overview>`;
+      case "devices":
+        return o`<ub-devices .ctx=${e} .filter=${this.devicesFilter} @filter=${(t) => this.devicesFilter = t.detail}></ub-devices>`;
+      case "cameras":
+        return o`<ub-cameras .ctx=${e}></ub-cameras>`;
+      case "home":
+        return o`<ub-home .ctx=${e}></ub-home>`;
+      case "security":
+        return o`<ub-security .ctx=${e}></ub-security>`;
+      case "network":
+        return o`<ub-network .ctx=${e}></ub-network>`;
+      case "mining":
+        return o`<ub-mining .ctx=${e}></ub-mining>`;
+      case "tools":
+        return o`<ub-tools .ctx=${e}></ub-tools>`;
     }
-    const fp = d.unifi_fingerprint;
-    if (fp) parts.push(`<div class="info-row"><span class="info-label">UniFi ID</span><span>category ${fp.dev_cat ?? "?"}${fp.os_name ? ", " + fp.os_name : ""}${fp.camera ? ' <span class="badge camera">camera</span>' : ""}</span></div>`);
-    return parts.length ? `<div class="device-info">${parts.join("")}</div>` : "";
   }
-
-  _vulnBlock(v) {
-    if (!v) return "";
-    const label = { affected: ["danger", "affected"], likely: ["danger", "probably affected"], check: ["warn", "couldn't check"] };
-    const fw = v.firmware_date ? `firmware built ${v.firmware_date}${v.firmware_age_years != null ? ` (${v.firmware_age_years} years old)` : ""}` : "firmware date unknown";
-    return `<div class="flags"><div class="flags-title">Firmware check${v.family ? ` · ${v.family}` : ""}:</div>
-      <div class="flag-item">${fw}</div>
-      ${(v.findings || []).map(f => `<div class="flag-item"><span class="badge ${label[f.status][0]}">${label[f.status][1]}</span> <strong>${f.cve}</strong>${f.kev ? " (exploited, CISA KEV)" : ""}: ${f.detail}</div>`).join("")}
-    </div>`;
+  render() {
+    const e = this.snap.overview, t = this.snap.clients.filter((n) => n.containment === "leaking").length, a = this.snap.recs.critical_count || 0, s = this.openMac ? this.snap.clients.find((n) => n.mac.toLowerCase() === this.openMac) : void 0;
+    return o`
+      <div class="toolbar">
+        ${this.narrow ? o`<ha-menu-button .hass=${this.hass} .narrow=${this.narrow}></ha-menu-button>` : l}
+        <div class="title">UniFi Blocker</div>
+        <span class="status ${e.health?.connection_ok === !1 ? "bad" : ""}" title="Controller">
+          ${this.snap.loaded ? e.health?.connection_ok === !1 ? "Controller unreachable" : `${e.health?.hostname || "Controller"} · ${e.total_clients ?? 0} devices` : "Loading…"}
+        </span>
+        <button class="icon" aria-label="Refresh" title="Refresh" @click=${() => this.load()}>
+          <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M17.65 6.35A8 8 0 1 0 19.7 14h-2.1a6 6 0 1 1-1.4-6.2L13 11h7V4z"/></svg>
+        </button>
+      </div>
+      <nav aria-label="UniFi Blocker sections">
+        ${Bt.map((n) => o`
+          <button class="tab" aria-current=${this.view === n.id ? "page" : "false"} @click=${() => this.go(n.id)}>
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d=${n.icon}/></svg>
+            <span>${n.label}</span>
+            ${n.id === "security" && a ? o`<span class="dot" aria-label="${a} critical">${a}</span>` : l}
+            ${n.id === "cameras" && t ? o`<span class="dot" aria-label="${t} not contained">${t}</span>` : l}
+            ${n.id === "devices" && (e.new_count || 0) > 0 ? o`<span class="dot soft">${e.new_count}</span>` : l}
+          </button>`)}
+      </nav>
+      <main>
+        ${this.snap.error ? o`<div class="card error" role="alert">Couldn't load data: ${this.snap.error}</div>` : l}
+        ${this.renderView()}
+        <footer class="muted small">UniFi Blocker ${Ke}${this.snap.updated ? o` · updated ${new Date(this.snap.updated).toLocaleTimeString()}` : l}</footer>
+      </main>
+      ${s ? o`<ub-device-detail .ctx=${this.ctxObj()} .client=${s} @close=${() => this.openMac = null}></ub-device-detail>` : l}
+      ${this.ask ? o`
+        <div class="scrim" @click=${() => this.answer(!1)}></div>
+        <div class="dialog" role="alertdialog" aria-modal="true" aria-label="Confirm">
+          <p>${this.ask.text}</p>
+          <div class="row"><span class="spacer"></span>
+            <button class="btn" @click=${() => this.answer(!1)}>Cancel</button>
+            <button class="btn ${this.ask.danger ? "danger" : "primary"}" @click=${() => this.answer(!0)}>Continue</button>
+          </div>
+        </div>` : l}
+      ${this.toast ? o`<div class="toast ${this.toast.bad ? "bad" : ""}" role="status">${this.toast.text}</div>` : l}
+    `;
   }
-
-  _actBtns(mac, cat) {
-    const localBtn = `<button class="btn btn-local" data-localassign="${cat||'iot'}" data-mac="${mac}">🔒Local Only</button>`;
-    return `<button class="btn btn-trust" data-action="trust" data-mac="${mac}">✅Trust</button><button class="btn btn-ignore" data-action="ignore" data-mac="${mac}">👁Ignore</button>${localBtn}<button class="btn btn-quarantine" data-action="quarantine" data-mac="${mac}">🚫Block</button>`;
-  }
-
-  _catBtns(mac) {
-    const cats = [
-      ["camera","📹Cam"],["computer","💻PC"],["phone","📱Phone"],["esphome","🔌ESP"],
-      ["led","💡Light"],["ha_device","🏠HA"],["smart_speaker","🔊Spkr"],["streaming","📺Stream"],
-      ["gaming","🎮Game"],["printer","🖨Print"],["networking","🌐Net"],["crypto","⛏Crypto"],
-      ["iot","🔧IoT"],["nas","💾NAS"],["tablet","📱Tab"],
-    ];
-    return cats.map(([k,l]) => `<button class="btn btn-cat" data-setcat="${k}" data-mac="${mac}">${l}</button>`).join("");
-  }
-  _fmtB(b) { if(!b)return"0"; if(b>1e9)return(b/1e9).toFixed(1)+"GB"; if(b>1e6)return(b/1e6).toFixed(1)+"MB"; if(b>1e3)return(b/1e3).toFixed(1)+"KB"; return b+"B"; }
-}
-
-// ── CSS ─────────────────────────────────────────────────────────────
-const CSS = `
-:host{display:block;height:100%;font-family:var(--ha-card-header-font-family,"Segoe UI",Roboto,sans-serif)}
-*{box-sizing:border-box;margin:0;padding:0}
-.shell{display:flex;height:100%;background:var(--primary-background-color,#1a1a2e);color:var(--primary-text-color,#e0e0e0)}
-.sidebar{width:230px;min-width:230px;background:var(--card-background-color,#16213e);border-right:1px solid var(--divider-color,#2a2a4a);display:flex;flex-direction:column}
-.brand{padding:16px;text-align:center;border-bottom:1px solid var(--divider-color,#2a2a4a)}
-.brand-icon{font-size:32px}.brand-text{font-size:15px;font-weight:700;margin-top:4px;color:var(--primary-color,#0f9b8e)}.brand-ver{font-size:10px;color:var(--secondary-text-color,#888)}
-.nav-items{flex:1;padding:8px 0;overflow-y:auto}
-.nav-item{display:flex;align-items:center;padding:9px 14px;cursor:pointer;transition:background .15s;border-left:3px solid transparent}
-.nav-item:hover{background:rgba(255,255,255,.05)}.nav-item.active{background:rgba(15,155,142,.15);border-left-color:var(--primary-color,#0f9b8e)}
-.nav-item.sub{padding-left:22px;font-size:12px}.nav-icon{font-size:16px;margin-right:8px;width:22px;text-align:center}.nav-label{font-size:13px;flex:1}
-.nav-count{background:rgba(255,255,255,.1);padding:1px 6px;border-radius:8px;font-size:10px;margin-left:4px}
-.nav-divider{padding:10px 14px 4px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--secondary-text-color,#666);border-top:1px solid var(--divider-color,#2a2a4a);margin-top:4px}
-.action-toggle{padding:14px;border-top:1px solid var(--divider-color,#2a2a4a)}
-.toggle-label{display:flex;align-items:center;cursor:pointer;gap:8px}.toggle-label input{display:none}
-.toggle-switch{width:34px;height:18px;background:#444;border-radius:9px;position:relative;transition:background .2s}
-.toggle-switch::after{content:"";width:14px;height:14px;background:#fff;border-radius:50%;position:absolute;top:2px;left:2px;transition:transform .2s}
-.toggle-label input:checked+.toggle-switch{background:#e94560}.toggle-label input:checked+.toggle-switch::after{transform:translateX(16px)}
-.toggle-text{font-size:11px;font-weight:600}.toggle-hint{font-size:10px;color:var(--secondary-text-color,#888);margin-top:3px;padding-left:42px}
-.content{flex:1;padding:20px;overflow-y:auto}
-h1{font-size:20px;font-weight:700;margin-bottom:6px}h1 .count{font-size:13px;background:var(--primary-color,#0f9b8e);color:#fff;padding:2px 7px;border-radius:9px;vertical-align:middle}
-h2{font-size:15px;font-weight:600;margin-bottom:10px}.subtitle{color:var(--secondary-text-color,#888);font-size:12px;margin-bottom:14px}
-.empty{padding:30px;text-align:center;color:var(--secondary-text-color,#888);font-size:13px}
-.ro-banner{background:rgba(15,155,142,.1);border:1px solid var(--primary-color,#0f9b8e);border-radius:8px;padding:10px;margin-top:16px;font-size:12px;text-align:center}
-.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-bottom:16px}
-.stat-card{background:var(--card-background-color,#16213e);border-radius:8px;padding:14px;text-align:center;border:1px solid var(--divider-color,#2a2a4a);transition:transform .15s,border-color .15s}
-.stat-card.clickable{cursor:pointer}.stat-card.clickable:hover{transform:translateY(-2px);border-color:var(--primary-color,#0f9b8e)}
-.btn-back{background:none;border:1px solid var(--divider-color,#2a2a4a);color:var(--primary-color,#0f9b8e);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;margin-bottom:12px;transition:background .15s}.btn-back:hover{background:rgba(15,155,142,.1)}
-.stat-card.warn{border-color:#f0a500}.stat-card.danger{border-color:#e94560}
-.stat-icon{font-size:22px}.stat-value{font-size:26px;font-weight:700;margin:3px 0}.stat-card.warn .stat-value{color:#f0a500}.stat-card.danger .stat-value{color:#e94560}
-.stat-label{font-size:11px;color:var(--secondary-text-color,#888);text-transform:uppercase;letter-spacing:.5px}
-.card{background:var(--card-background-color,#16213e);border-radius:8px;padding:16px;margin-bottom:14px;border:1px solid var(--divider-color,#2a2a4a)}
-.card p{font-size:12px;line-height:1.5;color:var(--secondary-text-color,#ccc)}.danger-card{border-color:#e94560}.warn-card{border-color:#f0a500}
-.cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px}
-.cat-item{display:flex;flex-direction:column;align-items:center;padding:10px;background:rgba(255,255,255,.03);border-radius:6px;transition:transform .15s,border-color .15s;border:1px solid transparent}
-.cat-item.clickable{cursor:pointer}.cat-item.clickable:hover{transform:translateY(-2px);border-color:var(--primary-color,#0f9b8e)}
-.cat-icon{font-size:22px}.cat-count{font-size:18px;font-weight:700;margin:2px 0}.cat-label{font-size:10px;color:var(--secondary-text-color,#888);text-transform:uppercase}
-.table-wrap{overflow-x:auto}
-.data-table{width:100%;border-collapse:collapse;font-size:11px}
-.data-table th{text-align:left;padding:7px 8px;background:rgba(255,255,255,.05);border-bottom:2px solid var(--divider-color,#2a2a4a);cursor:pointer;user-select:none;white-space:nowrap}
-.data-table td{padding:6px 8px;border-bottom:1px solid var(--divider-color,#2a2a4a)}.data-table tbody tr:hover{background:rgba(255,255,255,.03)}
-.row-suspicious{background:rgba(233,69,96,.08)!important}.row-camera{border-left:3px solid #f0a500}.row-danger td{color:#e94560}.row-warn td{color:#f0a500}
-.info-table{width:100%}.info-table td{padding:5px 0;font-size:12px}.info-table td:first-child{color:var(--secondary-text-color,#888);width:100px}
-.filter-input{width:100%;padding:7px 10px;margin-bottom:10px;border-radius:6px;border:1px solid var(--divider-color,#2a2a4a);background:var(--card-background-color,#16213e);color:var(--primary-text-color,#e0e0e0);font-size:12px;outline:none}
-.filter-input:focus{border-color:var(--primary-color,#0f9b8e)}
-.device-card{background:var(--card-background-color,#16213e);border-radius:8px;padding:14px;margin-bottom:10px;border:1px solid var(--divider-color,#2a2a4a)}
-.device-suspicious{border-color:#e94560}.device-camera{border-left:4px solid #f0a500}
-.device-header{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px}
-.device-num{font-weight:700;color:var(--secondary-text-color,#888);font-size:12px}.device-mac{font-size:13px;font-weight:600}
-.device-body{display:grid;grid-template-columns:1fr 1fr;gap:12px}.device-info{display:flex;flex-direction:column;gap:3px}
-.info-row{display:flex;font-size:11px}.info-label{color:var(--secondary-text-color,#888);width:60px;flex-shrink:0}
-.flags{grid-column:1/-1}.flags-title{font-size:11px;font-weight:600;color:#f0a500;margin-bottom:3px}.flag-item{font-size:11px;padding:1px 0}
-.dpi{grid-column:1/-1}.dpi-title{font-size:11px;font-weight:600;margin-bottom:3px}.dpi-table{width:100%;font-size:10px}.dpi-table th,.dpi-table td{padding:2px 5px}.dpi-table th{text-align:left}
-.device-actions{margin-top:10px;display:flex;gap:6px;flex-wrap:wrap}
-.id-tool{grid-column:1/-1;background:rgba(255,255,255,.03);border-radius:6px;padding:10px;margin-top:6px}
-.id-title{font-size:11px;font-weight:600;margin-bottom:6px;color:var(--primary-color,#0f9b8e)}
-.id-name{width:100%;padding:6px 8px;margin-bottom:8px;border-radius:4px;border:1px solid var(--divider-color,#2a2a4a);background:var(--primary-background-color,#1a1a2e);color:var(--primary-text-color,#e0e0e0);font-size:12px}
-.id-buttons{display:flex;flex-wrap:wrap;gap:4px}
-.btn{padding:5px 10px;border-radius:5px;border:none;cursor:pointer;font-size:11px;font-weight:600;transition:opacity .15s}.btn:hover{opacity:.85}
-.btn-trust{background:#4caf50;color:#fff}.btn-ignore{background:#607d8b;color:#fff}.btn-local{background:#0f9b8e;color:#fff}.btn-quarantine{background:#e94560;color:#fff}
-.cat-assign{display:flex;flex-wrap:wrap;gap:3px;margin-top:6px;padding-top:6px;border-top:1px solid var(--divider-color,#2a2a4a);align-items:center}
-.btn-cat{background:rgba(255,255,255,.1);color:var(--primary-text-color,#e0e0e0);font-size:10px;padding:4px 8px}
-.btn-cat:hover{background:rgba(15,155,142,.3)}
-.conf{font-size:10px;color:var(--secondary-text-color,#888);font-style:italic}
-.badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase}
-.badge.new{background:#0f9b8e33;color:#0f9b8e}.badge.trusted{background:#4caf5033;color:#4caf50}.badge.ignored{background:#9e9e9e33;color:#9e9e9e}
-.badge.quarantined{background:#e9456033;color:#e94560}.badge.ok{background:#4caf5033;color:#4caf50}.badge.low{background:#f0a50033;color:#f0a500}
-.badge.medium{background:#ff980033;color:#ff9800}.badge.high,.badge.danger{background:#e9456033;color:#e94560}.badge.camera{background:#f0a50033;color:#f0a500}
-.badge.computer{background:#42a5f533;color:#42a5f5}.badge.phone{background:#ab47bc33;color:#ab47bc}.badge.esphome{background:#66bb6a33;color:#66bb6a}
-.badge.led{background:#ffee5833;color:#fdd835}.badge.ha_device{background:#29b6f633;color:#29b6f6}.badge.smart_speaker{background:#ef535033;color:#ef5350}
-.badge.streaming{background:#7e57c233;color:#7e57c2}.badge.gaming{background:#26a69a33;color:#26a69a}.badge.networking{background:#78909c33;color:#78909c}
-.badge.crypto{background:#ff702033;color:#ff7020}.badge.iot{background:#8d6e6333;color:#8d6e63}.badge.nas{background:#5c6bc033;color:#5c6bc0}
-.badge.printer{background:#a1887f33;color:#a1887f}.badge.tablet{background:#ce93d833;color:#ce93d8}.badge.unknown{background:#ffffff1a;color:#999}
-.rec-item{padding:10px;margin-bottom:8px;border-radius:6px;border-left:4px solid var(--divider-color,#2a2a4a);background:rgba(255,255,255,.02)}
-.rec-critical{border-left-color:#e94560;background:rgba(233,69,96,.05)}.rec-high{border-left-color:#ff9800;background:rgba(255,152,0,.05)}
-.rec-medium{border-left-color:#f0a500;background:rgba(240,165,0,.03)}.rec-low{border-left-color:#4caf50}.rec-info{border-left-color:#42a5f5}
-.rec-header{display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap}
-.rec-priority{font-size:11px;font-weight:700}.rec-device{font-size:11px;color:var(--secondary-text-color,#888)}
-.rec-name{font-size:11px;color:var(--secondary-text-color,#aaa)}.rec-title{font-size:13px;font-weight:600;margin-bottom:4px}
-.rec-detail{font-size:11px;line-height:1.6;color:var(--secondary-text-color,#ccc)}.rec-actions{margin-top:6px;display:flex;gap:4px;flex-wrap:wrap}
-.netmap-container{background:var(--card-background-color,#16213e);border-radius:10px;padding:16px;margin-bottom:16px;border:1px solid var(--divider-color,#2a2a4a);overflow-x:auto}
-.netmap-svg{width:100%;max-width:800px;height:auto;display:block;margin:0 auto}
-.ip-history{grid-column:1/-1;margin-top:4px;padding:4px 6px;background:rgba(255,255,255,.02);border-radius:4px}
-.onvif-badge{grid-column:1/-1;font-size:11px;margin-top:4px}
-.scan-section{grid-column:1/-1;margin-top:4px}
-.scan-result{background:rgba(255,255,255,.03);border-radius:6px;padding:10px;border:1px solid var(--divider-color,#2a2a4a)}
-.scan-header{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px}
-.scan-title{font-size:12px;font-weight:700;color:var(--primary-color,#0f9b8e)}
-.scan-guess{font-size:12px;margin-bottom:8px;padding:6px 8px;background:rgba(15,155,142,.08);border-radius:4px;line-height:1.5}
-.scan-ports{margin-bottom:6px}.scan-subtitle{font-size:11px;font-weight:600;margin-bottom:4px}
-.scan-warnings{margin-top:6px}.scan-recs{margin-top:6px}
-.scan-loading{font-size:11px;color:var(--primary-color,#0f9b8e);padding:8px;animation:pulse 1.5s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-.btn-scan{background:rgba(15,155,142,.15);color:var(--primary-color,#0f9b8e);border:1px solid var(--primary-color,#0f9b8e);padding:5px 12px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;transition:background .15s}
-.btn-scan:hover{background:rgba(15,155,142,.3)}
-.btn-quantify{background:linear-gradient(135deg,#0f9b8e,#42a5f5);color:#fff;padding:10px 24px;border-radius:8px;border:none;cursor:pointer;font-size:14px;font-weight:600;transition:opacity .15s}
-.btn-quantify:hover{opacity:.85}.btn-quantify:disabled{opacity:.5;cursor:default}
-.btn-port-block{background:rgba(233,69,96,.15);color:#e94560;border:1px solid #e9456066;padding:2px 8px;border-radius:3px;cursor:pointer;font-size:10px;transition:background .15s}
-.btn-port-block:hover{background:rgba(233,69,96,.3)}.btn-port-block:disabled{opacity:.5;cursor:default}
-.ip-link{color:var(--primary-color,#0f9b8e);text-decoration:none}.ip-link:hover{text-decoration:underline}
-.mono{font-family:"Consolas","Monaco",monospace;font-size:11px}
-@media(max-width:768px){.shell{flex-direction:column}.sidebar{width:100%;min-width:100%;flex-direction:row;border-right:none;border-bottom:1px solid var(--divider-color,#2a2a4a)}.brand{display:none}.nav-items{display:flex;overflow-x:auto;padding:0}.nav-item{padding:8px 12px;border-left:none;border-bottom:3px solid transparent;white-space:nowrap}.nav-item.active{border-bottom-color:var(--primary-color,#0f9b8e)}.nav-item.sub{padding-left:12px}.nav-divider{display:none}.action-toggle{padding:6px 10px;display:flex;align-items:center;gap:6px}.toggle-hint{display:none}.device-body{grid-template-columns:1fr}.stat-grid{grid-template-columns:repeat(3,1fr)}}
-`;
-
-// Guard against double-registration (HA can load the script multiple times).
-if (!customElements.get("unifiblocker-panel")) {
-  customElements.define("unifiblocker-panel", UniFiBlockerPanel);
-}
+};
+w.styles = [k, vt`
+    :host { display: flex; flex-direction: column; height: 100%; background: var(--primary-background-color); }
+    .toolbar {
+      display: flex; align-items: center; gap: 8px; height: var(--header-height, 56px); padding: 0 12px 0 16px;
+      background: var(--app-header-background-color, var(--primary-color)); color: var(--app-header-text-color, #fff);
+      box-sizing: border-box; flex-shrink: 0;
+    }
+    .title { font-size: 20px; flex: 1; }
+    .status { font-size: 13px; opacity: 0.9; }
+    .status.bad { font-weight: 600; }
+    button.icon { all: unset; cursor: pointer; padding: 8px; border-radius: 50%; display: flex; }
+    button.icon:focus-visible { outline: 2px solid currentColor; }
+    nav {
+      display: flex; gap: 2px; padding: 0 8px; overflow-x: auto; flex-shrink: 0;
+      background: var(--app-header-background-color, var(--primary-color)); color: var(--app-header-text-color, #fff);
+    }
+    .tab {
+      all: unset; display: flex; align-items: center; gap: 6px; padding: 10px 14px; cursor: pointer; white-space: nowrap;
+      border-bottom: 3px solid transparent; opacity: 0.8; font-size: 14px; position: relative;
+    }
+    .tab[aria-current="page"] { opacity: 1; border-bottom-color: currentColor; }
+    .tab:hover, .tab:focus-visible { opacity: 1; }
+    .tab:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+    .dot { background: var(--error-color, #db4437); color: #fff; border-radius: 10px; font-size: 11px; padding: 0 6px; line-height: 16px; }
+    .dot.soft { background: rgba(255, 255, 255, 0.25); }
+    main { flex: 1; overflow-y: auto; padding: 16px; box-sizing: border-box; }
+    @media (min-width: 900px) { main { padding: 24px; } }
+    main > * { max-width: 1400px; margin-left: auto; margin-right: auto; display: block; }
+    footer { text-align: center; padding: 12px 0 4px; }
+    .card.error { border-color: var(--error-color); }
+    .scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4); z-index: 10; }
+    .dialog {
+      position: fixed; z-index: 11; left: 50%; top: 30%; transform: translate(-50%, -30%); width: min(440px, 90vw);
+      background: var(--ub-card); border-radius: var(--ub-radius); padding: 20px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+    }
+    .toast {
+      position: fixed; z-index: 12; left: 50%; bottom: 24px; transform: translateX(-50%); max-width: min(560px, 90vw);
+      background: var(--primary-text-color); color: var(--primary-background-color); padding: 10px 16px; border-radius: 8px;
+      font-size: 14px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    }
+    .toast.bad { background: var(--error-color, #db4437); color: #fff; }
+  `];
+A([
+  g({ attribute: !1 })
+], w.prototype, "hass", 2);
+A([
+  g({ type: Boolean })
+], w.prototype, "narrow", 2);
+A([
+  v()
+], w.prototype, "view", 2);
+A([
+  v()
+], w.prototype, "snap", 2);
+A([
+  v()
+], w.prototype, "toast", 2);
+A([
+  v()
+], w.prototype, "ask", 2);
+A([
+  v()
+], w.prototype, "openMac", 2);
+A([
+  v()
+], w.prototype, "devicesFilter", 2);
+w = A([
+  x("unifiblocker-panel")
+], w);
+export {
+  w as UniFiBlockerPanel,
+  Ke as VERSION
+};

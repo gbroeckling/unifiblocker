@@ -20,6 +20,7 @@ from .const import (
     API_DPI,
     API_FIREWALL_RULE,
     API_FIREWALL_RULES,
+    API_FIREWALL_ZONES,
     API_HEALTH,
     API_LOGIN,
     API_NETWORKS,
@@ -379,6 +380,12 @@ class UniFiApi:
         """Delete a firewall rule."""
         path = API_FIREWALL_RULE.replace("{rule_id}", rule_id)
         await self._request("DELETE", path)
+
+    async def get_firewall_zones(self) -> list[dict[str, Any]]:
+        """Zones of the zone-based firewall; empty while the controller
+        still uses the older rule-based firewall."""
+        result = await self._request("GET", API_FIREWALL_ZONES)
+        return result if isinstance(result, list) else []
 
     async def block_port_for_mac(
         self, mac: str, port: int, *, protocol: str = "tcp", name: str = ""

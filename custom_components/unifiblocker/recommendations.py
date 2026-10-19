@@ -97,6 +97,15 @@ PRIORITY_LABELS = {
 }
 
 
+def _contained(device: dict[str, Any], local_prefix: str) -> bool:
+    """Is the device actually cut off? Decided by a real rule/block
+    (device["containment"]) when the coordinator provides it; an address in
+    the local-only range on its own proves nothing."""
+    if "containment" in device:
+        return bool(device["containment"])
+    return device.get("ip", "").startswith(f"{local_prefix}.")
+
+
 def generate_recommendations(
     device: dict[str, Any], local_prefix: str = "192.168.2"
 ) -> list[dict[str, Any]]:
@@ -275,16 +284,29 @@ def generate_recommendations(
 
     # ── 2. Camera on main network ────────────────────────────────────
 
-    if is_camera and ip and not ip.startswith(f"{local_prefix}."):
+    if is_camera and ip and not _contained(device, local_prefix):
+        on_range = ip.startswith(f"{local_prefix}.")
         recs.append({
             "priority": PRIORITY_HIGH,
             "priority_label": PRIORITY_LABELS[PRIORITY_HIGH],
-            "title": "Camera on main network — not isolated",
-            "detail": "This camera is on your main network and can reach other devices and the internet. "
-                      f"Move it to the local-only subnet ({local_prefix}.x) to block internet access while "
-                      "keeping local RTSP/ONVIF streaming. Cameras don't need internet for local recording.",
-            "action": "local_only",
-            "action_data": {"mac": mac, "category": "camera"},
+            "title": "Camera can reach the internet",
+            "detail": ("It has a local-only address, but no rule blocks its internet access, so the address on "
+                       "its own does nothing. " if on_range else "Nothing stops this camera reaching the internet. ")
+                      + "Block its internet access: it keeps its address, so viewing and recording keep working. "
+                        "Cameras don't need the internet for local recording.",
+            "action": "block_internet",
+            "action_data": {"mac": mac},
+        })
+    elif (ip.startswith(f"{local_prefix}.") and not _contained(device, local_prefix)
+          and (device.get("home_automation") or {}).get("tier") != "cloud"):
+        recs.append({
+            "priority": PRIORITY_MEDIUM,
+            "priority_label": PRIORITY_LABELS[PRIORITY_MEDIUM],
+            "title": "Local-only address, but internet is open",
+            "detail": f"It's in the {local_prefix}.x local-only range, but no rule blocks its internet access, "
+                      "so the address on its own does nothing. Block its internet access to finish the job.",
+            "action": "block_internet",
+            "action_data": {"mac": mac},
         })
 
     # ── 3. Suspicious traffic flags ──────────────────────────────────
@@ -553,7 +575,7 @@ def generate_network_recommendations(
         })
 
     cameras = [d for d in devices if d.get("is_camera")]
-    cameras_on_main = [d for d in cameras if not d.get("ip", "").startswith(f"{local_prefix}.")]
+    cameras_on_main = [d for d in cameras if not _contained(d, local_prefix)]
     new_count = sum(1 for d in devices if d.get("state") == "new")
     telnet_devices = [d for d in devices if 23 in (d.get("scan_result", {}).get("open_ports", []))]
 
@@ -563,8 +585,8 @@ def generate_network_recommendations(
             "priority_label": PRIORITY_LABELS[PRIORITY_HIGH],
             "title": "Local-only devices missing their internet block",
             "detail": "Some devices assigned to Local Only don't have their traffic rule on the UCG Max yet, "
-                      "so they can still reach the internet. Go to the Local Only view and click "
-                      "'Create Missing Rules'.",
+                      "so they can still reach the internet. On the Network page, click "
+                      "'Create missing rules'.",
             "action": "info",
             "action_data": {},
         })
@@ -573,10 +595,10 @@ def generate_network_recommendations(
         recs.append({
             "priority": PRIORITY_HIGH,
             "priority_label": PRIORITY_LABELS[PRIORITY_HIGH],
-            "title": f"{len(cameras_on_main)} camera(s) on main network",
-            "detail": "These cameras can reach the internet and all other devices on your network. "
-                      f"MACs: {', '.join(d.get('mac','') for d in cameras_on_main[:5])}. "
-                      f"Move them to the local-only subnet ({local_prefix}.x).",
+            "title": f"{len(cameras_on_main)} camera(s) can reach the internet",
+            "detail": "No rule blocks these cameras' internet access: "
+                      + ", ".join(d.get("name") or d.get("mac", "") for d in cameras_on_main[:8])
+                      + ". Block their internet access from the Cameras page; their addresses stay the same.",
             "action": "info",
             "action_data": {},
         })

@@ -30,6 +30,7 @@ API_DPI = "/proxy/network/api/s/{site}/stat/stadpi"
 API_USER = "/proxy/network/api/s/{site}/rest/user/{user_id}"
 API_FIREWALL_RULES = "/proxy/network/api/s/{site}/rest/firewallrule"
 API_FIREWALL_RULE = "/proxy/network/api/s/{site}/rest/firewallrule/{rule_id}"
+API_FIREWALL_ZONES = "/proxy/network/v2/api/site/{site}/firewall/zone"
 API_NETWORKS = "/proxy/network/api/s/{site}/rest/networkconf"
 # v2 Traffic Rules API (newer UCG Max / UDM firmware)
 API_TRAFFIC_RULES = "/proxy/network/v2/api/site/{site}/trafficrules"

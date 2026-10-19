@@ -68,15 +68,16 @@ TOP_KEYS = frozenset({"schema", "install_id", "day", "version", "ha_version", "p
 EVENTS = frozenset({
     "deep_scan_unknowns", "scan_device", "onvif_discover", "onvif_probe",
     "set_category", "clear_category", "check_ip", "block_port", "block_ports",
-    "localnet_assign", "localnet_remove", "localnet_ensure_rule",
+    "localnet_assign", "localnet_remove", "localnet_ensure_rule", "localnet_range_block",
     "trust", "ignore", "quarantine", "block", "unblock", "reconnect",
-    "learned_rule_update",
+    "learned_rule_update", "block_internet", "allow_internet",
 })
 VIEWS = frozenset({
     "overview", "detail_connected", "detail_wireless", "detail_wired", "detail_blocked",
     "detail_trusted", "detail_threats", "new", "suspicious", "clients", "recommendations",
     "identify", "nas", "localnet", "storage", "mining", "netmap", "category",
     "quarantined", "ports",
+    "devices", "cameras", "home", "security", "network", "tools",
 })
 
 # Identifier shapes that must never appear in any value (PadSpan's list).

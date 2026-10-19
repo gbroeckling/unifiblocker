@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.61 (not released yet)
+
+New panel, and blocking that does what it says.
+
+- The panel is rebuilt (Lit + TypeScript, source in `frontend/`): Overview, Devices, Cameras, Home, Security, Network, Mining, Tools, with a device drawer, works in dark mode and on a phone.
+- Block internet: one per-device rule, the address stays the same, so recorders keep working. Allow internet again undoes it. This is now the first action offered for cameras, including "Block internet for all" on the Cameras page.
+- Containment is judged by real rules, not by the address: a device in the local-only range with no rule is reported as open, with a button to block it.
+- Block the whole range (Network page): two gateway rules block a range such as 192.168.2.0/25 from the internet, time sync (NTP) still allowed. It only accepts ranges inside the local-only /24, warns about NAS and computers in the range, and refuses on controllers using the zone-based firewall. Off unless you turn it on.
+- New per-device rules are named "UB: <mac> no internet". Older "local-only" ones still count.
+
 ## 0.3.60 — 2026-10-19
 
 Home automation.

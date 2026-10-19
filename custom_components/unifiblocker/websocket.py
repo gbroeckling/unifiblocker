@@ -30,11 +30,14 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     _reg(ws_clear_category)
     _reg(ws_get_learned)
     _reg(ws_learned_rule_update)
+    _reg(ws_block_internet)
+    _reg(ws_allow_internet)
     _reg(ws_get_suggestions)
     _reg(ws_localnet_status)
     _reg(ws_localnet_assign)
     _reg(ws_localnet_remove)
     _reg(ws_localnet_ensure_rule)
+    _reg(ws_localnet_range_block)
     _reg(ws_onvif_discover)
     _reg(ws_onvif_probe)
     _reg(ws_onvif_results)
@@ -359,6 +362,48 @@ async def ws_learned_rule_update(
 
 @websocket_api.require_admin
 @websocket_api.websocket_command(
+    {vol.Required("type"): "unifiblocker/block_internet", vol.Required("mac"): str}
+)
+@websocket_api.async_response
+async def ws_block_internet(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Block a device's internet access with a per-device traffic rule,
+    without changing its address (unlike localnet_assign)."""
+    entry = _get_coordinator(hass)
+    if not entry or not entry.get("local_net"):
+        connection.send_error(msg["id"], "not_ready", "Integration not loaded")
+        return
+    result = await entry["local_net"].block_device_internet(entry["api"], msg["mac"].lower())
+    if not result.get("ok"):
+        connection.send_error(msg["id"], "unifi_error", result.get("error") or "The controller refused the rule")
+        return
+    entry["store"].mark_auto_blocked(msg["mac"], result.get("rule_id", ""))
+    await entry["coordinator"].async_request_refresh()
+    connection.send_result(msg["id"], {"ok": True, "mac": msg["mac"], "rule_id": result.get("rule_id", "")})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {vol.Required("type"): "unifiblocker/allow_internet", vol.Required("mac"): str}
+)
+@websocket_api.async_response
+async def ws_allow_internet(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Undo block_internet (or the new-camera policy's block)."""
+    entry = _get_coordinator(hass)
+    if not entry or not entry.get("local_net"):
+        connection.send_error(msg["id"], "not_ready", "Integration not loaded")
+        return
+    await entry["local_net"].unblock_device_internet(entry["api"], msg["mac"].lower())
+    await entry["store"].clear_auto_blocked(msg["mac"])
+    await entry["coordinator"].async_request_refresh()
+    connection.send_result(msg["id"], {"ok": True, "mac": msg["mac"]})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
     {vol.Required("type"): "unifiblocker/suggestions"}
 )
 @websocket_api.async_response
@@ -503,6 +548,10 @@ async def ws_get_recommendations(
     fw_exists = False
     if local_net:
         fw_status = await local_net.get_firewall_status(entry["api"])
+    try:
+        range_block = await local_net.range_block_status(entry["api"])
+    except Exception as err:  # never let this break the Network page
+        range_block = {"supported": False, "enabled": False, "cidr": None, "reason": f"Could not read firewall rules: {err}"}
         # "enabled" is only present once devices are assigned; it means every
         # assigned device has its block rule.
         fw_exists = fw_status.get("enabled", True)
@@ -959,6 +1008,7 @@ async def ws_localnet_status(
         "assignments": local_net.assignments,
         "ranges": local_net.get_range_info(),
         "firewall": fw_status,
+        "range_block": range_block,
         "subnet": local_net.cidr,
         "prefix": local_net.subnet,
     })
@@ -1012,6 +1062,35 @@ async def ws_localnet_remove(
     result = await entry["local_net"].remove_assignment(entry["api"], msg["mac"])
     if result.get("ok"):
         await entry["coordinator"].async_request_refresh()
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "unifiblocker/localnet_range_block",
+        vol.Required("enabled"): bool,
+        vol.Optional("cidr"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_localnet_range_block(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Block (or stop blocking) a whole address range from the internet."""
+    entry = _get_coordinator(hass)
+    if not entry or not entry.get("local_net"):
+        connection.send_error(msg["id"], "not_ready", "Integration not loaded")
+        return
+    local_net = entry["local_net"]
+    if msg["enabled"]:
+        result = await local_net.enable_range_block(entry["api"], msg.get("cidr") or f"{local_net.subnet}.0/24")
+    else:
+        result = await local_net.disable_range_block(entry["api"])
+    if not result.get("ok"):
+        connection.send_error(msg["id"], "unifi_error", result.get("error") or "Failed")
+        return
+    await entry["coordinator"].async_request_refresh()
     connection.send_result(msg["id"], result)
 
 

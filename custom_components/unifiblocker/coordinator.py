@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import ipaddress
 import logging
 import time
 from typing import Any
@@ -255,6 +256,7 @@ class UniFiBlockerData:
             "phone_home": self.phone_home.get(mac_lower),
             "watched": mac_lower in self.phone_home or mac_lower in self._watched,
             "containment": containment_status(self.phone_home.get(mac_lower), mac_lower in self.contained),
+            "internet_blocked": bool(self.store.auto_blocked(mac_lower)),
             "ip_history": self.store.get_ip_history(mac),
             "manual_category": self.store.get_manual_category(mac),
             "suggested_category": self.store.get_suggestion(mac),
@@ -600,11 +602,20 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
 
     def _contained_macs(self, clients: list[dict[str, Any]]) -> set[str]:
         """Devices that are supposed to be off the internet: local-only,
-        quarantined, or blocked on the controller."""
+        quarantined, blocked on the controller, or in the blocked range."""
         out = {m.lower() for m in (self.local_net.assignments if self.local_net else {})}
         out |= {m.lower() for m in self.store.get_devices_by_state(STATE_QUARANTINED)}
         out |= {c.get("mac", "").lower() for c in clients if c.get("blocked")}
         out |= self.store.auto_blocked_macs()
+        cidr = self.local_net.range_block_cidr if self.local_net else None
+        if cidr:
+            net = ipaddress.ip_network(cidr)
+            for c in clients:
+                try:
+                    if ipaddress.ip_address(c.get("ip") or "") in net:
+                        out.add(c.get("mac", "").lower())
+                except ValueError:
+                    pass
         return out
 
     def _watched_macs(self, clients, categories, contained: set[str]) -> list[str]:
@@ -657,7 +668,12 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
                     fresh[mac] = self._flows.get(mac)
             self._flows = fresh
 
+        async def range_block() -> None:
+            if self.local_net:
+                await self.local_net.range_block_status(self.api)
+
         await due("rogue", ROGUE_EVERY_S, rogue)
+        await due("range_block", FLOWS_EVERY_S, range_block)
         await due("flows", FLOWS_EVERY_S, flows)
 
     def _announce_new_devices(self, data: UniFiBlockerData, new_macs: list[str]) -> None:

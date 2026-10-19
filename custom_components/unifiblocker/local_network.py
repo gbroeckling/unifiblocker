@@ -10,6 +10,7 @@ but have no internet access.  Handles:
 """
 from __future__ import annotations
 
+import ipaddress
 import logging
 from typing import Any
 
@@ -20,9 +21,43 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _has_rule_for(descriptions: list[str], mac: str) -> bool:
-    """True if one of our "UB: <mac> local-only" rules exists for this MAC."""
+    """True if one of our "UB: <mac> ..." rules exists for this MAC."""
     prefix = f"ub: {mac.lower()}"
     return any(d.startswith(prefix) for d in descriptions)
+
+
+RANGE_RULE_PREFIX = "UB: local-only range"
+
+
+def _range_rule(name: str, cidr: str, action: str, index: int, port: str = "") -> dict[str, Any]:
+    """A rule-based firewall ("Internet Out") rule for a source range."""
+    return {
+        "name": name,
+        "enabled": True,
+        "action": action,
+        "ruleset": "WAN_OUT",
+        "rule_index": index,
+        "protocol": "udp" if port else "all",
+        "protocol_match_excepted": False,
+        "logging": action == "drop",
+        "state_established": False,
+        "state_invalid": False,
+        "state_new": False,
+        "state_related": False,
+        "ipsec": "",
+        "setting_preference": "manual",
+        "src_firewallgroup_ids": [],
+        "src_mac_address": "",
+        "src_address": cidr,
+        "src_networkconf_id": "",
+        "src_networkconf_type": "NETv4",
+        "dst_firewallgroup_ids": [],
+        "dst_address": "",
+        "dst_port": port,
+        "dst_networkconf_id": "",
+        "dst_networkconf_type": "NETv4",
+        "icmp_typename": "",
+    }
 
 
 STORAGE_KEY = "unifiblocker_localnet"
@@ -421,7 +456,7 @@ class LocalNetworkManager:
             import copy
             payload = copy.deepcopy(template)
             payload.pop("_id", None)
-            payload["description"] = f"UB: {mac.lower()} local-only"
+            payload["description"] = f"UB: {mac.lower()} no internet"
             payload["enabled"] = True
             payload["target_devices"] = [
                 {"client_mac": mac.lower(), "type": "CLIENT"}
@@ -437,7 +472,7 @@ class LocalNetworkManager:
                     "enabled": False,
                     "upload_limit_kbps": 1024,
                 },
-                "description": f"UB: {mac.lower()} local-only",
+                "description": f"UB: {mac.lower()} no internet",
                 "domains": [],
                 "enabled": True,
                 "ip_addresses": [],
@@ -484,6 +519,87 @@ class LocalNetworkManager:
             return {"ok": False, "error": "No matching rule found"}
         except Exception as err:
             return {"ok": False, "error": str(err)}
+
+    # ── Whole-range block ────────────────────────────────────────────
+
+    @property
+    def range_block_cidr(self) -> str | None:
+        """The range blocked by our firewall rules, as last seen on the controller."""
+        return self._config.get("range_block")
+
+    def range_block_problem(self, cidr: str) -> str | None:
+        """Why *cidr* can't be blocked, or None. It must sit inside the
+        local-only /24 so a typo can't cut off the rest of the LAN."""
+        try:
+            net = ipaddress.ip_network(cidr, strict=True)
+            home = ipaddress.ip_network(f"{self.subnet}.0/24")
+        except ValueError:
+            return "Not a valid range, e.g. 192.168.2.0/25"
+        if net.version != 4 or not net.subnet_of(home):
+            return f"The range has to be inside {home}"
+        return None
+
+    async def range_block_status(self, api: Any) -> dict[str, Any]:
+        """Read our range rules back from the controller and keep the saved
+        state in step (someone may have deleted them in UniFi)."""
+        try:
+            if await api.get_firewall_zones():
+                return {"supported": False, "enabled": False, "cidr": None,
+                        "reason": "This controller uses the zone-based firewall, which this switch can't manage yet."}
+        except Exception:  # pre-zone firmware has no zone endpoint at all
+            pass
+        rules = [r for r in await api.get_firewall_rules() if r.get("name", "").startswith(RANGE_RULE_PREFIX)]
+        block = next((r for r in rules if r.get("action") == "drop" and r.get("enabled")), None)
+        cidr = block.get("src_address") if block else None
+        if cidr != self._config.get("range_block"):
+            if cidr:
+                self._config["range_block"] = cidr
+            else:
+                self._config.pop("range_block", None)
+            await self.async_save()
+        return {"supported": True, "enabled": bool(block), "cidr": cidr,
+                "ntp_allowed": any(r.get("action") == "accept" and r.get("enabled") for r in rules)}
+
+    async def enable_range_block(self, api: Any, cidr: str) -> dict[str, Any]:
+        """Block *cidr* from the internet with two rules: allow time sync
+        (NTP), drop everything else going out to the internet."""
+        problem = self.range_block_problem(cidr)
+        if problem:
+            return {"ok": False, "error": problem}
+        status = await self.range_block_status(api)
+        if not status["supported"]:
+            return {"ok": False, "error": status["reason"]}
+        await self.disable_range_block(api)
+        used = [r.get("rule_index", 0) for r in await api.get_firewall_rules() if r.get("ruleset") == "WAN_OUT"]
+        index = max([1999, *[i for i in used if 2000 <= i < 3000]]) + 1
+        made = []
+        try:
+            for rule in (_range_rule(f"{RANGE_RULE_PREFIX} time sync", cidr, "accept", index, "123"),
+                         _range_rule(f"{RANGE_RULE_PREFIX} no internet", cidr, "drop", index + 1)):
+                made.append((await api.create_firewall_rule(rule) or {}).get("_id"))
+        except Exception as err:
+            for rule_id in filter(None, made):
+                try:
+                    await api.delete_firewall_rule(rule_id)
+                except Exception:
+                    _LOGGER.warning("Could not remove half-made range rule %s", rule_id)
+            return {"ok": False, "error": f"The controller refused the rule: {err}"}
+        status = await self.range_block_status(api)
+        if status.get("cidr") != cidr:
+            return {"ok": False, "error": "The rules were sent but don't show up on the controller"}
+        _LOGGER.info("Blocked %s from the internet (time sync allowed)", cidr)
+        return {"ok": True, **status}
+
+    async def disable_range_block(self, api: Any) -> dict[str, Any]:
+        """Delete our range rules."""
+        removed = 0
+        for rule in await api.get_firewall_rules():
+            if rule.get("name", "").startswith(RANGE_RULE_PREFIX) and rule.get("_id"):
+                await api.delete_firewall_rule(rule["_id"])
+                removed += 1
+        if self._config.pop("range_block", None) is not None:
+            await self.async_save()
+        return {"ok": True, "removed": removed}
 
     async def _try_create_legacy_rule(self, api: Any) -> dict[str, Any]:
         """Legacy firewall rules — not supported on newer UCG Max."""
