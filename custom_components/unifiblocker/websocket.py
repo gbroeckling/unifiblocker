@@ -20,7 +20,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
 
     def _reg(handler) -> None:
         # counted() only wraps the tools the opt-in report tracks.
-        _reg(counted(handler))
+        websocket_api.async_register_command(hass, counted(handler))
 
     _reg(ws_get_clients)
     _reg(ws_get_overview)

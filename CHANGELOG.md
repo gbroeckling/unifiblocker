@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.49 — 2026-10-19
+
+- 0.3.48 broke the sidebar panel: none of its commands registered, so it showed nothing. Fixed.
+
 ## 0.3.48 — 2026-10-19
 
 - New: an opt-in usage and issue report, off unless you turn it on. It's the "Help improve UniFi Blocker" card at the bottom of Overview, with a Preview of the exact JSON. Once a day it sends counts and versions only (device counts by category, which tools get used, poll times, controller API errors, warnings logged per module) so problems on other people's networks can be found. Never MACs, IPs, names, vendor strings or entity ids, and the whole report is refused if anything like that turns up. The full list is in the README under "Privacy and the opt-in usage report".
