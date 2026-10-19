@@ -18,12 +18,16 @@ from .miners import MinerTracker
 from .port_identify import analyze_dpi_entry
 from .suspicious_traffic import analyze_all_clients
 from .unifi_api import UniFiApi, UniFiApiError
+from .insights import camera_hotspots, hourly_series, security_events, traffic_spike, unifi_fingerprint
 from .vendor_lookup import CAMERA_CHIP_VENDORS, is_camera_like, lookup_vendor_safe
 
 _LOGGER = logging.getLogger(__name__)
 
 RESCAN_AFTER_S = 7 * 86400       # port scans and ONVIF results older than this get redone
 DISCOVERY_EVERY_S = 6 * 3600     # ONVIF WS-Discovery
+SECURITY_LOG_EVERY_S = 600       # system-log/all
+TRAFFIC_EVERY_S = 900            # stat/report/hourly.user
+ROGUE_EVERY_S = 1800             # stat/rogueap (Wi-Fi networks around us)
 ONVIF_PROBES_PER_PASS = 3
 # Web ports a camera's ONVIF service usually sits on.
 ONVIF_HINT_PORTS = frozenset({80, 2020, 8000, 8080, 8899})
@@ -44,6 +48,9 @@ class UniFiBlockerData:
         categories: dict[str, dict[str, Any]],
         miners: list[dict[str, Any]] | None = None,
         onvif: Any = None,
+        security: list[dict[str, Any]] | None = None,
+        traffic: dict[str, list[int]] | None = None,
+        hotspots: list[dict[str, Any]] | None = None,
     ) -> None:
         self.clients = clients
         self.devices = devices
@@ -55,6 +62,12 @@ class UniFiBlockerData:
         self.categories = categories        # mac → category result
         self.miners = miners or []          # list of rig dicts (see miners.py)
         self.onvif = onvif                  # OnvifProbe, used for enrichment
+        self.security = security or []      # SECURITY entries from system-log/all
+        self.traffic = traffic or {}        # mac → bytes per hour, last 24 h
+        self.hotspots = hotspots or []      # camera-looking Wi-Fi networks nearby
+        from .insights import events_by_mac
+        self._security_by_mac = events_by_mac(self.security)
+        self._contained_by_mac = events_by_mac(self.security, ours=True)
         # Several entities enrich the same clients on every update; do it once
         # per poll. Each poll builds a new UniFiBlockerData, so this never
         # outlives the data it was built from.
@@ -120,8 +133,9 @@ class UniFiBlockerData:
 
     @property
     def threat_events(self) -> list[dict[str, Any]]:
-        """IDS/IPS events from the controller."""
-        return [
+        """Security events: UniFi's system log on current firmware, plus
+        IDS/IPS entries from stat/event on controllers that still have it."""
+        return [e for e in self.security if not e.get("ours")] + [
             e for e in self.events
             if e.get("key", "").startswith("EVT_IPS")
             or "threat" in e.get("msg", "").lower()
@@ -221,6 +235,11 @@ class UniFiBlockerData:
             "onvif_serial": cat_data.get("onvif_serial", ""),
             "onvif": self._get_onvif_for(mac, client.get("ip", "")),
             "vulns": self._vulns(client, camera, vendor, cat_data),
+            "unifi_fingerprint": unifi_fingerprint(client),
+            "security_events_24h": self._security_by_mac.get(mac_lower, 0),
+            "blocked_by_rule_24h": self._contained_by_mac.get(mac_lower, 0),
+            "traffic_24h": self.traffic.get(mac_lower),
+            "traffic_spike": traffic_spike(self.traffic.get(mac_lower) or []),
             "ip_history": self.store.get_ip_history(mac),
             "manual_category": self.store.get_manual_category(mac),
             "suggested_category": self.store.get_suggestion(mac),
@@ -309,6 +328,11 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         self._onvif_busy = False
         self._last_discovery = 0.0
         self._auto_scan_count = auto_scan_count
+        # Slower-moving sources, refreshed on their own schedule (see *_EVERY_S).
+        self._security: list[dict[str, Any]] = []
+        self._traffic_rows: list[dict[str, Any]] = []
+        self._rogue: list[dict[str, Any]] = []
+        self._fetched_at: dict[str, float] = {}
         self._events_supported = True  # stat/event is gone on newer UniFi Network
 
     def _schedule_onvif(self, clients: list[dict[str, Any]], now_ts: float) -> None:
@@ -503,6 +527,7 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             _LOGGER.debug("Miner tracker update failed", exc_info=True)
 
         usage_report.record_poll(time.monotonic() - started, ok=True)
+        await self._refresh_slow_sources(now_ts)
         data = UniFiBlockerData(
             clients=clients,
             devices=devices,
@@ -514,9 +539,40 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             categories=categories,
             miners=miners,
             onvif=self.onvif,
+            security=self._security,
+            traffic=hourly_series(self._traffic_rows),
         )
+        # Hotspots need to know which clients are cameras, so they come after.
+        cams = {c.get("mac", "").lower(): (c.get("name") or c.get("hostname") or "")
+                for c in clients if data.enrich_client(c).get("is_camera")}
+        data.hotspots = camera_hotspots(self._rogue, cams)
         self._announce_new_cameras(data)
         return data
+
+    async def _refresh_slow_sources(self, now_ts: float) -> None:
+        """Security log, hourly traffic and nearby Wi-Fi, each on its own
+        schedule. Failures keep the last good copy; the poll goes on."""
+        async def due(name: str, every: float, fetch) -> None:
+            if now_ts - self._fetched_at.get(name, 0) < every:
+                return
+            self._fetched_at[name] = now_ts
+            try:
+                await fetch()
+            except Exception:  # extras: never let them fail the poll
+                _LOGGER.debug("Could not fetch %s", name, exc_info=True)
+
+        async def sec() -> None:
+            self._security = security_events(await self.api.get_system_log(24))
+
+        async def traffic() -> None:
+            self._traffic_rows = await self.api.get_hourly_traffic(25)
+
+        async def rogue() -> None:
+            self._rogue = await self.api.get_rogue_aps()
+
+        await due("security", SECURITY_LOG_EVERY_S, sec)
+        await due("traffic", TRAFFIC_EVERY_S, traffic)
+        await due("rogue", ROGUE_EVERY_S, rogue)
 
     def _announce_new_cameras(self, data: UniFiBlockerData) -> None:
         """Fire unifiblocker_new_camera once for each camera seen for the

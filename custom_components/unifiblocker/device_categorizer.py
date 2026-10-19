@@ -331,6 +331,7 @@ def categorize_device(
     scan_result: dict[str, Any] | None = None,
     onvif_result: dict[str, Any] | None = None,
     learned_patterns: Any = None,
+    unifi_dev_cat: int | None = None,
 ) -> dict[str, Any]:
     """Classify a device using ALL available signals.
 
@@ -405,6 +406,11 @@ def categorize_device(
             return _result("camera", "medium", "vendor+no_hostname")
         # Has a hostname but it doesn't look like a camera — still flag as probable.
         return _result("camera", "low", "chip_vendor")
+
+    # 4b. UniFi's own fingerprint (stat/sta dev_cat), see insights.py.
+    from .insights import UNIFI_CAMERA_DEV_CATS
+    if unifi_dev_cat in UNIFI_CAMERA_DEV_CATS:
+        return _result("camera", "medium", "unifi_fingerprint")
 
     # 5. Vendor-specific hostname refinement (Apple, Amazon, Google)
     if vendor in ("Apple",):
@@ -547,6 +553,7 @@ def categorize_all_clients(
             scan_result=scan,
             onvif_result=onvif,
             learned_patterns=learned_patterns,
+            unifi_dev_cat=client.get("dev_cat"),
         )
     return results
 

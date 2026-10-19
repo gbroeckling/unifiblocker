@@ -188,6 +188,34 @@ def generate_recommendations(
             **contain,
         })
 
+    # ── 1c. What UniFi itself saw (security log, traffic history) ───
+
+    sec = device.get("security_events_24h") or 0
+    if sec:
+        recs.append({
+            "priority": PRIORITY_MEDIUM,
+            "priority_label": PRIORITY_LABELS[PRIORITY_MEDIUM],
+            "title": f"UniFi blocked this device {sec} time{'s' if sec != 1 else ''} in the last 24 hours",
+            "detail": "Your own firewall or content-filtering rules stopped it, which UniFi logged as a security "
+                      "event. Check the Threats page for what it was trying to reach.",
+            "action": "review",
+            "action_data": {"mac": mac},
+        })
+    spike = device.get("traffic_spike")
+    if spike:
+        mb = spike["last_hour_bytes"] // 1_000_000
+        usual = f"; it usually moves about {spike['usual_bytes'] // 1_000_000} MB an hour" if spike.get("usual_bytes") else ""
+        recs.append({
+            "priority": PRIORITY_HIGH if is_camera else PRIORITY_MEDIUM,
+            "priority_label": PRIORITY_LABELS[PRIORITY_HIGH if is_camera else PRIORITY_MEDIUM],
+            "title": f"Traffic spike: {mb} MB in the last hour",
+            "detail": f"This device moved {mb} MB in the last full hour{usual}."
+                      + (" A camera suddenly sending a lot can mean it's uploading video somewhere."
+                         if is_camera else ""),
+            "action": "review",
+            "action_data": {"mac": mac},
+        })
+
     # ── 2. Camera on main network ────────────────────────────────────
 
     if is_camera and ip and not ip.startswith(f"{local_prefix}."):
@@ -426,9 +454,34 @@ def generate_network_recommendations(
     devices: list[dict[str, Any]],
     firewall_exists: bool = False,
     local_prefix: str = "192.168.2",
+    hotspots: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Generate network-wide security recommendations."""
     recs: list[dict[str, Any]] = []
+
+    for h in [h for h in hotspots or [] if h["reason"] == "own_camera"]:
+        recs.append({
+            "priority": PRIORITY_HIGH,
+            "priority_label": PRIORITY_LABELS[PRIORITY_HIGH],
+            "title": f"{h['camera_name'] or h['camera_mac']} is running its own Wi-Fi network",
+            "detail": f"It's broadcasting “{h['essid'] or '(hidden)'}” on channel {h.get('channel')}. Anyone in range can "
+                      "join that network and reach the camera directly, around your firewall and local-only rules. "
+                      "Turn off its access-point / hotspot mode in the camera's settings.",
+            "action": "info",
+            "action_data": {"mac": h["camera_mac"]},
+        })
+    nearby = [h for h in hotspots or [] if h["reason"] == "camera_ssid"]
+    if nearby:
+        recs.append({
+            "priority": PRIORITY_LOW,
+            "priority_label": PRIORITY_LABELS[PRIORITY_LOW],
+            "title": f"{len(nearby)} camera setup network{'s' if len(nearby) != 1 else ''} in range",
+            "detail": "Wi-Fi names like " + ", ".join(f"“{h['essid']}”" for h in nearby[:5]) + " are what cheap "
+                      "cameras broadcast until they're set up, or when their hotspot mode is left on. If one is "
+                      "yours, finish its setup or turn the hotspot off. It may also be a neighbour's.",
+            "action": "info",
+            "action_data": {},
+        })
 
     cameras = [d for d in devices if d.get("is_camera")]
     cameras_on_main = [d for d in cameras if not d.get("ip", "").startswith(f"{local_prefix}.")]

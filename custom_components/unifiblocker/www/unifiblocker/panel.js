@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.56";
+const VERSION = "0.3.57";
 const SIDEBAR_THRESHOLD = 5;
 
 // Everything the panel renders goes through innerHTML, and a lot of it comes
@@ -725,7 +725,8 @@ class UniFiBlockerPanel extends HTMLElement {
   _vDetailThreats() {
     const o = this._overview;
     const suspDevices = o.suspicious_devices || [];
-    const evts = []; // We'd need threat events from WS — for now show suspicious devices
+    const evts = o.security_events || [];
+    const hotspots = o.hotspots || [];
     const cameras = (this._data.clients||[]).filter(c => c.is_camera);
     const blocked = (this._data.clients||[]).filter(c => c.blocked);
 
@@ -735,7 +736,8 @@ class UniFiBlockerPanel extends HTMLElement {
       <p class="subtitle">Security events, suspicious devices, and potential threats detected on your network.</p>
 
       <div class="stat-grid">
-        ${this._stat("IDS/IPS Events", o.threat_events||0, "🛡", o.threat_events>0?"danger":"")}
+        ${this._stat("Security Events", o.threat_events||0, "🛡", o.threat_events>0?"danger":"")}
+        ${this._stat("Blocked by Local-Only", o.contained_blocks_24h||0, "🔒")}
         ${this._stat("Suspicious", o.suspicious_count||0, "⚠", o.suspicious_count>0?"danger":"")}
         ${this._stat("Cameras", cameras.length, "📹", cameras.length>0?"warn":"")}
         ${this._stat("Blocked", blocked.length, "🚫")}
@@ -750,6 +752,21 @@ class UniFiBlockerPanel extends HTMLElement {
           <li><strong>Devices Phoning Home</strong> — Cameras or IoT devices making outbound connections to cloud servers (ports 34567, 6789, 32100, etc.)</li>
         </ul>
       </div>
+
+      <div class="card"><h2>Security events, last 24 hours (${evts.length})</h2>
+        <p class="subtitle">From UniFi's security log. Blocks made by UniFi Blocker's own local-only rules aren't listed here; they're counted above and show on each device.</p>
+        ${evts.length ? `<table class="data-table"><thead><tr><th>When</th><th>What</th><th>Severity</th><th>Rule</th></tr></thead><tbody>
+          ${evts.slice(0, 50).map(e => `<tr><td class="mono">${e.time ? new Date(e.time).toLocaleString() : "—"}</td><td>${e.msg || e.title || e.key}</td><td>${e.inner_alert_severity || "—"}</td><td>${e.rule || e.catname || "—"}</td></tr>`).join("")}
+        </tbody></table>` : "<div class=\"empty\">Nothing in UniFi's security log.</div>"}
+      </div>
+
+      ${hotspots.length ? `<div class="card warn-card"><h2>📶 Camera Wi-Fi networks (${hotspots.length})</h2>
+        <p class="subtitle">Wi-Fi networks that belong to one of your cameras, or have a camera setup-network name.</p>
+        <table class="data-table"><thead><tr><th>Network</th><th>Why</th><th>Signal</th><th>Channel</th><th>Security</th></tr></thead><tbody>
+          ${hotspots.map(h => `<tr><td>${h.essid || "(hidden)"} <span class="mono" style="font-size:10px">${h.bssid}</span></td>
+            <td>${h.reason === "own_camera" ? `<span class="badge danger">your camera ${h.camera_name || h.camera_mac}</span>` : "camera setup name"}</td>
+            <td>${h.rssi != null ? h.rssi + " dBm" : "—"}</td><td>${h.channel ?? "—"}</td><td>${h.security || "open"}</td></tr>`).join("")}
+        </tbody></table></div>` : ""}
 
       <div class="card danger-card"><h2>⚠ Suspicious Devices (${suspDevices.length})</h2>
         ${suspDevices.length === 0 ? '<div class="empty">No suspicious devices — your network looks clean.</div>' : ''}
@@ -1649,6 +1666,7 @@ class UniFiBlockerPanel extends HTMLElement {
         ${d.suggested_category && !d.manual_category ? `<div style="font-size:11px;margin:4px 0">Quantify suggests <strong>${d.suggested_category.category}</strong> (${d.suggested_category.confidence})${this._actionMode ? ` <button class="btn btn-trust" data-setcat="${d.suggested_category.category}" data-mac="${d.mac}">Accept</button>` : ""}</div>` : ""}
         ${d.onvif && d.onvif.onvif ? `<div class="onvif-badge"><span class="badge ok">ONVIF Confirmed</span> ${d.onvif.manufacturer||""} ${d.onvif.model||""}${d.onvif.auth_required ? ' <span class="badge">login needed</span>' : ""}</div>` : ""}
         ${this._vulnBlock(d.vulns)}
+        ${this._insightBlock(d)}
         ${d.ip_history && d.ip_history.length > 1 ? `
           <div class="ip-history">
             <div style="font-size:10px;font-weight:600;color:var(--secondary-text-color);margin-bottom:3px">IP History:</div>
@@ -1674,6 +1692,27 @@ class UniFiBlockerPanel extends HTMLElement {
   // Local-only subnet from the integration options (defaults to 192.168.2.0/24).
   _lp() { return (this._localnet && this._localnet.prefix) || "192.168.2"; }
   _lcidr() { return (this._localnet && this._localnet.subnet) || "192.168.2.0/24"; }
+
+  _sparkline(series) {
+    if (!series || !series.length) return "";
+    const max = Math.max(...series, 1);
+    const w = 3, h = 24;
+    const bars = series.map((v, i) => `<rect x="${i * (w + 1)}" y="${h - Math.max(1, Math.round(h * v / max))}" width="${w}" height="${Math.max(1, Math.round(h * v / max))}" fill="currentColor" opacity="${i === series.length - 1 ? 1 : 0.55}"></rect>`).join("");
+    return `<svg width="${series.length * (w + 1)}" height="${h}" role="img" aria-label="Traffic per hour, last 24 hours" style="color:var(--primary-color,#42a5f5);vertical-align:middle">${bars}</svg>`;
+  }
+
+  _insightBlock(d) {
+    const parts = [];
+    if (d.traffic_24h) {
+      const total = d.traffic_24h.reduce((a, b) => a + b, 0);
+      parts.push(`<div class="info-row"><span class="info-label">Last 24 h</span><span>${this._sparkline(d.traffic_24h)} ${this._fmtB(total)}${d.traffic_spike ? ' <span class="badge danger">spike</span>' : ""}</span></div>`);
+    }
+    if (d.blocked_by_rule_24h) parts.push(`<div class="info-row"><span class="info-label">Local-only</span><span><span class="badge ok">working</span> blocked ${d.blocked_by_rule_24h} internet attempt${d.blocked_by_rule_24h === 1 ? "" : "s"} today</span></div>`);
+    if (d.security_events_24h) parts.push(`<div class="info-row"><span class="info-label">UniFi log</span><span><span class="badge warn">${d.security_events_24h} security event${d.security_events_24h === 1 ? "" : "s"}</span></span></div>`);
+    const fp = d.unifi_fingerprint;
+    if (fp) parts.push(`<div class="info-row"><span class="info-label">UniFi ID</span><span>category ${fp.dev_cat ?? "?"}${fp.os_name ? ", " + fp.os_name : ""}${fp.camera ? ' <span class="badge camera">camera</span>' : ""}</span></div>`);
+    return parts.length ? `<div class="device-info">${parts.join("")}</div>` : "";
+  }
 
   _vulnBlock(v) {
     if (!v) return "";

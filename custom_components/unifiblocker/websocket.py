@@ -152,6 +152,9 @@ async def ws_get_overview(
         "wireless_count": sum(1 for c in data.clients if not c.get("is_wired", False)),
         "wired_count": sum(1 for c in data.clients if c.get("is_wired", False)),
         "threat_events": len(data.threat_events),
+        "security_events": data.threat_events[:50],
+        "contained_blocks_24h": sum(1 for e in data.security if e.get("ours")),
+        "hotspots": data.hotspots[:30],
         "health": data.health,
         "new_devices": [data.enrich_client(c) for c in data.new_devices],
         "suspicious_devices": [
@@ -513,6 +516,7 @@ async def ws_get_recommendations(
 
     network_recs = generate_network_recommendations(
         all_enriched, firewall_exists=fw_exists, local_prefix=local_prefix,
+        hotspots=data.hotspots,
     )
 
     connection.send_result(msg["id"], {

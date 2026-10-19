@@ -33,6 +33,11 @@ API_FIREWALL_RULE = "/proxy/network/api/s/{site}/rest/firewallrule/{rule_id}"
 API_NETWORKS = "/proxy/network/api/s/{site}/rest/networkconf"
 # v2 Traffic Rules API (newer UCG Max / UDM firmware)
 API_TRAFFIC_RULES = "/proxy/network/v2/api/site/{site}/trafficrules"
+# UniFi Network 9/10: these replace stat/event, stat/alarm and stat/stadpi,
+# which are gone (404) or empty on current firmware.
+API_SYSTEM_LOG = "/proxy/network/v2/api/site/{site}/system-log/all"
+API_TRAFFIC_FLOWS = "/proxy/network/v2/api/site/{site}/traffic-flows"
+API_HOURLY_USER = "/proxy/network/api/s/{site}/stat/report/hourly.user"
 API_TRAFFIC_RULE = "/proxy/network/v2/api/site/{site}/trafficrules/{rule_id}"
 
 # ── Device states ────────────────────────────────────────────────────

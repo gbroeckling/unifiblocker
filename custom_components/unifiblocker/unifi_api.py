@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import ssl
+import time
 from typing import Any
 
 import aiohttp
@@ -25,6 +26,9 @@ from .const import (
     API_ROGUE_AP,
     API_TRAFFIC_RULE,
     API_TRAFFIC_RULES,
+    API_SYSTEM_LOG,
+    API_TRAFFIC_FLOWS,
+    API_HOURLY_USER,
     API_USER,
     API_SYSINFO,
 )
@@ -470,6 +474,43 @@ class UniFiApi:
         """Delete a v2 traffic rule."""
         path = API_TRAFFIC_RULE.replace("{rule_id}", rule_id)
         await self._request("DELETE", path)
+
+    # ── Logs, flows and traffic history (UniFi Network 9+) ───────────
+
+    async def _paged(self, path: str, hours: float, extra: dict[str, Any] | None = None,
+                     page_size: int = 200, max_pages: int = 5) -> list[dict[str, Any]]:
+        """POST a v2 paged query over the last *hours*, newest first."""
+        now = int(time.time() * 1000)
+        out: list[dict[str, Any]] = []
+        for page in range(max_pages):
+            body = {"pageNumber": page, "pageSize": page_size,
+                    "timestampFrom": now - int(hours * 3600_000), "timestampTo": now, **(extra or {})}
+            rows = await self._request("POST", path, json=body)
+            if not isinstance(rows, list):
+                rows = (rows or {}).get("data", []) if isinstance(rows, dict) else []
+            out.extend(rows)
+            if len(rows) < page_size:
+                break
+        return out
+
+    async def get_system_log(self, hours: float = 24) -> list[dict[str, Any]]:
+        """Security and client events from UniFi's system log."""
+        return await self._paged(API_SYSTEM_LOG, hours, page_size=100, max_pages=3)
+
+    async def get_traffic_flows(self, macs: list[str], hours: float = 24,
+                                max_pages: int = 5) -> list[dict[str, Any]]:
+        """Logged flows from these clients. Current firmware only logs blocked
+        traffic, so in practice these are blocked connection attempts."""
+        return await self._paged(API_TRAFFIC_FLOWS, hours,
+                                 {"source_mac": [m.lower() for m in macs]}, max_pages=max_pages)
+
+    async def get_hourly_traffic(self, hours: float = 24) -> list[dict[str, Any]]:
+        """Per-client bytes per hour: rows of {user (mac), time (ms), rx_bytes, tx_bytes}."""
+        now = int(time.time() * 1000)
+        return await self._request("POST", API_HOURLY_USER, json={
+            "attrs": ["rx_bytes", "tx_bytes", "time", "user"],
+            "start": now - int(hours * 3600_000), "end": now,
+        })
 
     async def close(self) -> None:
         """Close the HTTP session if we own it."""

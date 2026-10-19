@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.57 — 2026-10-19
+
+Using what current UniFi firmware actually reports.
+
+- Security events come from UniFi's system log now. The old event feed is gone on UniFi Network 9/10, so the Threats page and sensor were always empty. Blocks made by UniFi Blocker's own local-only rules are counted separately and shown on each device as proof the rule is working, not as threats.
+- Every device card shows its traffic for the last 24 hours, and a sudden spike (5x its usual hourly level, at least 50 MB) gets a recommendation, high for cameras.
+- UniFi's own device fingerprint counts as camera evidence (medium confidence) and shows on device cards.
+- Wi-Fi networks around you are checked for camera hotspots: one of your own cameras broadcasting its own network (a way in that skips your firewall) gets a high recommendation, and camera setup networks in range get a note.
+
 ## 0.3.56 — 2026-10-19
 
 - The ONVIF probe followed redirects, so any web server that bounces /onvif/device_service to its login page (a UniFi NAS, for one) looked like an ONVIF camera. It doesn't follow redirects now, and only a real SOAP reply counts. This was always there, but the new background probes in 0.3.52 started hitting it.

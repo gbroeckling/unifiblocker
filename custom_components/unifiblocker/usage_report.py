@@ -295,6 +295,14 @@ def build_payload(hass: HomeAssistant, install_id: str, taken: dict[str, Any] | 
                 "categories": cats,
                 "advisories": advisories,
                 "vulnerable": vuln,
+                "insights": {
+                    "security_events_24h": len(data.threat_events),
+                    "local_only_blocks_24h": sum(1 for e in data.security if e.get("ours")),
+                    "own_camera_hotspots": sum(1 for h in data.hotspots if h["reason"] == "own_camera"),
+                    "camera_ssids_nearby": sum(1 for h in data.hotspots if h["reason"] == "camera_ssid"),
+                    "traffic_spikes": sum(1 for c in data.clients if (data.enrich_client(c).get("traffic_spike"))),
+                    "unifi_fingerprint_cameras": sum(1 for c in data.clients if c.get("dev_cat") in (9, 57)),
+                },
             }
 
     polls = taken["polls"]
