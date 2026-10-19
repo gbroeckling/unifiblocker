@@ -486,7 +486,7 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             _LOGGER.debug("Miner tracker update failed", exc_info=True)
 
         usage_report.record_poll(time.monotonic() - started, ok=True)
-        return UniFiBlockerData(
+        data = UniFiBlockerData(
             clients=clients,
             devices=devices,
             store=self.store,
@@ -498,3 +498,27 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             miners=miners,
             onvif=self.onvif,
         )
+        self._announce_new_cameras(data)
+        return data
+
+    def _announce_new_cameras(self, data: UniFiBlockerData) -> None:
+        """Fire unifiblocker_new_camera once for each camera seen for the
+        first time, so automations can notify, scan or isolate it."""
+        cams = {}
+        for client in data.clients:
+            e = data.enrich_client(client)
+            if e.get("is_camera") and e.get("mac"):
+                cams[e["mac"].lower()] = e
+        for mac in self.store.new_cameras(list(cams)):
+            e = cams[mac]
+            onvif = e.get("onvif") or {}
+            self.hass.bus.async_fire(f"{DOMAIN}_new_camera", {
+                "mac": mac,
+                "ip": e.get("ip", ""),
+                "name": e.get("name", ""),
+                "vendor": e.get("vendor", ""),
+                "category_source": e.get("source", ""),
+                "confidence": e.get("confidence", ""),
+                "manufacturer": onvif.get("manufacturer") or e.get("onvif_manufacturer", ""),
+                "model": onvif.get("model") or e.get("onvif_model", ""),
+            })

@@ -29,6 +29,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     _reg(ws_set_category)
     _reg(ws_clear_category)
     _reg(ws_get_learned)
+    _reg(ws_learned_rule_update)
     _reg(ws_get_suggestions)
     _reg(ws_localnet_status)
     _reg(ws_localnet_assign)
@@ -319,6 +320,38 @@ async def ws_get_learned(
         connection.send_result(msg["id"], {"rules": {}, "total_rules": 0})
         return
     connection.send_result(msg["id"], learned.rules_summary)
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "unifiblocker/learned_rule_update",
+        vol.Required("kind"): vol.In(["vendor", "hostname", "mac", "port"]),
+        vol.Required("key"): str,
+        # Omit (or null) to delete the rule.
+        vol.Optional("category"): vol.Any(None, str),
+    }
+)
+@websocket_api.async_response
+async def ws_learned_rule_update(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Change a learned rule's category, or delete it."""
+    entry = _get_coordinator(hass)
+    learned = entry.get("learned") if entry else None
+    if not learned:
+        connection.send_error(msg["id"], "not_ready", "Learning engine not loaded")
+        return
+    from .device_categorizer import CATEGORY_LABELS
+    cat = msg.get("category")
+    if cat is not None and cat not in CATEGORY_LABELS:
+        connection.send_error(msg["id"], "invalid_category", f"Unknown category: {cat}")
+        return
+    if not await learned.update_rule(msg["kind"], msg["key"], cat):
+        connection.send_error(msg["id"], "not_found", "No such rule")
+        return
+    await entry["coordinator"].async_request_refresh()
+    connection.send_result(msg["id"], {"ok": True, **learned.rules_summary})
 
 
 @websocket_api.require_admin
@@ -676,6 +709,12 @@ async def ws_deep_scan_unknowns(
         connection.send_result(msg["id"], {"scanned": 0, "identified": 0})
         return
 
+    connection.send_result(msg["id"], await run_quantify(hass, entry))
+
+
+async def run_quantify(hass: HomeAssistant, entry: dict) -> dict[str, Any]:
+    """Quantify: deep-scan every unknown device. Shared by the panel button
+    and the unifiblocker.run_quantify service."""
     from .deep_scan import deep_scan_multiple
     from .vendor_lookup import lookup_vendor_safe
 
@@ -732,7 +771,7 @@ async def ws_deep_scan_unknowns(
 
     names = {c.get("mac", "").lower(): c.get("name") or c.get("hostname") or "" for c in data.clients}
     ips = {t["mac"]: t["ip"] for t in targets}
-    connection.send_result(msg["id"], {
+    return {
         "scanned": len(results),
         "identified": identified,
         "suggested": suggested,
@@ -745,7 +784,7 @@ async def ws_deep_scan_unknowns(
             "applied": r.get("best_guess") != "unknown" and r.get("best_confidence") == "high",
             "techniques_used": list(r.get("techniques", {}).keys()),
         } for mac, r in results.items()},
-    })
+    }
 
 
 @websocket_api.require_admin

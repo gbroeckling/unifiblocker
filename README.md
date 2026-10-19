@@ -214,8 +214,30 @@ UniFi Blocker works best with a flat /22 network that uses IP-range-based firewa
 | `unifiblocker.block_device` | Immediately block on controller |
 | `unifiblocker.unblock_device` | Remove block on controller |
 | `unifiblocker.reconnect_device` | Force client reconnect (kick) |
+| `unifiblocker.scan_device` | Port-scan one device and update its category |
+| `unifiblocker.run_quantify` | Deep-scan every device that's still unknown (takes a few minutes) |
+| `unifiblocker.onvif_discover` | Look for ONVIF cameras now (it also runs at startup and every 6 hours) |
 
-All services accept a single parameter: `mac` (e.g., `"aa:bb:cc:dd:ee:ff"`).
+The device services take a single parameter, `mac` (e.g. `"aa:bb:cc:dd:ee:ff"`). `run_quantify` and `onvif_discover` take none.
+
+### New camera event
+
+When a device is seen as a camera for the first time, UniFi Blocker fires `unifiblocker_new_camera` with `mac`, `ip`, `name`, `vendor`, `manufacturer`, `model`, `confidence` and `category_source`. Cameras already on the network when you install or update don't fire it. Example: get a notification and scan it.
+
+```yaml
+automation:
+  - alias: New camera on the network
+    trigger:
+      - platform: event
+        event_type: unifiblocker_new_camera
+    action:
+      - service: notify.notify
+        data:
+          message: "New camera: {{ trigger.event.data.name or trigger.event.data.mac }} ({{ trigger.event.data.vendor }}) at {{ trigger.event.data.ip }}"
+      - service: unifiblocker.scan_device
+        data:
+          mac: "{{ trigger.event.data.mac }}"
+```
 
 ---
 

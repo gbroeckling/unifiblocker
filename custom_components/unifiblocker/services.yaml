@@ -69,3 +69,23 @@ reconnect_device:
       example: "aa:bb:cc:dd:ee:ff"
       selector:
         text:
+
+scan_device:
+  name: Scan device ports
+  description: Port-scan one device and update its category. Results show in the panel.
+  fields:
+    mac:
+      name: MAC address
+      description: The MAC address of the device to scan.
+      required: true
+      example: "aa:bb:cc:dd:ee:ff"
+      selector:
+        text:
+
+run_quantify:
+  name: Run Quantify
+  description: Deep-scan every device whose category is still unknown. Takes a few minutes. High-confidence results are applied; the rest show up as suggestions in the panel.
+
+onvif_discover:
+  name: Find ONVIF cameras
+  description: Run ONVIF discovery on the LAN now and probe every camera that answers. It already runs at startup and every 6 hours.

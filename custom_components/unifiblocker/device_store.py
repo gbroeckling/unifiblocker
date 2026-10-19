@@ -43,6 +43,7 @@ class DeviceStore:
         self._hass = hass
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self._devices: dict[str, dict[str, Any]] = {}
+        self._meta: dict[str, Any] = {}
         # Bumped on every user-driven change (they all end in async_save) so
         # cached enrichment knows to rebuild before the next poll.
         self.rev = 0
@@ -54,16 +55,44 @@ class DeviceStore:
         data = await self._store.async_load()
         if data and isinstance(data, dict):
             self._devices = data.get("devices", {})
+            self._meta = data.get("meta", {})
         _LOGGER.debug("Loaded %d device records", len(self._devices))
 
     async def async_save(self) -> None:
         """Persist current state to disk."""
         self.rev += 1
-        await self._store.async_save({"devices": self._devices})
+        await self._store.async_save(self._data())
 
     def schedule_save(self) -> None:
         """Debounced save for poll updates (last_seen changes every poll)."""
-        self._store.async_delay_save(lambda: {"devices": self._devices}, 60)
+        self._store.async_delay_save(self._data, 60)
+
+    def _data(self) -> dict[str, Any]:
+        return {"devices": self._devices, "meta": self._meta}
+
+    # ── new-camera tracking ──────────────────────────────────────────
+
+    def new_cameras(self, macs: list[str]) -> list[str]:
+        """Of *macs* (devices that look like cameras now), the ones never
+        seen as a camera before. Marks them seen.
+
+        The first call after an update only records what's already there
+        and returns nothing, so upgrading doesn't announce every existing
+        camera as new."""
+        fresh = [m for m in (x.lower() for x in macs)
+                 if not self._devices.get(m, {}).get("camera_seen")]
+        if not fresh:
+            if not self._meta.get("cameras_baselined"):
+                self._meta["cameras_baselined"] = True
+                self.schedule_save()
+            return []
+        for m in fresh:
+            self._devices.setdefault(m, {"state": STATE_NEW})["camera_seen"] = True
+        self.schedule_save()
+        if not self._meta.get("cameras_baselined"):
+            self._meta["cameras_baselined"] = True
+            return []
+        return fresh
 
     # ── queries ──────────────────────────────────────────────────────
 

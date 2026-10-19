@@ -69,6 +69,7 @@ EVENTS = frozenset({
     "set_category", "clear_category", "check_ip", "block_port", "block_ports",
     "localnet_assign", "localnet_remove", "localnet_ensure_rule",
     "trust", "ignore", "quarantine", "block", "unblock", "reconnect",
+    "learned_rule_update",
 })
 VIEWS = frozenset({
     "overview", "detail_connected", "detail_wireless", "detail_wired", "detail_blocked",

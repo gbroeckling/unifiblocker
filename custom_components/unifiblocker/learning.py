@@ -26,6 +26,8 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
+from .suspicious_traffic import _is_locally_administered as is_randomized_mac
+
 _LOGGER = logging.getLogger(__name__)
 
 STORAGE_KEY = "unifiblocker_learned"
@@ -103,8 +105,10 @@ class LearnedPatterns:
                 learned["rules_added"].append(f"hostname '{prefix}*' → {category}")
 
         # 3. MAC prefix learning.
-        #    Learn the first 3 octets (OUI).
-        if mac:
+        #    Learn the first 3 octets (OUI). Not from randomized ("locally
+        #    administered") MACs: their first bytes are random, so a rule
+        #    would match unrelated devices.
+        if mac and not is_randomized_mac(mac):
             mac_prefix = mac.lower().replace("-", ":")[0:8]
             if mac_prefix and len(mac_prefix) == 8 and mac_prefix not in self._mac_rules:
                 self._mac_rules[mac_prefix] = category
@@ -282,6 +286,34 @@ class LearnedPatterns:
         return ""
 
     # ── Info for display ─────────────────────────────────────────────
+
+    async def update_rule(self, kind: str, key: str, category: str | None) -> bool:
+        """Change a learned rule's category, or delete it with category=None.
+
+        *kind* is vendor / hostname / mac / port; for port rules *key* is the
+        ports joined with commas ("8000,9527"). Returns False if no such rule.
+        """
+        if kind == "port":
+            want = sorted(int(p) for p in key.split(",") if p.strip().isdigit())
+            for i, rule in enumerate(self._port_rules):
+                if sorted(rule["ports"]) == want:
+                    if category is None:
+                        del self._port_rules[i]
+                    else:
+                        rule["category"] = category
+                    await self.async_save()
+                    return True
+            return False
+        rules = {"vendor": self._vendor_rules, "hostname": self._hostname_rules,
+                 "mac": self._mac_rules}.get(kind)
+        if rules is None or key not in rules:
+            return False
+        if category is None:
+            del rules[key]
+        else:
+            rules[key] = category
+        await self.async_save()
+        return True
 
     @property
     def rules_summary(self) -> dict[str, Any]:

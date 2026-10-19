@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.53 — 2026-10-19
+
+- New services: `unifiblocker.scan_device`, `unifiblocker.run_quantify` and `unifiblocker.onvif_discover`, so automations can run the tools.
+- New event: `unifiblocker_new_camera`, fired once when a device is first seen as a camera. Cameras already on the network when you update don't fire it. The README has an example automation.
+- Learned rules show at the bottom of the Identify page, where you can change their category or delete them. Before, a wrong rule stuck forever.
+- Rules are no longer learned from randomized (private) MAC addresses. Their first bytes are random, so a MAC rule from one would match unrelated devices.
+
 ## 0.3.52 — 2026-10-19
 
 Scan and ONVIF results that last.

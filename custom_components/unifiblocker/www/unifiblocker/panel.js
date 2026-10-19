@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.52";
+const VERSION = "0.3.53";
 const SIDEBAR_THRESHOLD = 5;
 
 // Everything the panel renders goes through innerHTML, and a lot of it comes
@@ -65,7 +65,7 @@ class UniFiBlockerPanel extends HTMLElement {
   async _ws(type, extra = {}) { if (!this._hass) return null; try { return _sanitize(await this._hass.callWS({ type, ...extra })); } catch (e) { console.warn("[UB]", type, e); return null; } }
 
   async _fetchAll() {
-    const [ov, cl, cats, ln, recs, mn, sr, rp] = await Promise.all([
+    const [ov, cl, cats, ln, recs, mn, sr, rp, lr] = await Promise.all([
       this._ws("unifiblocker/overview"),
       this._ws("unifiblocker/clients"),
       this._ws("unifiblocker/categories"),
@@ -74,6 +74,7 @@ class UniFiBlockerPanel extends HTMLElement {
       this._ws("unifiblocker/miners"),
       this._ws("unifiblocker/scan_results"),
       this._ws("unifiblocker/report_status"),
+      this._ws("unifiblocker/learned_rules"),
     ]);
     if (ov) this._overview = ov;
     if (cl) this._data = cl;
@@ -83,6 +84,7 @@ class UniFiBlockerPanel extends HTMLElement {
     if (mn) this._miners = mn;
     if (sr && sr.results) this._scanCache = { ...sr.results, ...this._scanCache };
     if (rp) this._report = rp;
+    if (lr) this._learned = lr;
     this._render();
   }
 
@@ -300,6 +302,12 @@ class UniFiBlockerPanel extends HTMLElement {
     });
     mc.querySelectorAll("[data-ensureFw]").forEach(btn => {
       btn.addEventListener("click", () => this._ensureRule());
+    });
+    mc.querySelectorAll("[data-rulekind]").forEach(sel => {
+      sel.addEventListener("change", () => this._ruleUpdate(sel.dataset.rulekind, sel.dataset.rulekey, sel.value));
+    });
+    mc.querySelectorAll("[data-ruledel]").forEach(btn => {
+      btn.addEventListener("click", () => { if (confirm("Delete this learned rule?")) this._ruleUpdate(btn.dataset.ruledel, btn.dataset.rulekey, null); });
     });
     mc.querySelectorAll("[data-report]").forEach(btn => {
       btn.addEventListener("click", () => this._reportAction(btn.dataset.report));
@@ -860,7 +868,37 @@ class UniFiBlockerPanel extends HTMLElement {
             </div>
           </div>
         </div>`;
-      }).join("")}`;
+      }).join("")}
+      ${this._vLearnedRules(catLabels)}`;
+  }
+
+  _vLearnedRules(catLabels) {
+    const L = this._learned || {};
+    const rows = [
+      ...Object.entries(L.vendor_rules || {}).map(([k, c]) => ["vendor", k, `vendor contains “${k}”`, c]),
+      ...Object.entries(L.hostname_rules || {}).map(([k, c]) => ["hostname", k, `hostname starts “${k}”`, c]),
+      ...Object.entries(L.mac_rules || {}).map(([k, c]) => ["mac", k, `MAC starts ${k}`, c]),
+      ...(L.port_rules || []).map(r => ["port", r.ports.join(","), `ports ${r.ports.join(", ")}`, r.category]),
+    ];
+    return `<div class="card"><h2>Learned rules <span class="count">${rows.length}</span></h2>
+      <p class="subtitle">Picked up from categories you set by hand, and used for devices nothing else can identify. Fix or delete any that are wrong.</p>
+      ${rows.length ? `<table class="data-table"><thead><tr><th>Rule</th><th>Category</th>${this._actionMode ? "<th></th>" : ""}</tr></thead><tbody>
+        ${rows.map(([kind, key, label, cat]) => `<tr>
+          <td>${label}</td>
+          <td>${this._actionMode
+            ? `<select data-rulekind="${kind}" data-rulekey="${key}">${Object.entries(catLabels).map(([k, v]) => `<option value="${k}"${k === cat ? " selected" : ""}>${v}</option>`).join("")}</select>`
+            : (catLabels[cat] || cat)}</td>
+          ${this._actionMode ? `<td><button class="btn" data-ruledel="${kind}" data-rulekey="${key}">Delete</button></td>` : ""}
+        </tr>`).join("")}
+      </tbody></table>` : '<div class="empty">No learned rules yet. Setting a device\'s category by hand teaches one.</div>'}
+    </div>`;
+  }
+
+  async _ruleUpdate(kind, key, category) {
+    // key comes from a data- attribute, which the browser has already turned
+    // back from &amp; etc. into the rule's real text.
+    const r = await this._ws("unifiblocker/learned_rule_update", { kind, key, category: category ?? null });
+    if (r && r.ok) { this._learned = r; this._updateMain(); }
   }
 
   _vCategory() {

@@ -185,6 +185,44 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
         for n, h in [("trust_device", h_trust), ("ignore_device", h_ignore), ("quarantine_device", h_quarantine), ("block_device", h_block), ("unblock_device", h_unblock), ("reconnect_device", h_reconnect)]:
             hass.services.async_register(DOMAIN, n, h, schema=MAC_SCHEMA)
 
+    # Tool services, so automations can run scans (e.g. when a new camera
+    # event fires). Registered separately so an install that already has
+    # the services above still gets these after an update.
+    if not hass.services.has_service(DOMAIN, "scan_device"):
+        from homeassistant.exceptions import HomeAssistantError
+
+        def _loaded():
+            for d in hass.data.get(DOMAIN, {}).values():
+                if isinstance(d, dict) and "coordinator" in d:
+                    return d
+            raise HomeAssistantError("UniFi Blocker is not loaded")
+
+        async def h_scan(c):
+            d = _loaded()
+            client = d["coordinator"].data.client_by_mac(c.data["mac"]) if d["coordinator"].data else None
+            if not client or not client.get("ip"):
+                raise HomeAssistantError(f"{c.data['mac']} is not connected or has no IP")
+            if not d.get("scanner"):
+                raise HomeAssistantError("Port scanner not available")
+            await d["scanner"].scan_device(client["ip"], c.data["mac"])
+            await d["coordinator"].async_request_refresh()
+
+        async def h_quantify(c):
+            d = _loaded()
+            if d["coordinator"].data:
+                from .websocket import run_quantify
+                await run_quantify(hass, d)
+
+        async def h_onvif(c):
+            d = _loaded()
+            if d.get("onvif"):
+                await d["onvif"].discover_and_probe_all()
+                await d["coordinator"].async_request_refresh()
+
+        hass.services.async_register(DOMAIN, "scan_device", h_scan, schema=MAC_SCHEMA)
+        hass.services.async_register(DOMAIN, "run_quantify", h_quantify)
+        hass.services.async_register(DOMAIN, "onvif_discover", h_onvif)
+
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
