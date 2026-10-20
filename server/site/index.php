@@ -88,7 +88,7 @@ if (!empty($_SESSION['ok'])) {
     $since = fn($n) => gmdate('Y-m-d', time() - ($n - 1) * 86400);
 
     $S = ['active1' => 0, 'active7' => 0, 'active30' => count($reports), 'ever' => count($ledger),
-          'per_day' => [], 'version' => [], 'ha' => [], 'controller' => [], 'usage' => [], 'views' => [],
+          'per_day' => [], 'version' => [], 'ha' => [], 'controller' => [], 'edition' => [], 'usage' => [], 'views' => [],
           'api' => [], 'log' => [], 'cats' => [], 'adv' => [], 'polls' => 0, 'poll_fail' => 0,
           'poll_ms_sum' => 0, 'poll_ms_max' => 0, 'slow' => 0, 'oversize' => 0, 'slow_inst' => 0,
           'oversize_inst' => 0, 'api_inst' => [], 'log_inst' => [], 'sizes' => [], 'settings' => [], 'vuln' => []];
@@ -103,6 +103,7 @@ if (!empty($_SESSION['ok'])) {
         $bump($S['version'], $last['version'] ?? '?');
         $bump($S['ha'], $last['ha_version'] ?? '?');
         $bump($S['controller'], $last['env']['controller_version'] ?? '?');
+        $bump($S['edition'], $last['env']['edition'] ?? 'free (before 0.3.61)');
         $c = $last['counts'] ?? [];
         $S['sizes'][] = ['clients' => (int)($c['clients'] ?? 0), 'cameras' => (int)($c['cameras'] ?? 0)];
         foreach (($c['categories'] ?? []) as $k => $n) $bump($S['cats'], $k, (int)$n);
@@ -136,7 +137,7 @@ if (!empty($_SESSION['ok'])) {
         foreach ($apiSeen as $k => $_) $bump($S['api_inst'], $k);
         foreach ($logSeen as $k => $_) $bump($S['log_inst'], $k);
     }
-    foreach (['version', 'ha', 'controller', 'usage', 'views', 'api', 'log', 'cats', 'adv', 'settings'] as $k) arsort($S[$k]);
+    foreach (['version', 'ha', 'controller', 'edition', 'usage', 'views', 'api', 'log', 'cats', 'adv', 'settings'] as $k) arsort($S[$k]);
     ksort($S['per_day']);
 }
 
@@ -226,6 +227,7 @@ function median($xs) { if (!$xs) return 0; sort($xs); $m = intdiv(count($xs), 2)
     <div class="card"><h2>Integration version (latest report per install)</h2><?= pairs($S['version'], 'Version', 'Installs') ?></div>
     <div class="card"><h2>Home Assistant</h2><?= pairs($S['ha'], 'Version', 'Installs') ?></div>
     <div class="card"><h2>UniFi Network</h2><?= pairs($S['controller'], 'Version', 'Installs') ?></div>
+    <div class="card"><h2>Edition</h2><?= pairs($S['edition'], 'Edition', 'Installs') ?></div>
     <div class="card"><h2>Controller API errors</h2>
       <?php $rows = []; foreach (array_slice($S['api'], 0, 30, true) as $k => $n) $rows[] = [$k, $S['api_inst'][$k] ?? 0, $n]; echo table($rows, ['Endpoint and status', 'Installs', 'Count']); ?></div>
     <div class="card"><h2>Warnings and errors logged</h2>
