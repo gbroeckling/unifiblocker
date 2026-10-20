@@ -28,6 +28,7 @@ const VIEWS: { id: View; label: string; icon: string }[] = [
 ];
 
 import type { ActOptions, Ctx } from "./ui";
+import { applyTheme, savedTheme, saveTheme, type ThemeName } from "./themes";
 
 /** Root of the sidebar panel. Owns the data, actions, toasts, the confirm
  *  dialog and the device drawer; the views just render and call act(). */
@@ -43,6 +44,7 @@ export class UniFiBlockerPanel extends LitElement {
   @state() private toast: { text: string; bad: boolean } | null = null;
   @state() private ask: { text: string; danger: boolean; resolve: (ok: boolean) => void } | null = null;
   @state() private openMac: string | null = null;
+  @state() private theme: ThemeName = savedTheme();
   @state() private devicesFilter = "all";
   private timer?: number;
   private toastTimer?: number;
@@ -50,6 +52,7 @@ export class UniFiBlockerPanel extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
+    applyTheme(this, this.theme);
     const fromUrl = new URLSearchParams(location.search).get("view") as View | null;
     if (fromUrl && VIEWS.some((v) => v.id === fromUrl)) this.view = fromUrl;
     document.addEventListener("visibilitychange", this.onVisibility);
@@ -122,9 +125,15 @@ export class UniFiBlockerPanel extends LitElement {
     }
   }
 
+  private setTheme = (name: ThemeName) => {
+    this.theme = name;
+    saveTheme(name);
+    applyTheme(this, name);
+  };
+
   private ctxObj(): Ctx {
     return { hass: this.hass, snap: this.snap, act: this.act, open: this.openDevice, go: this.go, say: this.say,
-      confirm: this.confirm, reload: () => this.schedule(800) };
+      confirm: this.confirm, reload: () => this.schedule(800), theme: this.theme, setTheme: this.setTheme };
   }
 
   private answer(ok: boolean) {
@@ -215,7 +224,7 @@ export class UniFiBlockerPanel extends LitElement {
     .tab:hover, .tab:focus-visible { opacity: 1; }
     .tab:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
     .dot { background: var(--error-color, #db4437); color: #fff; border-radius: 10px; font-size: 11px; padding: 0 6px; line-height: 16px; }
-    .dot.soft { background: rgba(255, 255, 255, 0.25); }
+    .dot.soft { background: color-mix(in srgb, currentColor 22%, transparent); color: inherit; }
     main { flex: 1; overflow-y: auto; padding: 16px; box-sizing: border-box; }
     @media (min-width: 900px) { main { padding: 24px; } }
     main > * { max-width: 1400px; margin-left: auto; margin-right: auto; display: block; }

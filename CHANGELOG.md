@@ -17,6 +17,7 @@ New panel, and blocking that does what it says.
 - Making a device local-only reports an error if the internet block fails, instead of saying it worked.
 - Changing the blocked range makes the new rules before removing the old ones, so a refusal leaves the old block in place.
 - Devices in the local-only range without a rule get one network-wide recommendation instead of one each.
+- Themes (Tools page): PadSpan's Night, Day, Graphite, Ocean, Dusk, High contrast and Light (inverted), or Home Assistant's own theme (the default). The choice is kept per browser.
 
 ## 0.3.60 — 2026-10-19
 

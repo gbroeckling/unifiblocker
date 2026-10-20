@@ -1,3 +1,4 @@
+import type { ThemeName } from "./themes";
 import { html, nothing, svg, type TemplateResult } from "lit";
 import type { Client, Hass, Rec, Snapshot } from "./types";
 import { bytes, name } from "./format";
@@ -19,6 +20,8 @@ export interface Ctx {
   say: (text: string, bad?: boolean) => void;
   confirm: (text: string, danger?: boolean) => Promise<boolean>;
   reload: () => void;
+  theme: ThemeName;
+  setTheme: (name: ThemeName) => void;
 }
 
 export function sparkline(series: number[] | null | undefined, w = 3, h = 22): TemplateResult | typeof nothing {

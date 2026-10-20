@@ -2,6 +2,7 @@ import { LitElement, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { shared } from "../styles";
 import { categoryOptions, type Ctx } from "../ui";
+import { THEME_NAMES } from "../themes";
 
 const PORTS: [number | string, string, string, "bad" | "warn" | ""][] = [
   [34567, "XMEye / Xiongmai", "DVR protocol; these phone home to Xiongmai's cloud", "bad"],
@@ -76,6 +77,14 @@ export class UbTools extends LitElement {
               <pre class="mono" style="max-height:300px;overflow:auto;white-space:pre-wrap">${JSON.stringify(this.preview.payload, null, 2)}</pre>` : nothing}
           ` : html`<p class="muted">Not available.</p>`}
         </div>
+      </div>
+
+      <div class="card">
+        <h2>Theme</h2>
+        <p class="sub">The same looks as PadSpan. Home Assistant follows your HA theme. This browser only.</p>
+        <div class="chips" role="group" aria-label="Theme">${THEME_NAMES.map(([k, label]) => html`
+          <button class="chip" aria-pressed=${this.ctx.theme === k ? "true" : "false"}
+            @click=${() => this.ctx.setTheme(k)}>${label}</button>`)}</div>
       </div>
 
       <div class="card">
