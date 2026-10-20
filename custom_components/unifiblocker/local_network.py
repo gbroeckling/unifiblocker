@@ -26,6 +26,20 @@ def _has_rule_for(descriptions: list[str], mac: str) -> bool:
     return any(d.startswith(prefix) for d in descriptions)
 
 
+def ub_rule_macs(rules: list[dict[str, Any]]) -> set[str]:
+    """MACs with one of our per-device internet blocks that is switched on
+    in the controller right now: what's really blocked, whatever our own
+    records say."""
+    out: set[str] = set()
+    for rule in rules:
+        desc = (rule.get("description") or "").lower()
+        if not desc.startswith("ub: ") or not rule.get("enabled") or rule.get("action") != "BLOCK":
+            continue
+        macs = {(t.get("client_mac") or "").lower() for t in rule.get("target_devices") or []} - {""}
+        out |= macs or {desc.split()[1]}
+    return out
+
+
 RANGE_RULE_PREFIX = "UB: local-only range"
 
 
@@ -182,7 +196,39 @@ class LocalNetworkManager:
                     pass
         return ips
 
-    def next_available_ip(self, category: str) -> str | None:
+    def reserved_octets(self, users: list[dict[str, Any]], skip_mac: str = "") -> set[int]:
+        """Last octets of DHCP reservations in the local-only subnet held by
+        other devices on the controller (not only the ones we made)."""
+        out: set[int] = set()
+        for u in users:
+            ip = u.get("fixed_ip") or ""
+            if u.get("use_fixedip") and ip.startswith(self.subnet + ".") and u.get("mac", "").lower() != skip_mac:
+                try:
+                    out.add(int(ip.rsplit(".", 1)[1]))
+                except ValueError:
+                    pass
+        return out
+
+    async def sync_assignments(self, api: Any) -> int:
+        """Bring our record of each local-only device's address in line
+        with its reservation on the controller (someone may have changed it
+        in UniFi). Returns how many changed."""
+        users = {u.get("mac", "").lower(): u for u in await api.get_all_users()}
+        changed = 0
+        for mac, info in self._assignments.items():
+            u = users.get(mac)
+            if not u:
+                continue
+            ip = (u.get("fixed_ip") if u.get("use_fixedip") else "") or ""
+            if ip != info.get("ip"):
+                _LOGGER.info("Local-only %s: controller has %s, we had %s", mac, ip or "no reservation", info.get("ip"))
+                info["ip"] = ip
+                changed += 1
+        if changed:
+            await self.async_save()
+        return changed
+
+    def next_available_ip(self, category: str, taken: set[int] | None = None) -> str | None:
         """Pick the next free IP in the category's range.
 
         Waterfall strategy — never returns None until ALL 254 addresses
@@ -193,7 +239,7 @@ class LocalNetworkManager:
              (least-used ranges first)
           4. Sweep the entire .1-.254 space for anything still free
         """
-        used = self.used_ips() | RESERVED
+        used = self.used_ips() | RESERVED | (taken or set())
         cat_ranges = self.category_ranges
         own_start, own_end = cat_ranges.get(category, DEFAULT_RANGE)
 
@@ -280,10 +326,6 @@ class LocalNetworkManager:
         if existing:
             return {"ok": True, "ip": existing["ip"], "already_assigned": True}
 
-        ip = self.next_available_ip(category)
-        if not ip:
-            return {"ok": False, "error": "No available IPs in range"}
-
         # Find the UniFi user record.
         user = await api.get_user_by_mac(mac)
         if not user:
@@ -292,6 +334,17 @@ class LocalNetworkManager:
         user_id = user.get("_id", "")
         if not user_id:
             return {"ok": False, "error": "User record has no ID"}
+
+        # Already reserved inside the local-only range: keep that address, so
+        # nothing that records or controls the device has to be changed.
+        if user.get("use_fixedip") and (user.get("fixed_ip") or "").startswith(self.subnet + "."):
+            ip = user["fixed_ip"]
+        else:
+            # Skip addresses other devices already have reserved on the controller.
+            taken = self.reserved_octets(await api.get_all_users(), skip_mac=mac)
+            ip = self.next_available_ip(category, taken)
+            if not ip:
+                return {"ok": False, "error": "No available IPs in range"}
 
         # Check for existing reservation and record the change.
         old_ip = ""
@@ -304,7 +357,7 @@ class LocalNetworkManager:
             )
 
         # Record IP change in the device store.
-        if store and old_ip:
+        if store and old_ip and old_ip != ip:
             await store.record_ip_change(mac, old_ip, ip, "local_only_assignment")
         elif store:
             # Record current DHCP IP before the change.
@@ -313,10 +366,11 @@ class LocalNetworkManager:
                 await store.record_ip_change(mac, current_ip, ip, "local_only_assignment")
 
         # Set the DHCP reservation (overwrites any existing one).
-        try:
-            await api.set_fixed_ip(user_id, ip)
-        except Exception as err:
-            return {"ok": False, "error": f"Failed to set reservation: {err}"}
+        if ip != (user.get("fixed_ip") if user.get("use_fixedip") else None):
+            try:
+                await api.set_fixed_ip(user_id, ip)
+            except Exception as err:
+                return {"ok": False, "error": f"Failed to set reservation: {err}"}
 
         # Block internet for this device via v2 Traffic Rule.
         block_result = await self.block_device_internet(api, mac)
@@ -336,6 +390,11 @@ class LocalNetworkManager:
 
         _LOGGER.info("Assigned %s → %s (was: %s, category: %s, internet blocked: %s)",
                       mac, ip, old_ip or "dhcp", category, block_result.get("ok", False))
+        if not block_result.get("ok"):
+            return {"ok": False, "ip": ip, "mac": mac,
+                    "error": f"Its address is now {ip}, but the internet block failed "
+                             f"({block_result.get('error') or 'no reason given'}). "
+                             "Use 'Create missing rules' on the Network page."}
         return {"ok": True, "ip": ip, "mac": mac, "category": category,
                 "previous_ip": old_ip,
                 "had_reservation": had_reservation,
@@ -569,8 +628,11 @@ class LocalNetworkManager:
         status = await self.range_block_status(api)
         if not status["supported"]:
             return {"ok": False, "error": status["reason"]}
-        await self.disable_range_block(api)
-        used = [r.get("rule_index", 0) for r in await api.get_firewall_rules() if r.get("ruleset") == "WAN_OUT"]
+        # Make the new rules first and only then remove any old ones, so a
+        # refusal never leaves the range without a block.
+        existing = await api.get_firewall_rules()
+        old_ids = [r["_id"] for r in existing if r.get("name", "").startswith(RANGE_RULE_PREFIX) and r.get("_id")]
+        used = [r.get("rule_index", 0) for r in existing if r.get("ruleset") == "WAN_OUT"]
         index = max([1999, *[i for i in used if 2000 <= i < 3000]]) + 1
         made = []
         try:
@@ -583,7 +645,10 @@ class LocalNetworkManager:
                     await api.delete_firewall_rule(rule_id)
                 except Exception:
                     _LOGGER.warning("Could not remove half-made range rule %s", rule_id)
-            return {"ok": False, "error": f"The controller refused the rule: {err}"}
+            kept = " The block that was already there is unchanged." if old_ids else ""
+            return {"ok": False, "error": f"The controller refused the rule: {err}.{kept}"}
+        for rule_id in old_ids:
+            await api.delete_firewall_rule(rule_id)
         status = await self.range_block_status(api)
         if status.get("cidr") != cidr:
             return {"ok": False, "error": "The rules were sent but don't show up on the controller"}

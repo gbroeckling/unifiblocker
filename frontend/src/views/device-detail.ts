@@ -58,7 +58,7 @@ export class UbDeviceDetail extends LitElement {
         <div class="actions row">
           ${c.state !== "trusted" ? html`<button class="btn" @click=${() => act("trust", { mac: c.mac }, { done: `${n} trusted` })}>Trust</button>` : nothing}
           ${c.state === "new" ? html`<button class="btn" @click=${() => act("ignore", { mac: c.mac }, { done: `${n} ignored` })}>Ignore</button>` : nothing}
-          ${c.internet_blocked
+          ${c.internet_blocked && assigned ? nothing : c.internet_blocked
             ? html`<button class="btn" @click=${() => act("allow_internet", { mac: c.mac }, { confirm: `Let ${n} reach the internet again?`, done: `${n} can reach the internet again` })}>Allow internet again</button>`
             : html`<button class="btn primary" @click=${() => act("block_internet", { mac: c.mac }, { confirm: `Block ${n} from the internet? It keeps its address and keeps working on your network.`, done: `${n} blocked from the internet` })}>Block internet</button>`}
           ${assigned

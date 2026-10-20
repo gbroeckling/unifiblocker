@@ -84,9 +84,11 @@ class DeviceStore:
             return []
         return fresh
 
-    def mark_auto_blocked(self, mac: str, rule_id: str) -> None:
+    def mark_auto_blocked(self, mac: str, rule_id: str, by: str = "policy") -> None:
+        """Record an internet block we added: by="policy" (new-camera policy,
+        undone by Trust) or by="user" (Block internet, kept on Trust)."""
         entry = self._devices.setdefault(mac.lower(), {"state": STATE_NEW})
-        entry["auto_blocked"] = {"rule_id": rule_id}
+        entry["auto_blocked"] = {"rule_id": rule_id, "by": by}
         self.schedule_save()
 
     def auto_blocked(self, mac: str) -> dict[str, Any] | None:
@@ -133,6 +135,11 @@ class DeviceStore:
         """Return the classification for *mac*, defaulting to ``new``."""
         entry = self._devices.get(mac.lower())
         return entry["state"] if entry else STATE_NEW
+
+    def first_seen(self, mac: str) -> str | None:
+        """When *mac* was first recorded (ISO time), if known."""
+        entry = self._devices.get(mac.lower())
+        return entry.get("first_seen") if entry else None
 
     def get_devices_by_state(self, state: str) -> dict[str, dict[str, Any]]:
         """Return all devices matching *state*."""

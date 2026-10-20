@@ -36,7 +36,7 @@ export class UbNetwork extends LitElement {
     const flagged = inside.filter((c) => !c.is_camera && ["nas", "computer", "phone", "tablet", "networking", "crypto", "streaming", "gaming"].includes(c.category));
     return html`<div class="card">
       <h2>Block the whole range</h2>
-      <p>Two firewall rules on the gateway cut every address in a range off from the internet, including devices added later. Time sync (NTP) stays allowed so camera timestamps and light schedules stay right. Nothing on your own network is affected.</p>
+      <p>Two firewall rules on the gateway cut every address in a range off from the internet, including any device you later give an address in it. New devices get their address from the DHCP pool, so they aren't covered until you reserve one in the range. Time sync (NTP, to any server) stays allowed so camera timestamps and light schedules stay right. Nothing on your own network is affected.</p>
       ${!rb.supported ? html`<p><span class="badge warn">not available</span> ${rb.reason}</p>` : rb.enabled
         ? html`<div class="row"><span class="badge ok">on</span><span class="mono">${rb.cidr}</span>
             <span class="small muted">${plural(inside.length, "device")} online in it${rb.ntp_allowed ? ", time sync allowed" : ""}</span><span class="spacer"></span>

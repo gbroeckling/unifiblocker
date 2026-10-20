@@ -297,17 +297,6 @@ def generate_recommendations(
             "action": "block_internet",
             "action_data": {"mac": mac},
         })
-    elif (ip.startswith(f"{local_prefix}.") and not _contained(device, local_prefix)
-          and (device.get("home_automation") or {}).get("tier") != "cloud"):
-        recs.append({
-            "priority": PRIORITY_MEDIUM,
-            "priority_label": PRIORITY_LABELS[PRIORITY_MEDIUM],
-            "title": "Local-only address, but internet is open",
-            "detail": f"It's in the {local_prefix}.x local-only range, but no rule blocks its internet access, "
-                      "so the address on its own does nothing. Block its internet access to finish the job.",
-            "action": "block_internet",
-            "action_data": {"mac": mac},
-        })
 
     # ── 3. Suspicious traffic flags ──────────────────────────────────
 
@@ -587,6 +576,23 @@ def generate_network_recommendations(
             "detail": "Some devices assigned to Local Only don't have their traffic rule on the UCG Max yet, "
                       "so they can still reach the internet. On the Network page, click "
                       "'Create missing rules'.",
+            "action": "info",
+            "action_data": {},
+        })
+
+    in_range_open = [d for d in devices
+                     if not d.get("is_camera") and d.get("ip", "").startswith(f"{local_prefix}.")
+                     and not _contained(d, local_prefix)
+                     and (d.get("home_automation") or {}).get("tier") != "cloud"]
+    if in_range_open:
+        recs.append({
+            "priority": PRIORITY_MEDIUM,
+            "priority_label": PRIORITY_LABELS[PRIORITY_MEDIUM],
+            "title": f"{len(in_range_open)} device{'s' if len(in_range_open) != 1 else ''} in the local-only range can reach the internet",
+            "detail": "They have addresses in " + local_prefix + ".x but no rule blocks their internet access: "
+                      + ", ".join(d.get("name") or d.get("mac", "") for d in in_range_open[:8])
+                      + (" and more" if len(in_range_open) > 8 else "")
+                      + ". 'Block the whole range' on the Network page covers them all at once.",
             "action": "info",
             "action_data": {},
         })

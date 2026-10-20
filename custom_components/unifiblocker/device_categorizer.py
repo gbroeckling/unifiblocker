@@ -223,9 +223,15 @@ for _cv in CAMERA_VENDORS:
 # ── Hostname patterns → category ────────────────────────────────────
 # Checked in order; first match wins.
 
+# Hostnames of open smart-home firmware: never cameras, whatever UniFi's
+# fingerprint says.
+_NOT_CAMERA_FIRMWARE = ("tasmota", "esphome", "wled", "shelly", "openbk", "espresense")
+
 _HOSTNAME_PATTERNS: list[tuple[list[str] | None, str]] = [
     # ESPHome
     (["esphome", "esp32", "esp8266", "esp-", "esph-", "espresense"], "esphome"),
+    # Other open smart-plug / relay firmware
+    (["tasmota", "shelly", "openbk"], "iot"),
     # Home Assistant
     (["homeassistant", "home-assistant", "hassio", "hass.", "ha-", "supervisor"], "ha_device"),
     # WLED / Smart lights (expanded patterns)
@@ -408,8 +414,10 @@ def categorize_device(
         return _result("camera", "low", "chip_vendor")
 
     # 4b. UniFi's own fingerprint (stat/sta dev_cat), see insights.py.
+    #     UniFi puts some smart plugs in the same group as cameras (a
+    #     Tasmota plug shows up as dev_cat 57), so a DIY firmware name wins.
     from .insights import UNIFI_CAMERA_DEV_CATS
-    if unifi_dev_cat in UNIFI_CAMERA_DEV_CATS:
+    if unifi_dev_cat in UNIFI_CAMERA_DEV_CATS and not any(f in hn for f in _NOT_CAMERA_FIRMWARE):
         return _result("camera", "medium", "unifi_fingerprint")
 
     # 5. Vendor-specific hostname refinement (Apple, Amazon, Google)

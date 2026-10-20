@@ -1094,7 +1094,7 @@ let U = class extends $ {
         <div class="actions row">
           ${e.state !== "trusted" ? o`<button class="btn" @click=${() => t("trust", { mac: e.mac }, { done: `${s} trusted` })}>Trust</button>` : l}
           ${e.state === "new" ? o`<button class="btn" @click=${() => t("ignore", { mac: e.mac }, { done: `${s} ignored` })}>Ignore</button>` : l}
-          ${e.internet_blocked ? o`<button class="btn" @click=${() => t("allow_internet", { mac: e.mac }, { confirm: `Let ${s} reach the internet again?`, done: `${s} can reach the internet again` })}>Allow internet again</button>` : o`<button class="btn primary" @click=${() => t("block_internet", { mac: e.mac }, { confirm: `Block ${s} from the internet? It keeps its address and keeps working on your network.`, done: `${s} blocked from the internet` })}>Block internet</button>`}
+          ${e.internet_blocked && n ? l : e.internet_blocked ? o`<button class="btn" @click=${() => t("allow_internet", { mac: e.mac }, { confirm: `Let ${s} reach the internet again?`, done: `${s} can reach the internet again` })}>Allow internet again</button>` : o`<button class="btn primary" @click=${() => t("block_internet", { mac: e.mac }, { confirm: `Block ${s} from the internet? It keeps its address and keeps working on your network.`, done: `${s} blocked from the internet` })}>Block internet</button>`}
           ${n ? o`<button class="btn" @click=${() => t("localnet_remove", { mac: e.mac }, { confirm: `Take ${s} off local-only? It gets internet access again.`, done: `${s} is no longer local-only` })}>Remove local-only</button>` : o`<button class="btn" @click=${() => t(
       "localnet_assign",
       { mac: e.mac, category: e.category === "unknown" ? "iot" : e.category },
@@ -1265,7 +1265,7 @@ let at = class extends $ {
           <td>${n.reason === "own_camera" ? o`<span class="badge bad">your camera ${n.camera_name || n.camera_mac}</span>` : "camera setup name"}</td>
           <td>${n.rssi != null ? `${n.rssi} dBm` : "—"}</td><td>${n.channel ?? "—"}</td><td>${n.security || "open"}</td></tr>`)}</tbody></table></div>` : l}
       <div class="card small muted">
-        UniFi only logs blocked connections, so a camera's internet use shows up once it's blocked: every attempt it makes is then blocked and listed. "Not contained" means UniFi logged traffic it let through from a camera that should be cut off.
+        UniFi only logs blocked connections, so a camera's internet use shows up once it's blocked: every attempt it makes is then blocked and listed. "Not contained" means UniFi logged traffic it let through from a camera that should be cut off. Most UniFi gateways log only blocked connections, though, so a block that isn't working can look the same as a quiet camera: test a new kind of block from a laptop on the same addresses.
       </div>
     `;
   }
@@ -1409,7 +1409,7 @@ let O = class extends $ {
     const n = this.cidr || s.cidr || `${e}.0/24`, i = t.clients.filter((h) => h.ip && Le(h.ip, n)), r = i.filter((h) => !h.is_camera && ["nas", "computer", "phone", "tablet", "networking", "crypto", "streaming", "gaming"].includes(h.category));
     return o`<div class="card">
       <h2>Block the whole range</h2>
-      <p>Two firewall rules on the gateway cut every address in a range off from the internet, including devices added later. Time sync (NTP) stays allowed so camera timestamps and light schedules stay right. Nothing on your own network is affected.</p>
+      <p>Two firewall rules on the gateway cut every address in a range off from the internet, including any device you later give an address in it. New devices get their address from the DHCP pool, so they aren't covered until you reserve one in the range. Time sync (NTP, to any server) stays allowed so camera timestamps and light schedules stay right. Nothing on your own network is affected.</p>
       ${s.supported ? s.enabled ? o`<div class="row"><span class="badge ok">on</span><span class="mono">${s.cidr}</span>
             <span class="small muted">${y(i.length, "device")} online in it${s.ntp_allowed ? ", time sync allowed" : ""}</span><span class="spacer"></span>
             <button class="btn" @click=${() => a("localnet_range_block", { enabled: !1 }, { confirm: `Remove the block on ${s.cidr}? Devices in it get internet access again unless they have their own rule.`, done: "Range block removed" })}>Turn off</button></div>` : o`<div class="row">

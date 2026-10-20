@@ -48,7 +48,7 @@ export class UbCameras extends LitElement {
           <td>${h.reason === "own_camera" ? html`<span class="badge bad">your camera ${h.camera_name || h.camera_mac}</span>` : "camera setup name"}</td>
           <td>${h.rssi != null ? `${h.rssi} dBm` : "—"}</td><td>${h.channel ?? "—"}</td><td>${h.security || "open"}</td></tr>`)}</tbody></table></div>` : nothing}
       <div class="card small muted">
-        UniFi only logs blocked connections, so a camera's internet use shows up once it's blocked: every attempt it makes is then blocked and listed. "Not contained" means UniFi logged traffic it let through from a camera that should be cut off.
+        UniFi only logs blocked connections, so a camera's internet use shows up once it's blocked: every attempt it makes is then blocked and listed. "Not contained" means UniFi logged traffic it let through from a camera that should be cut off. Most UniFi gateways log only blocked connections, though, so a block that isn't working can look the same as a quiet camera: test a new kind of block from a laptop on the same addresses.
       </div>
     `;
   }

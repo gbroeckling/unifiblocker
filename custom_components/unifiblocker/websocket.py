@@ -378,7 +378,7 @@ async def ws_block_internet(
     if not result.get("ok"):
         connection.send_error(msg["id"], "unifi_error", result.get("error") or "The controller refused the rule")
         return
-    entry["store"].mark_auto_blocked(msg["mac"], result.get("rule_id", ""))
+    entry["store"].mark_auto_blocked(msg["mac"], result.get("rule_id", ""), by="user")
     await entry["coordinator"].async_request_refresh()
     connection.send_result(msg["id"], {"ok": True, "mac": msg["mac"], "rule_id": result.get("rule_id", "")})
 

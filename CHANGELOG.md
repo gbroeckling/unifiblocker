@@ -9,6 +9,14 @@ New panel, and blocking that does what it says.
 - Containment is judged by real rules, not by the address: a device in the local-only range with no rule is reported as open, with a button to block it.
 - Block the whole range (Network page): two gateway rules block a range such as 192.168.2.0/25 from the internet, time sync (NTP) still allowed. It only accepts ranges inside the local-only /24, warns about NAS and computers in the range, and refuses on controllers using the zone-based firewall. Off unless you turn it on.
 - New per-device rules are named "UB: <mac> no internet". Older "local-only" ones still count.
+- Whether a device is cut off now comes from the rules switched on in the controller, read every poll, not from UniFi Blocker's own records. A rule you disable or delete in UniFi shows as open.
+- The new-camera policy only blocks cameras that are new to the network (first seen in the last 2 days), and never trusted or ignored devices. Older devices that start to look like cameras get a notification instead.
+- UniFi's fingerprint no longer makes a camera out of Tasmota, ESPHome, WLED or Shelly devices (UniFi puts some Tasmota plugs in its camera group).
+- Trust only removes a block the new-camera policy made. A block you added with Block internet stays.
+- Local-only addresses follow the controller: if a reservation is changed in UniFi, the panel shows the new address. New local-only addresses skip every address already reserved on the controller, and a device that already has an address in the range keeps it.
+- Making a device local-only reports an error if the internet block fails, instead of saying it worked.
+- Changing the blocked range makes the new rules before removing the old ones, so a refusal leaves the old block in place.
+- Devices in the local-only range without a rule get one network-wide recommendation instead of one each.
 
 ## 0.3.60 — 2026-10-19
 

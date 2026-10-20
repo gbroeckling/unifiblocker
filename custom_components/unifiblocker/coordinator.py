@@ -20,6 +20,7 @@ from .port_identify import analyze_dpi_entry
 from .suspicious_traffic import analyze_all_clients
 from .unifi_api import UniFiApi, UniFiApiError
 from .home_automation import classify as classify_home_automation
+from .local_network import ub_rule_macs
 from .insights import (
     camera_hotspots, containment_status, hourly_series, security_events,
     summarize_flows, traffic_spike, unifi_fingerprint,
@@ -60,6 +61,7 @@ class UniFiBlockerData:
         hotspots: list[dict[str, Any]] | None = None,
         phone_home: dict[str, dict[str, Any]] | None = None,
         contained: set[str] | None = None,
+        ruled: set[str] | None = None,
     ) -> None:
         self.clients = clients
         self.devices = devices
@@ -76,6 +78,7 @@ class UniFiBlockerData:
         self.hotspots = hotspots or []      # camera-looking Wi-Fi networks nearby
         self.phone_home = phone_home or {}  # mac → summarize_flows() of its logged flows
         self.contained = contained or set() # macs meant to be off the internet
+        self.ruled = ruled                   # macs with our enabled per-device rule (None: not read yet)
         self._watched: set[str] = set()
         from .insights import events_by_mac
         self._security_by_mac = events_by_mac(self.security)
@@ -256,7 +259,8 @@ class UniFiBlockerData:
             "phone_home": self.phone_home.get(mac_lower),
             "watched": mac_lower in self.phone_home or mac_lower in self._watched,
             "containment": containment_status(self.phone_home.get(mac_lower), mac_lower in self.contained),
-            "internet_blocked": bool(self.store.auto_blocked(mac_lower)),
+            "internet_blocked": (mac_lower in self.ruled) if self.ruled is not None
+                                else bool(self.store.auto_blocked(mac_lower)),
             "ip_history": self.store.get_ip_history(mac),
             "manual_category": self.store.get_manual_category(mac),
             "suggested_category": self.store.get_suggestion(mac),
@@ -356,6 +360,7 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         self._fetched_at: dict[str, float] = {}
         self._flows: dict[str, dict[str, Any] | None] = {}
         self._leak_announced: dict[str, float] = {}
+        self._ruled_macs: set[str] | None = None  # from the controller's traffic rules
         self.local_net: Any = None   # set by __init__ once it exists
         self._events_supported = True  # stat/event is gone on newer UniFi Network
 
@@ -554,6 +559,10 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             _LOGGER.debug("Miner tracker update failed", exc_info=True)
 
         usage_report.record_poll(time.monotonic() - started, ok=True)
+        try:
+            self._ruled_macs = ub_rule_macs(await self.api.get_traffic_rules())
+        except Exception:  # keep the last good copy
+            _LOGGER.debug("Could not read traffic rules", exc_info=True)
         contained = self._contained_macs(clients)
         watched = self._watched_macs(clients, categories, contained)
         await self._refresh_slow_sources(now_ts, watched)
@@ -572,6 +581,7 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             traffic=hourly_series(self._traffic_rows),
             phone_home={m: s for m, s in self._flows.items() if s},
             contained=contained,
+            ruled=self._ruled_macs,
         )
         data._watched = set(watched)
         # Hotspots need to know which clients are cameras, so they come after.
@@ -601,12 +611,17 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             })
 
     def _contained_macs(self, clients: list[dict[str, Any]]) -> set[str]:
-        """Devices that are supposed to be off the internet: local-only,
-        quarantined, blocked on the controller, or in the blocked range."""
-        out = {m.lower() for m in (self.local_net.assignments if self.local_net else {})}
+        """Devices cut off from the internet: an enabled UB rule on the
+        controller, quarantined, blocked on the controller, or in the
+        blocked range."""
+        ruled = getattr(self, "_ruled_macs", None)
+        if ruled is not None:
+            out = set(ruled)
+        else:  # rules not read yet: go by our own records
+            out = {m.lower() for m in (self.local_net.assignments if self.local_net else {})}
+            out |= self.store.auto_blocked_macs()
         out |= {m.lower() for m in self.store.get_devices_by_state(STATE_QUARANTINED)}
         out |= {c.get("mac", "").lower() for c in clients if c.get("blocked")}
-        out |= self.store.auto_blocked_macs()
         cidr = self.local_net.range_block_cidr if self.local_net else None
         if cidr:
             net = ipaddress.ip_network(cidr)
@@ -671,6 +686,7 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         async def range_block() -> None:
             if self.local_net:
                 await self.local_net.range_block_status(self.api)
+                await self.local_net.sync_assignments(self.api)
 
         await due("rogue", ROGUE_EVERY_S, rogue)
         await due("range_block", FLOWS_EVERY_S, range_block)
