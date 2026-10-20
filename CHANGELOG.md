@@ -18,6 +18,7 @@ New panel, and blocking that does what it says.
 - Changing the blocked range makes the new rules before removing the old ones, so a refusal leaves the old block in place.
 - Devices in the local-only range without a rule get one network-wide recommendation instead of one each.
 - Themes (Tools page): PadSpan's Night, Day, Graphite, Ocean, Dusk, High contrast and Light (inverted), or Home Assistant's own theme (the default). The choice is kept per browser.
+- UniFi Blocker Pro ($35 CAD/year, 30-day free trial): whole-range blocking, automatic blocking of new cameras, traffic insight (phone-home monitor, 24-hour traffic and spikes, the containment alert), the mining tracker and the Day/Graphite/Ocean/Dusk/High contrast themes. Everything else stays free. Keys are checked with the traks licence server once a day, with 14 days' grace; a lapsed licence undoes nothing. Licence card on the Tools page.
 
 ## 0.3.60 — 2026-10-19
 

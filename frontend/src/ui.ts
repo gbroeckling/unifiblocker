@@ -104,3 +104,10 @@ export function recCard(ctx: Ctx, r: Rec, mac?: string) {
     <div class="row">${recAction(ctx, r, mac)}</div>
   </div>`;
 }
+
+/** A Pro feature that's locked here: what it is, and where to unlock it. */
+export function proLocked(ctx: Ctx, what: string): TemplateResult {
+  return html`<p class="small"><span class="badge info">Pro</span> ${what} is part of UniFi Blocker Pro
+    (${ctx.snap.licence.price || "$35 CAD/year"}).
+    <button class="linkish" @click=${() => ctx.go("tools")}>Licence and free trial</button></p>`;
+}

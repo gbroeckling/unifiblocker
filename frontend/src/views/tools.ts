@@ -2,7 +2,7 @@ import { LitElement, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { shared } from "../styles";
 import { categoryOptions, type Ctx } from "../ui";
-import { THEME_NAMES } from "../themes";
+import { PRO_THEMES, THEME_NAMES } from "../themes";
 
 const PORTS: [number | string, string, string, "bad" | "warn" | ""][] = [
   [34567, "XMEye / Xiongmai", "DVR protocol; these phone home to Xiongmai's cloud", "bad"],
@@ -24,12 +24,70 @@ export class UbTools extends LitElement {
   @state() private preview: any = null;
   @state() private discovering = false;
   @state() private debug: string | null = null;
+  @state() private trialEmail = "";
+  @state() private shownKey = "";
 
   private async discover() {
     this.discovering = true;
     const r = await this.ctx.act("onvif_discover", {}, { refresh: true });
     this.discovering = false;
     if (r) this.ctx.say(`ONVIF discovery found ${r.count ?? 0} camera${r.count === 1 ? "" : "s"}`);
+  }
+
+  private async enterKey() {
+    const key = window.prompt("Your UniFi Blocker Pro key (UBLOK-XXXX-XXXX-XXXX-XXXX):");
+    if (!key) return;
+    const r = await this.ctx.act("licence_activate", { key }, { refresh: true });
+    if (r) this.ctx.say(r.ok ? "UniFi Blocker Pro is on" : r.message, !r.ok);
+  }
+
+  private async startTrial() {
+    const r = await this.ctx.act("licence_trial", { email: this.trialEmail.trim() }, { refresh: true });
+    if (r) this.ctx.say(r.ok ? `Pro trial on for ${r.days_left ?? 30} days` : r.message, !r.ok);
+  }
+
+  private licenceCard() {
+    const L = this.ctx.snap.licence;
+    const until = L.expires ? new Date(L.expires) : null;
+    const lifetime = until && until.getFullYear() >= 2090;
+    const date = until && !lifetime ? until.toLocaleDateString() : "";
+    const status = !L.has_key
+      ? html`<p>No licence on this install. Everything below "What Pro adds" is locked; everything else is free and stays free.</p>`
+      : !L.active
+        ? html`<p><span class="badge bad">expired</span> Your Pro licence ended on ${date}, so the Pro features are off. Blocks already on your controller stay where they are and can always be turned off.</p>`
+        : L.in_grace
+          ? html`<p><span class="badge warn">renew</span> Your Pro licence ended on ${date}. It keeps working for ${L.grace_days ?? 14} days after that.</p>`
+          : L.trial
+            ? html`<p><span class="badge ok">trial</span> Pro trial, ${L.days_left ?? "?"} days left.</p>`
+            : html`<p><span class="badge ok">Pro</span> UniFi Blocker Pro${lifetime ? ", lifetime" : date ? `, valid until ${date}` : ""}${!lifetime && (L.days_left ?? 99) <= 14 ? ` · renews in ${L.days_left} days` : ""}.</p>`;
+    const buy = !L.has_key || !L.active || L.in_grace || L.trial;
+    return html`<div class="card">
+      <h2>UniFi Blocker Pro</h2>
+      ${status}
+      <details><summary class="small">What Pro adds</summary>
+        <ul class="small">
+          <li>Block a whole address range from the internet with one switch (Network page).</li>
+          <li>Block new cameras from the internet automatically as they join.</li>
+          <li>Traffic insight: what each device tries to reach, port sweeps, devices using their own DNS, 24-hour traffic and spikes, and an alert when a cut-off device gets through.</li>
+          <li>The mining tracker: live hashrate, temperatures, power and profit per rig.</li>
+          <li>The Day, Graphite, Ocean, Dusk and High contrast themes.</li>
+        </ul>
+        <p class="small muted">Free, always: finding and identifying every device, recommendations, the security log, firmware warnings, port scans, ONVIF, and blocking, local-only and quarantine device by device.</p>
+      </details>
+      <div class="row" style="margin-top:8px">
+        ${buy ? html`<a class="btn primary" href=${L.buy_url || "https://unifiblocker.enerx.ca/pro/"} target="_blank" rel="noopener noreferrer">${L.has_key && !L.trial ? "Renew" : "Buy"} Pro, ${L.price || "$35 CAD/year"}</a>` : nothing}
+        <button class="btn" @click=${() => this.enterKey()}>${L.has_key ? "Replace licence key" : "Enter licence key"}</button>
+        ${L.has_key ? html`<button class="btn" @click=${async () => { const r = await this.ctx.act("licence_reveal", {}, { refresh: false }); if (r) this.shownKey = r.key; }}>Show key</button>
+          <button class="btn" @click=${() => this.ctx.act("licence_remove", {}, { confirm: "Take the licence key off this install? You can enter it again later.", done: "Licence key removed" })}>Remove key</button>` : nothing}
+      </div>
+      ${this.shownKey ? html`<p class="mono" style="margin-top:8px">${this.shownKey}</p>` : nothing}
+      ${!L.has_key && !L.trial_used ? html`<div class="row" style="margin-top:12px">
+        <span class="small">Try Pro free for ${L.trial_days ?? 30} days, once per home:</span>
+        <input type="email" placeholder="your email" aria-label="Email for the trial key" .value=${this.trialEmail}
+          @input=${(e: Event) => (this.trialEmail = (e.target as HTMLInputElement).value)}>
+        <button class="btn" ?disabled=${!this.trialEmail.includes("@")} @click=${() => this.startTrial()}>Start free trial</button>
+      </div><p class="small muted">Your email is kept with the trial key on the licence server, nothing else. Write the key down from "Show key" if you want it elsewhere.</p>` : nothing}
+    </div>`;
   }
 
   private async showDebug(type: string) {
@@ -50,7 +108,8 @@ export class UbTools extends LitElement {
     ] : [];
     return html`
       <h1>Tools</h1>
-      <p class="sub">Scans, learned rules, and settings for the usage report.</p>
+      <p class="sub">Your licence, scans, learned rules, and settings for the usage report.</p>
+      ${this.licenceCard()}
       <div class="grid two">
         <div class="card">
           <h2>Find cameras</h2>
@@ -82,9 +141,13 @@ export class UbTools extends LitElement {
       <div class="card">
         <h2>Theme</h2>
         <p class="sub">The same looks as PadSpan. Home Assistant follows your HA theme. This browser only.</p>
-        <div class="chips" role="group" aria-label="Theme">${THEME_NAMES.map(([k, label]) => html`
-          <button class="chip" aria-pressed=${this.ctx.theme === k ? "true" : "false"}
-            @click=${() => this.ctx.setTheme(k)}>${label}</button>`)}</div>
+        <div class="chips" role="group" aria-label="Theme">${THEME_NAMES.map(([k, label]) => {
+          const locked = PRO_THEMES.includes(k) && !snap.licence.pro;
+          return html`<button class="chip" aria-pressed=${this.ctx.theme === k && !locked ? "true" : "false"} ?disabled=${locked}
+            title=${locked ? "UniFi Blocker Pro" : ""} style=${locked ? "opacity:.45;cursor:default" : ""}
+            @click=${() => this.ctx.setTheme(k)}>${label}${locked ? " · Pro" : ""}</button>`;
+        })}</div>
+        ${snap.licence.pro ? nothing : html`<p class="small muted">Day, Graphite, Ocean, Dusk and High contrast come with Pro.</p>`}
       </div>
 
       <div class="card">

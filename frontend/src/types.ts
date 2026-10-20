@@ -172,6 +172,22 @@ export interface LocalNet {
 export interface Miners {
   rigs: Record<string, any>[];
   summary: Record<string, number>;
+  pro?: boolean;
+}
+
+export interface Licence {
+  pro: boolean;
+  has_key: boolean;
+  active?: boolean;
+  expires?: string;
+  days_left?: number | null;
+  in_grace?: boolean;
+  trial?: boolean;
+  trial_used?: boolean;
+  price?: string;
+  buy_url?: string;
+  trial_days?: number;
+  grace_days?: number;
 }
 
 export interface ScanResult {
@@ -212,6 +228,7 @@ export interface Snapshot {
   scans: Record<string, ScanResult>;
   report: ReportStatus | null;
   learned: LearnedRules | null;
+  licence: Licence;
   loaded: boolean;
   error: string;
   updated: number;

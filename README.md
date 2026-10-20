@@ -109,6 +109,20 @@ Generates prioritized, actionable security advice for every device based on vend
 
 ---
 
+## UniFi Blocker Pro
+
+UniFi Blocker is free, and the free part does the job: it finds and identifies every device, shows the recommendations, the security log and firmware warnings, scans ports and ONVIF, and blocks, isolates or quarantines devices one at a time.
+
+Pro ($35 CAD/year, [unifiblocker.enerx.ca/pro](https://unifiblocker.enerx.ca/pro/)) adds the automation and the traffic detail:
+
+- Block a whole address range from the internet with one switch (time sync stays allowed).
+- Block new cameras from the internet automatically as they join.
+- Traffic insight: what each device tries to reach, port sweeps, devices using their own DNS, 24-hour traffic and spikes, and an alert when a device that should be cut off gets through.
+- The mining tracker (hashrate, temperatures, power, profit per rig).
+- The Day, Graphite, Ocean, Dusk and High contrast themes.
+
+There's a free 30-day trial in **Tools → UniFi Blocker Pro**. If Pro lapses nothing is undone: blocks already on your controller stay, and turning any of them off always works. The key is checked with the licence server once a day; an offline house keeps working, with 14 days' grace past the expiry date.
+
 ## Installation
 
 ### HACS (Recommended)

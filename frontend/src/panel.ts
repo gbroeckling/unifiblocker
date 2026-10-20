@@ -28,7 +28,7 @@ const VIEWS: { id: View; label: string; icon: string }[] = [
 ];
 
 import type { ActOptions, Ctx } from "./ui";
-import { applyTheme, savedTheme, saveTheme, type ThemeName } from "./themes";
+import { applyTheme, effectiveTheme, savedTheme, saveTheme, type ThemeName } from "./themes";
 
 /** Root of the sidebar panel. Owns the data, actions, toasts, the confirm
  *  dialog and the device drawer; the views just render and call act(). */
@@ -39,7 +39,7 @@ export class UniFiBlockerPanel extends LitElement {
   @state() private view: View = "overview";
   @state() private snap: Snapshot = {
     overview: {}, clients: [], recs: {}, localnet: {}, miners: { rigs: [], summary: {} }, scans: {},
-    report: null, learned: null, loaded: false, error: "", updated: 0,
+    report: null, learned: null, licence: { pro: false, has_key: false }, loaded: false, error: "", updated: 0,
   };
   @state() private toast: { text: string; bad: boolean } | null = null;
   @state() private ask: { text: string; danger: boolean; resolve: (ok: boolean) => void } | null = null;
@@ -80,6 +80,7 @@ export class UniFiBlockerPanel extends LitElement {
     if (!this.hass) return this.schedule(500);
     try {
       this.snap = await fetchSnapshot(this.hass);
+      applyTheme(this, effectiveTheme(this.theme, this.snap.licence.pro));
     } catch (err: any) {
       this.snap = { ...this.snap, error: err?.message ?? String(err) };
     }
@@ -128,7 +129,7 @@ export class UniFiBlockerPanel extends LitElement {
   private setTheme = (name: ThemeName) => {
     this.theme = name;
     saveTheme(name);
-    applyTheme(this, name);
+    applyTheme(this, effectiveTheme(name, this.snap.licence.pro));
   };
 
   private ctxObj(): Ctx {

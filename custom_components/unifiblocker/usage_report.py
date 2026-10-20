@@ -253,6 +253,10 @@ def build_payload(hass: HomeAssistant, install_id: str, taken: dict[str, Any] | 
             "local_cidr_default": opts.get("local_cidr", DEFAULT_LOCAL_CIDR) == DEFAULT_LOCAL_CIDR,
             "verify_ssl": bool(opts.get("verify_ssl", False)),
         }
+        from .licence import licence_of  # noqa: PLC0415
+        lic = licence_of(hass)
+        lst = lic.state() if lic else {}
+        env["edition"] = "trial" if lst.get("trial") and lst.get("pro") else "pro" if lst.get("pro") else "free"
         if data:
             env["controller_version"] = _major_minor(data.health.get("version", ""))
             env["controller_ok"] = bool(data.health.get("connection_ok"))

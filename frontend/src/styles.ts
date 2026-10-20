@@ -59,8 +59,8 @@ export const shared = css`
     background: transparent; color: var(--primary-text-color); padding: 6px 12px; font: inherit; font-size: 13px;
     cursor: pointer; text-decoration: none;
   }
-  button.btn:hover, button.btn:focus-visible { border-color: var(--primary-color); outline: none; }
-  button.btn.primary { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); }
+  button.btn:hover, button.btn:focus-visible, a.btn:hover, a.btn:focus-visible { border-color: var(--primary-color); outline: none; }
+  button.btn.primary, a.btn.primary { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); }
   button.btn.danger { color: var(--ub-bad); border-color: color-mix(in srgb, var(--ub-bad) 50%, transparent); }
   button.btn:disabled { opacity: 0.5; cursor: default; }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -80,7 +80,7 @@ export const shared = css`
     color: inherit; font: inherit; font-size: 13px; cursor: pointer;
   }
   .chip[aria-pressed="true"] { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); }
-  input[type="search"], input[type="text"], select {
+  input[type="search"], input[type="text"], input[type="email"], select {
     font: inherit; font-size: 14px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--ub-line);
     background: var(--ub-card); color: var(--primary-text-color);
   }

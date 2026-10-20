@@ -2,13 +2,20 @@ import { LitElement, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { shared } from "../styles";
 import { hashrate, money } from "../format";
-import type { Ctx } from "../ui";
+import { proLocked, type Ctx } from "../ui";
 
 @customElement("ub-mining")
 export class UbMining extends LitElement {
   @property({ attribute: false }) ctx!: Ctx;
 
   render() {
+    if (this.ctx.snap.miners.pro === false) {
+      const found = this.ctx.snap.clients.filter((c) => c.category === "crypto").length;
+      return html`<h1>Mining</h1>
+        <p class="sub">Crypto miners found on the network, with live hashrate, power and profitability.</p>
+        <div class="card"><p>${found ? `${found} device${found === 1 ? " looks" : "s look"} like a miner (see Devices).` : "No miners found yet."}</p>
+          ${proLocked(this.ctx, "The mining tracker (live hashrate, temperatures, power and profit per rig)")}</div>`;
+    }
     const { rigs, summary: s } = this.ctx.snap.miners;
     const profit = s.profit_usd_day ?? 0;
     return html`

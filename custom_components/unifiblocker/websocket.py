@@ -38,6 +38,11 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     _reg(ws_localnet_remove)
     _reg(ws_localnet_ensure_rule)
     _reg(ws_localnet_range_block)
+    _reg(ws_licence_status)
+    _reg(ws_licence_activate)
+    _reg(ws_licence_trial)
+    _reg(ws_licence_reveal)
+    _reg(ws_licence_remove)
     _reg(ws_onvif_discover)
     _reg(ws_onvif_probe)
     _reg(ws_onvif_results)
@@ -400,6 +405,90 @@ async def ws_allow_internet(
     await entry["store"].clear_auto_blocked(msg["mac"])
     await entry["coordinator"].async_request_refresh()
     connection.send_result(msg["id"], {"ok": True, "mac": msg["mac"]})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "unifiblocker/licence_status"})
+@websocket_api.async_response
+async def ws_licence_status(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Pro or not, until when, the price and the buy link. Never the key."""
+    from .licence import licence_of
+    lic = licence_of(hass)
+    connection.send_result(msg["id"], lic.state() if lic else {"pro": False, "has_key": False})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {vol.Required("type"): "unifiblocker/licence_activate", vol.Required("key"): str}
+)
+@websocket_api.async_response
+async def ws_licence_activate(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Check a key with the licence server and keep it if it's good."""
+    from .licence import licence_of
+    lic = licence_of(hass)
+    if not lic:
+        connection.send_error(msg["id"], "not_ready", "Integration not loaded")
+        return
+    result = await lic.activate(msg["key"])
+    if result.get("ok"):
+        await _refresh(hass)
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {vol.Required("type"): "unifiblocker/licence_trial", vol.Required("email"): str}
+)
+@websocket_api.async_response
+async def ws_licence_trial(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Start the one-time free trial (the licence server decides "one-time")."""
+    from .licence import licence_of
+    lic = licence_of(hass)
+    if not lic:
+        connection.send_error(msg["id"], "not_ready", "Integration not loaded")
+        return
+    result = await lic.start_trial(msg["email"])
+    if result.get("ok"):
+        await _refresh(hass)
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({vol.Required("type"): "unifiblocker/licence_reveal"})
+@websocket_api.async_response
+async def ws_licence_reveal(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """The key itself, for an admin who asks (to move it to another install)."""
+    from .licence import licence_of
+    lic = licence_of(hass)
+    connection.send_result(msg["id"], {"key": lic.key if lic else ""})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({vol.Required("type"): "unifiblocker/licence_remove"})
+@websocket_api.async_response
+async def ws_licence_remove(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Take the key off this install."""
+    from .licence import licence_of
+    lic = licence_of(hass)
+    if lic:
+        await lic.remove()
+        await _refresh(hass)
+    connection.send_result(msg["id"], {"ok": True})
+
+
+async def _refresh(hass: HomeAssistant) -> None:
+    entry = _get_coordinator(hass)
+    if entry:
+        await entry["coordinator"].async_request_refresh()
 
 
 @websocket_api.require_admin
@@ -1083,6 +1172,10 @@ async def ws_localnet_range_block(
         connection.send_error(msg["id"], "not_ready", "Integration not loaded")
         return
     local_net = entry["local_net"]
+    from .licence import is_pro
+    if msg["enabled"] and not is_pro(hass):  # turning it off always works
+        connection.send_error(msg["id"], "pro_required", "Blocking a whole range is part of UniFi Blocker Pro.")
+        return
     if msg["enabled"]:
         result = await local_net.enable_range_block(entry["api"], msg.get("cidr") or f"{local_net.subnet}.0/24")
     else:
@@ -1337,4 +1430,5 @@ async def ws_get_miners(
         "profit_usd_day": round(sum(r.get("profit_usd_day", 0) for r in rigs), 2),
         "electricity_usd_per_kwh": ELECTRICITY_COST_USD_PER_KWH,
     }
-    connection.send_result(msg["id"], {"rigs": rigs, "summary": summary})
+    from .licence import is_pro
+    connection.send_result(msg["id"], {"rigs": rigs, "summary": summary, "pro": is_pro(hass)})

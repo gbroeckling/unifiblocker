@@ -2,7 +2,7 @@ import { LitElement, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { shared } from "../styles";
 import { name, plural } from "../format";
-import { categoryOptions, stateBadge, type Ctx } from "../ui";
+import { categoryOptions, proLocked, stateBadge, type Ctx } from "../ui";
 import type { Client } from "../types";
 
 function inCidr(ip: string, cidr: string): boolean {
@@ -41,6 +41,7 @@ export class UbNetwork extends LitElement {
         ? html`<div class="row"><span class="badge ok">on</span><span class="mono">${rb.cidr}</span>
             <span class="small muted">${plural(inside.length, "device")} online in it${rb.ntp_allowed ? ", time sync allowed" : ""}</span><span class="spacer"></span>
             <button class="btn" @click=${() => act("localnet_range_block", { enabled: false }, { confirm: `Remove the block on ${rb.cidr}? Devices in it get internet access again unless they have their own rule.`, done: "Range block removed" })}>Turn off</button></div>`
+        : !snap.licence.pro ? proLocked(this.ctx, "Blocking a whole range")
         : html`<div class="row">
             <label class="small" for="cidr">Range</label>
             <input id="cidr" class="mono" style="width:150px" .value=${cidr} @input=${(e: Event) => (this.cidr = (e.target as HTMLInputElement).value.trim())}>

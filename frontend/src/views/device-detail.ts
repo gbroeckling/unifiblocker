@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { shared } from "../styles";
 import { bytes, duration, name, plural } from "../format";
-import { byPriority, categoryOptions, containmentBadge, recCard, sparkline, stateBadge, vulnBadge, type Ctx } from "../ui";
+import { proLocked, byPriority, categoryOptions, containmentBadge, recCard, sparkline, stateBadge, vulnBadge, type Ctx } from "../ui";
 import type { Client } from "../types";
 
 /** Slide-in drawer with everything about one device. */
@@ -138,6 +138,11 @@ export class UbDeviceDetail extends LitElement {
   }
 
   private internet(c: Client) {
+    if (!this.ctx.snap.licence.pro) {
+      return html`${c.containment ? html`<p>${containmentBadge(c)}</p>` : nothing}
+        ${proLocked(this.ctx, "Traffic insight (24-hour traffic, spikes, and what the device tries to reach)")}
+        ${c.security_events_24h ? html`<p class="small"><span class="badge warn">${plural(c.security_events_24h, "security event")}</span> in UniFi's log today.</p>` : nothing}`;
+    }
     const ph = c.phone_home;
     const span = ph?.window_minutes ? (ph.window_minutes < 120 ? `${ph.window_minutes} min` : `${Math.round(ph.window_minutes / 60)} h`) : "";
     return html`

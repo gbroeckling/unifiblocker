@@ -122,6 +122,15 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
         _LOGGER.warning("Local network manager failed to load", exc_info=True)
         local_net = None
 
+    # UniFi Blocker Pro: one licence per Home Assistant, loaded once.
+    from .licence import STORE_KEY as LICENCE_KEY, Licence
+    if LICENCE_KEY not in hass.data:
+        lic = Licence(hass)
+        await lic.async_load()
+        hass.data[LICENCE_KEY] = lic
+    hass.data[LICENCE_KEY].start()
+    entry.async_on_unload(hass.data[LICENCE_KEY].stop)
+
     coordinator = UniFiBlockerCoordinator(
         hass, api, store,
         update_interval=data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),

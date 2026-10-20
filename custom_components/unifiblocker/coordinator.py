@@ -20,6 +20,7 @@ from .port_identify import analyze_dpi_entry
 from .suspicious_traffic import analyze_all_clients
 from .unifi_api import UniFiApi, UniFiApiError
 from .home_automation import classify as classify_home_automation
+from .licence import is_pro
 from .local_network import ub_rule_macs
 from .insights import (
     camera_hotspots, containment_status, hourly_series, security_events,
@@ -554,7 +555,8 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
         miners: list[dict[str, Any]] = []
         try:
             session = async_get_clientsession(self.hass)
-            miners = await self.miners.async_update(session, clients)
+            if is_pro(self.hass):  # mining tracker: Pro
+                miners = await self.miners.async_update(session, clients)
         except Exception:
             _LOGGER.debug("Miner tracker update failed", exc_info=True)
 
@@ -671,7 +673,13 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
             self._rogue = await self.api.get_rogue_aps()
 
         await due("security", SECURITY_LOG_EVERY_S, sec)
-        await due("traffic", TRAFFIC_EVERY_S, traffic)
+        # Traffic insight (24 h traffic, spikes, phone-home monitor) is Pro.
+        # Without it nothing is fetched and nothing stale is shown.
+        pro = is_pro(self.hass)
+        if not pro:
+            self._traffic_rows, self._flows = [], {}
+        if pro:
+            await due("traffic", TRAFFIC_EVERY_S, traffic)
         async def flows() -> None:
             # One query per device, so a chatty camera can't crowd out the rest.
             fresh = {}
@@ -690,7 +698,8 @@ class UniFiBlockerCoordinator(DataUpdateCoordinator[UniFiBlockerData]):
 
         await due("rogue", ROGUE_EVERY_S, rogue)
         await due("range_block", FLOWS_EVERY_S, range_block)
-        await due("flows", FLOWS_EVERY_S, flows)
+        if pro:
+            await due("flows", FLOWS_EVERY_S, flows)
 
     def _announce_new_devices(self, data: UniFiBlockerData, new_macs: list[str]) -> None:
         """unifiblocker_new_device per device seen for the first time, plus

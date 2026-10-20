@@ -6,7 +6,8 @@ new_camera_policy (options):
                     change, so local viewing and recording keep working.
                     Trusting the camera removes the rule again. Only for
                     cameras new to the network (first seen < 2 days ago)
-                    and never for trusted or ignored devices.
+                    and never for trusted or ignored devices. Pro; without
+                    it this acts as notify.
     notify          a notification only
     off             nothing (the unifiblocker_new_camera event still fires)
 
@@ -65,7 +66,9 @@ async def on_new_camera(hass: HomeAssistant, policy: str, api: Any, local_net: A
     new_to_network = _seen_within(store.first_seen(mac), NEW_DEVICE_DAYS)
     name = cam.get("name") or mac
     what = f"**{name}** ({cam.get('vendor') or 'unknown maker'}, {cam.get('ip') or 'no IP'})"
-    if policy == "block_internet" and local_net is not None and new_to_network:
+    from .licence import is_pro
+    pro = is_pro(hass)
+    if policy == "block_internet" and local_net is not None and new_to_network and pro:
         try:
             result = await local_net.block_device_internet(api, mac)
         except Exception as err:  # never let this break the poll
@@ -79,9 +82,11 @@ async def on_new_camera(hass: HomeAssistant, policy: str, api: Any, local_net: A
                     "remove the block.", f"{DOMAIN}_cam_{mac}")
             return
         _LOGGER.warning("Couldn't block new camera %s: %s", mac, result.get("error"))
+    pro_note = ("\n\nBlocking new cameras automatically is part of UniFi Blocker Pro."
+                if policy == "block_internet" and new_to_network and not pro else "")
     _notify(hass, "New camera on your network",
-            f"UniFi Blocker found a new camera, {what}. Open the UniFi Blocker panel to put it on local-only "
-            "or trust it.", f"{DOMAIN}_cam_{mac}")
+            f"UniFi Blocker found a new camera, {what}. Open the UniFi Blocker panel to block its internet "
+            f"access or trust it.{pro_note}", f"{DOMAIN}_cam_{mac}")
 
 
 def on_new_devices(hass: HomeAssistant, policy: str, devices: list[dict[str, Any]]) -> None:

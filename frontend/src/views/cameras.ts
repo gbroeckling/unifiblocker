@@ -2,7 +2,7 @@ import { LitElement, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { shared } from "../styles";
 import { name, plural } from "../format";
-import { containmentBadge, vulnBadge, type Ctx } from "../ui";
+import { containmentBadge, proLocked, vulnBadge, type Ctx } from "../ui";
 
 @customElement("ub-cameras")
 export class UbCameras extends LitElement {
@@ -33,7 +33,7 @@ export class UbCameras extends LitElement {
             <td><button class="linkish" @click=${() => this.ctx.open(c.mac)}><strong>${name(c)}</strong></button><div class="muted small">${c.ip} · ${c.vulns?.family || c.onvif_manufacturer || c.vendor}</div></td>
             <td>${containmentBadge(c)}${c.phone_home ? html`<div class="small muted">${plural(c.phone_home.attempts, "attempt")}${c.phone_home.allowed ? `, ${c.phone_home.allowed} through` : ", all blocked"}</div>` : nothing}
               ${c.phone_home?.port_sweep ? html`<div class="small"><span class="badge warn">probing ${c.phone_home.port_sweep.ports} ports</span></div>` : nothing}</td>
-            <td class="small">${c.phone_home ? (Object.keys(c.phone_home.clouds).join(", ") || Object.keys(c.phone_home.regions).join(", ") || "—") : html`<span class="muted">not visible</span>`}</td>
+            <td class="small">${c.phone_home ? (Object.keys(c.phone_home.clouds).join(", ") || Object.keys(c.phone_home.regions).join(", ") || "—") : html`<span class="muted">${snap.licence.pro ? "not visible" : "Pro"}</span>`}</td>
             <td>${vulnBadge(c)}<div class="small muted">${c.vulns?.firmware_date || ""}</div></td>
             <td>${c.onvif?.onvif ? html`<span class="badge ok">yes</span>${c.onvif.auth_required ? html` <span class="small muted">login</span>` : nothing}` : html`<span class="muted small">—</span>`}</td>
             <td>${c.containment ? nothing : html`<button class="btn" @click=${() => this.ctx.act("block_internet", { mac: c.mac }, { confirm: `Block ${name(c)} from the internet? It keeps its address, so recording keeps working.`, done: `${name(c)} blocked from the internet` })}>Block internet</button>`}</td>
@@ -47,6 +47,7 @@ export class UbCameras extends LitElement {
         <tbody>${hotspots.map((h) => html`<tr><td>${h.essid || "(hidden)"}<div class="mono muted">${h.bssid}</div></td>
           <td>${h.reason === "own_camera" ? html`<span class="badge bad">your camera ${h.camera_name || h.camera_mac}</span>` : "camera setup name"}</td>
           <td>${h.rssi != null ? `${h.rssi} dBm` : "—"}</td><td>${h.channel ?? "—"}</td><td>${h.security || "open"}</td></tr>`)}</tbody></table></div>` : nothing}
+      ${snap.licence.pro ? nothing : html`<div class="card">${proLocked(this.ctx, "Seeing what each camera tries to reach (the phone-home monitor)")}</div>`}
       <div class="card small muted">
         UniFi only logs blocked connections, so a camera's internet use shows up once it's blocked: every attempt it makes is then blocked and listed. "Not contained" means UniFi logged traffic it let through from a camera that should be cut off. Most UniFi gateways log only blocked connections, though, so a block that isn't working can look the same as a quiet camera: test a new kind of block from a laptop on the same addresses.
       </div>

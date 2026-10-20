@@ -26,7 +26,7 @@ async function soft<T>(p: Promise<T>, fallback: T): Promise<T> {
 /** Everything the panel shows, fetched in parallel. A failing command
  *  leaves its part empty instead of failing the whole refresh. */
 export async function fetchSnapshot(hass: Hass): Promise<Snapshot> {
-  const [overview, clients, recs, localnet, miners, scans, report, learned] = await Promise.all([
+  const [overview, clients, recs, localnet, miners, scans, report, learned, licence] = await Promise.all([
     soft(ws(hass, "overview"), {}),
     soft(ws<{ clients: any[] }>(hass, "clients"), { clients: [] }),
     soft(ws(hass, "recommendations"), {}),
@@ -35,9 +35,10 @@ export async function fetchSnapshot(hass: Hass): Promise<Snapshot> {
     soft(ws<{ results: Record<string, any> }>(hass, "scan_results"), { results: {} }),
     soft(ws(hass, "report_status"), null),
     soft(ws(hass, "learned_rules"), null),
+    soft(ws(hass, "licence_status"), { pro: false, has_key: false }),
   ]);
   return {
     overview, clients: clients.clients || [], recs, localnet, miners,
-    scans: scans.results || {}, report, learned, loaded: true, error: "", updated: Date.now(),
+    scans: scans.results || {}, report, learned, licence, loaded: true, error: "", updated: Date.now(),
   } as Snapshot;
 }

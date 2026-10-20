@@ -15,6 +15,15 @@ export const THEME_NAMES: [ThemeName, string][] = [
   ["ocean", "Ocean"], ["dusk", "Dusk"], ["contrast", "High contrast"], ["light", "Light (inverted)"],
 ];
 
+/** Pro looks, as in PadSpan. Home Assistant, Night and Light (the
+ *  accessibility inversion) are everyone's. */
+export const PRO_THEMES: ThemeName[] = ["day", "graphite", "ocean", "dusk", "contrast"];
+
+/** What to show: a Pro look falls back to Home Assistant's without Pro. */
+export function effectiveTheme(name: ThemeName, pro: boolean): ThemeName {
+  return PRO_THEMES.includes(name) && !pro ? "ha" : name;
+}
+
 interface Palette {
   bg: string; card: string; inset: string; line: string; header: string;
   text: string; text2: string; accent: string; onAccent: string;
