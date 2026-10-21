@@ -48,7 +48,7 @@
           "new_device_policy": "When any other new device shows up"
         },
         "data_description": {
-          "new_camera_policy": "block_internet: cut it off from the internet right away (it keeps working on your network; trust it to undo). notify: just tell me. off: do nothing.",
+          "new_camera_policy": "notify (default): just tell me. block_internet: cut a camera that is new to the network off from the internet right away (it keeps working on your network; trust it to undo). off: do nothing.",
           "new_device_policy": "notify: one notification listing new devices. off: do nothing."
         }
       }

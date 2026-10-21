@@ -1,11 +1,13 @@
 """What happens when something new shows up on the network.
 
 new_camera_policy (options):
-    block_internet  default. Add the "UB: <mac> local-only" traffic rule so
-                    the camera can't reach the internet. Its IP doesn't
-                    change, so local viewing and recording keep working.
-                    Trusting the camera removes the rule again.
-    notify          a notification only
+    block_internet  Add the "UB: <mac> local-only" traffic rule so the
+                    camera can't reach the internet. Its IP doesn't change,
+                    so local viewing and recording keep working. Trusting
+                    the camera removes the rule again. Only for cameras new
+                    to the network (first seen < 2 days ago), never for
+                    trusted or ignored devices. Opt-in: it changes the router.
+    notify          default. A notification only
     off             nothing (the unifiblocker_new_camera event still fires)
 
 new_device_policy (options): notify (default) / off, for everything else.
@@ -23,8 +25,24 @@ _LOGGER = logging.getLogger(__name__)
 
 CAMERA_POLICIES = ("block_internet", "notify", "off")
 DEVICE_POLICIES = ("notify", "off")
-DEFAULT_CAMERA_POLICY = "block_internet"
+DEFAULT_CAMERA_POLICY = "notify"
 DEFAULT_DEVICE_POLICY = "notify"
+NEW_DEVICE_DAYS = 2
+
+
+def _seen_within(first_seen: str | None, days: int) -> bool:
+    """True if *first_seen* (ISO time) is less than *days* ago. Unknown
+    counts as new: the store hasn't recorded the device yet."""
+    if not first_seen:
+        return True
+    from datetime import datetime, timezone
+    try:
+        t = datetime.fromisoformat(first_seen)
+    except ValueError:
+        return True
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - t).total_seconds() < days * 86400
 
 
 def _notify(hass: HomeAssistant, title: str, message: str, nid: str) -> None:
@@ -38,9 +56,15 @@ async def on_new_camera(hass: HomeAssistant, policy: str, api: Any, local_net: A
     if policy == "off":
         return
     mac = cam["mac"].lower()
+    if store.get_state(mac) in ("trusted", "ignored"):
+        return
+    # Only cut off a camera that's new to the network. A device that's been
+    # around for a while and now looks like a camera gets a notification:
+    # blocking it could break something that has been working.
+    new_to_network = _seen_within(store.first_seen(mac), NEW_DEVICE_DAYS)
     name = cam.get("name") or mac
     what = f"**{name}** ({cam.get('vendor') or 'unknown maker'}, {cam.get('ip') or 'no IP'})"
-    if policy == "block_internet" and local_net is not None:
+    if policy == "block_internet" and local_net is not None and new_to_network:
         try:
             result = await local_net.block_device_internet(api, mac)
         except Exception as err:  # never let this break the poll

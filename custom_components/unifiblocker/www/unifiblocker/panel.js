@@ -6,7 +6,7 @@
  * Manual device identification tool for unknowns.
  */
 
-const VERSION = "0.3.60";
+const VERSION = "0.3.61";
 const SIDEBAR_THRESHOLD = 5;
 
 // Everything the panel renders goes through innerHTML, and a lot of it comes
@@ -756,16 +756,16 @@ class UniFiBlockerPanel extends HTMLElement {
       <div class="card"><h2>Security events, last 24 hours (${evts.length})</h2>
         <p class="subtitle">From UniFi's security log. Blocks made by UniFi Blocker's own local-only rules aren't listed here; they're counted above and show on each device.</p>
         ${evts.length ? `<table class="data-table"><thead><tr><th>When</th><th>What</th><th>Severity</th><th>Rule</th></tr></thead><tbody>
-          ${evts.slice(0, 50).map(e => `<tr><td class="mono">${e.time ? new Date(e.time).toLocaleString() : "—"}</td><td>${e.msg || e.title || e.key}</td><td>${e.inner_alert_severity || "—"}</td><td>${e.rule || e.catname || "—"}</td></tr>`).join("")}
+          ${evts.slice(0, 50).map(e => `<tr><td class="mono">${e.time ? new Date(e.time).toLocaleString() : "—"}</td><td>${_esc(e.msg || e.title || e.key)}</td><td>${_esc(e.inner_alert_severity || "—")}</td><td>${_esc(e.rule || e.catname || "—")}</td></tr>`).join("")}
         </tbody></table>` : "<div class=\"empty\">Nothing in UniFi's security log.</div>"}
       </div>
 
       ${hotspots.length ? `<div class="card warn-card"><h2>📶 Camera Wi-Fi networks (${hotspots.length})</h2>
         <p class="subtitle">Wi-Fi networks that belong to one of your cameras, or have a camera setup-network name.</p>
         <table class="data-table"><thead><tr><th>Network</th><th>Why</th><th>Signal</th><th>Channel</th><th>Security</th></tr></thead><tbody>
-          ${hotspots.map(h => `<tr><td>${h.essid || "(hidden)"} <span class="mono" style="font-size:10px">${h.bssid}</span></td>
-            <td>${h.reason === "own_camera" ? `<span class="badge danger">your camera ${h.camera_name || h.camera_mac}</span>` : "camera setup name"}</td>
-            <td>${h.rssi != null ? h.rssi + " dBm" : "—"}</td><td>${h.channel ?? "—"}</td><td>${h.security || "open"}</td></tr>`).join("")}
+          ${hotspots.map(h => `<tr><td>${_esc(h.essid || "(hidden)")} <span class="mono" style="font-size:10px">${_esc(h.bssid)}</span></td>
+            <td>${h.reason === "own_camera" ? `<span class="badge danger">your camera ${_esc(h.camera_name || h.camera_mac)}</span>` : "camera setup name"}</td>
+            <td>${h.rssi != null ? _esc(h.rssi) + " dBm" : "—"}</td><td>${_esc(h.channel ?? "—")}</td><td>${_esc(h.security || "open")}</td></tr>`).join("")}
         </tbody></table></div>` : ""}
 
       <div class="card danger-card"><h2>⚠ Suspicious Devices (${suspDevices.length})</h2>
@@ -901,11 +901,11 @@ class UniFiBlockerPanel extends HTMLElement {
       <p class="subtitle">Picked up from categories you set by hand, and used for devices nothing else can identify. Fix or delete any that are wrong.</p>
       ${rows.length ? `<table class="data-table"><thead><tr><th>Rule</th><th>Category</th>${this._actionMode ? "<th></th>" : ""}</tr></thead><tbody>
         ${rows.map(([kind, key, label, cat]) => `<tr>
-          <td>${label}</td>
+          <td>${_esc(label)}</td>
           <td>${this._actionMode
-            ? `<select data-rulekind="${kind}" data-rulekey="${key}">${Object.entries(catLabels).map(([k, v]) => `<option value="${k}"${k === cat ? " selected" : ""}>${v}</option>`).join("")}</select>`
-            : (catLabels[cat] || cat)}</td>
-          ${this._actionMode ? `<td><button class="btn" data-ruledel="${kind}" data-rulekey="${key}">Delete</button></td>` : ""}
+            ? `<select data-rulekind="${_esc(kind)}" data-rulekey="${_esc(key)}">${Object.entries(catLabels).map(([k, v]) => `<option value="${k}"${k === cat ? " selected" : ""}>${v}</option>`).join("")}</select>`
+            : _esc(catLabels[cat] || cat)}</td>
+          ${this._actionMode ? `<td><button class="btn" data-ruledel="${_esc(kind)}" data-rulekey="${_esc(key)}">Delete</button></td>` : ""}
         </tr>`).join("")}
       </tbody></table>` : '<div class="empty">No learned rules yet. Setting a device\'s category by hand teaches one.</div>'}
     </div>`;
@@ -1630,8 +1630,8 @@ class UniFiBlockerPanel extends HTMLElement {
             ${pd.length?`<table class="dpi-table">
               <tr><th>Port</th><th>Service</th><th>Type</th>${this._actionMode?"<th></th>":""}</tr>
               ${pd.map(p => `<tr class="${p.group.includes("insecure")||p.group.includes("backdoor")||p.group.includes("xmeye")?"row-danger":p.group.includes("cloud")?"row-warn":""}">
-                <td>${p.port}</td><td>${p.name}</td><td>${p.group}</td>
-                ${this._actionMode?`<td><button class="btn-port-block" data-blockport="${p.port}" data-blockmac="${d.mac}">Block</button></td>`:""}
+                <td>${_esc(p.port)}</td><td>${_esc(p.name)}</td><td>${_esc(p.group)}</td>
+                ${this._actionMode?`<td><button class="btn-port-block" data-blockport="${_esc(p.port)}" data-blockmac="${_esc(d.mac)}">Block</button></td>`:""}
               </tr>`).join("")}
             </table>`:"<div>No ports responded.</div>"}
           </div>
@@ -1664,7 +1664,7 @@ class UniFiBlockerPanel extends HTMLElement {
         </div>
         ${d.manual_category && this._actionMode ? `<div style="font-size:11px;margin:4px 0">Category set by hand. <button class="btn" data-clearcat="${d.mac}">Clear override</button></div>` : ""}
         ${d.suggested_category && !d.manual_category ? `<div style="font-size:11px;margin:4px 0">Quantify suggests <strong>${d.suggested_category.category}</strong> (${d.suggested_category.confidence})${this._actionMode ? ` <button class="btn btn-trust" data-setcat="${d.suggested_category.category}" data-mac="${d.mac}">Accept</button>` : ""}</div>` : ""}
-        ${d.onvif && d.onvif.onvif ? `<div class="onvif-badge"><span class="badge ok">ONVIF Confirmed</span> ${d.onvif.manufacturer||""} ${d.onvif.model||""}${d.onvif.auth_required ? ' <span class="badge">login needed</span>' : ""}</div>` : ""}
+        ${d.onvif && d.onvif.onvif ? `<div class="onvif-badge"><span class="badge ok">ONVIF Confirmed</span> ${_esc(d.onvif.manufacturer||"")} ${_esc(d.onvif.model||"")}${d.onvif.auth_required ? ' <span class="badge">login needed</span>' : ""}</div>` : ""}
         ${this._vulnBlock(d.vulns)}
         ${this._insightBlock(d)}
         ${d.ip_history && d.ip_history.length > 1 ? `
@@ -1714,25 +1714,25 @@ class UniFiBlockerPanel extends HTMLElement {
     if (cs || ph) {
       const span = ph && ph.window_minutes ? ` in ${ph.window_minutes < 120 ? ph.window_minutes + " min" : Math.round(ph.window_minutes / 60) + " h"}` : "";
       parts.push(`<div class="info-row"><span class="info-label">Internet</span><span>${cs ? `<span class="badge ${cs[0]}">${cs[1]}</span> ` : ""}${ph ? `${ph.attempts} attempt${ph.attempts === 1 ? "" : "s"}${span}${ph.allowed ? `, <strong>${ph.allowed} let through</strong>` : ", all blocked"}` : ""}</span></div>`);
-      if (ph && Object.keys(ph.clouds || {}).length) parts.push(`<div class="info-row"><span class="info-label">Calls</span><span>${Object.keys(ph.clouds).join(", ")} cloud</span></div>`);
-      if (ph && (ph.top_destinations || []).length) parts.push(`<div class="info-row"><span class="info-label">Tries</span><span class="mono" style="font-size:10px">${ph.top_destinations.slice(0, 4).map(t => `${t.host}:${t.port ?? "-"}${t.region ? " (" + t.region + ")" : ""} ×${t.count}`).join("<br>")}</span></div>`);
-      if (ph && ph.port_sweep) parts.push(`<div class="info-row"><span class="info-label">Probing</span><span><span class="badge warn">${ph.port_sweep.ports} ports</span> on ${ph.port_sweep.host}</span></div>`);
-      if (ph && Object.keys(ph.dns_bypass || {}).length) parts.push(`<div class="info-row"><span class="info-label">DNS</span><span><span class="badge warn">own DNS</span> ${Object.keys(ph.dns_bypass).join(", ")}</span></div>`);
+      if (ph && Object.keys(ph.clouds || {}).length) parts.push(`<div class="info-row"><span class="info-label">Calls</span><span>${_esc(Object.keys(ph.clouds).join(", "))} cloud</span></div>`);
+      if (ph && (ph.top_destinations || []).length) parts.push(`<div class="info-row"><span class="info-label">Tries</span><span class="mono" style="font-size:10px">${ph.top_destinations.slice(0, 4).map(t => `${_esc(t.host)}:${_esc(t.port ?? "-")}${t.region ? " (" + _esc(t.region) + ")" : ""} ×${_esc(t.count)}`).join("<br>")}</span></div>`);
+      if (ph && ph.port_sweep) parts.push(`<div class="info-row"><span class="info-label">Probing</span><span><span class="badge warn">${_esc(ph.port_sweep.ports)} ports</span> on ${_esc(ph.port_sweep.host)}</span></div>`);
+      if (ph && Object.keys(ph.dns_bypass || {}).length) parts.push(`<div class="info-row"><span class="info-label">DNS</span><span><span class="badge warn">own DNS</span> ${_esc(Object.keys(ph.dns_bypass).join(", "))}</span></div>`);
     } else if (d.is_camera) {
       parts.push(`<div class="info-row"><span class="info-label">Internet</span><span style="font-size:11px">Not visible: UniFi only logs blocked traffic. Put it on local-only to see what it tries to reach.</span></div>`);
     }
     const fp = d.unifi_fingerprint;
-    if (fp) parts.push(`<div class="info-row"><span class="info-label">UniFi ID</span><span>category ${fp.dev_cat ?? "?"}${fp.os_name ? ", " + fp.os_name : ""}${fp.camera ? ' <span class="badge camera">camera</span>' : ""}</span></div>`);
+    if (fp) parts.push(`<div class="info-row"><span class="info-label">UniFi ID</span><span>category ${_esc(fp.dev_cat ?? "?")}${fp.os_name ? ", " + _esc(fp.os_name) : ""}${fp.camera ? ' <span class="badge camera">camera</span>' : ""}</span></div>`);
     return parts.length ? `<div class="device-info">${parts.join("")}</div>` : "";
   }
 
   _vulnBlock(v) {
     if (!v) return "";
     const label = { affected: ["danger", "affected"], likely: ["danger", "probably affected"], check: ["warn", "couldn't check"] };
-    const fw = v.firmware_date ? `firmware built ${v.firmware_date}${v.firmware_age_years != null ? ` (${v.firmware_age_years} years old)` : ""}` : "firmware date unknown";
-    return `<div class="flags"><div class="flags-title">Firmware check${v.family ? ` · ${v.family}` : ""}:</div>
+    const fw = v.firmware_date ? `firmware built ${_esc(v.firmware_date)}${v.firmware_age_years != null ? ` (${v.firmware_age_years} years old)` : ""}` : "firmware date unknown";
+    return `<div class="flags"><div class="flags-title">Firmware check${v.family ? ` · ${_esc(v.family)}` : ""}:</div>
       <div class="flag-item">${fw}</div>
-      ${(v.findings || []).map(f => `<div class="flag-item"><span class="badge ${label[f.status][0]}">${label[f.status][1]}</span> <strong>${f.cve}</strong>${f.kev ? " (exploited, CISA KEV)" : ""}: ${f.detail}</div>`).join("")}
+      ${(v.findings || []).map(f => `<div class="flag-item"><span class="badge ${label[f.status][0]}">${label[f.status][1]}</span> <strong>${_esc(f.cve)}</strong>${f.kev ? " (exploited, CISA KEV)" : ""}: ${_esc(f.detail)}</div>`).join("")}
     </div>`;
   }
 

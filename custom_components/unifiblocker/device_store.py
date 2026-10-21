@@ -134,6 +134,11 @@ class DeviceStore:
         entry = self._devices.get(mac.lower())
         return entry["state"] if entry else STATE_NEW
 
+    def first_seen(self, mac: str) -> str | None:
+        """When *mac* was first recorded (ISO time), if known."""
+        entry = self._devices.get(mac.lower())
+        return entry.get("first_seen") if entry else None
+
     def get_devices_by_state(self, state: str) -> dict[str, dict[str, Any]]:
         """Return all devices matching *state*."""
         return {

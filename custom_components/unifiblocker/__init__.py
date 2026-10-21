@@ -173,6 +173,8 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
         _LOGGER.warning("Could not register WebSocket commands", exc_info=True)
 
     # Services
+    from homeassistant.helpers.service import async_register_admin_service
+
     MAC_SCHEMA = vol.Schema({vol.Required("mac"): cv.string})
 
     if not hass.services.has_service(DOMAIN, "trust_device"):
@@ -195,8 +197,9 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
         async def h_reconnect(c):
             d = await _ed(); await d["api"].reconnect_client(c.data["mac"]); await d["coordinator"].async_request_refresh()
 
+        # Admin only: these change the controller.
         for n, h in [("trust_device", h_trust), ("ignore_device", h_ignore), ("quarantine_device", h_quarantine), ("block_device", h_block), ("unblock_device", h_unblock), ("reconnect_device", h_reconnect)]:
-            hass.services.async_register(DOMAIN, n, h, schema=MAC_SCHEMA)
+            async_register_admin_service(hass, DOMAIN, n, h, schema=MAC_SCHEMA)
 
     # Tool services, so automations can run scans (e.g. when a new camera
     # event fires). Registered separately so an install that already has
@@ -232,9 +235,10 @@ async def _do_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
                 await d["onvif"].discover_and_probe_all()
                 await d["coordinator"].async_request_refresh()
 
-        hass.services.async_register(DOMAIN, "scan_device", h_scan, schema=MAC_SCHEMA)
-        hass.services.async_register(DOMAIN, "run_quantify", h_quantify)
-        hass.services.async_register(DOMAIN, "onvif_discover", h_onvif)
+        # Admin only as well: they probe devices on the network.
+        async_register_admin_service(hass, DOMAIN, "scan_device", h_scan, schema=MAC_SCHEMA)
+        async_register_admin_service(hass, DOMAIN, "run_quantify", h_quantify)
+        async_register_admin_service(hass, DOMAIN, "onvif_discover", h_onvif)
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:

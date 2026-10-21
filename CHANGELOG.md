@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.61 — 2026-10-21
+
+Review fixes.
+
+- The services (trust, ignore, quarantine, block, unblock, reconnect, scan_device, run_quantify, onvif_discover) are admin-only, like the panel commands.
+- The new-camera policy defaults to `notify`. `block_internet` is opt-in, only acts on cameras new to the network (first seen in the last 2 days), and never on trusted or ignored devices.
+- UniFi's fingerprint no longer makes a camera out of Tasmota, ESPHome, WLED or Shelly devices (UniFi puts some Tasmota plugs in its camera group).
+- The panel escapes everything added since 0.3.50 that comes from the network: nearby Wi-Fi names, security log entries, traffic-flow destinations, ONVIF maker and model, firmware findings, learned rules and port details.
+- The README install section leads with searching for UniFi Blocker in HACS.
+
 ## 0.3.60 — 2026-10-19
 
 Home automation.
