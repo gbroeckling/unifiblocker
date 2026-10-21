@@ -1845,7 +1845,7 @@ var is = Object.defineProperty, ns = Object.getOwnPropertyDescriptor, A = (t, e,
     (o = t[r]) && (i = (s ? o(e, a, i) : o(i)) || i);
   return s && i && is(e, a, i), i;
 };
-const rs = "0.3.61", Vt = [
+const rs = "0.3.62", Vt = [
   { id: "overview", label: "Overview", icon: "M12 3 2 12h3v8h6v-6h2v6h6v-8h3z" },
   { id: "devices", label: "Devices", icon: "M4 6h16v10H4zM2 18h20v2H2z" },
   { id: "cameras", label: "Cameras", icon: "M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11z" },

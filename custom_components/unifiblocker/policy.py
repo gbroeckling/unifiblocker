@@ -1,14 +1,14 @@
 """What happens when something new shows up on the network.
 
 new_camera_policy (options):
-    block_internet  default. Add the "UB: <mac> no internet" traffic rule so
-                    the camera can't reach the internet. Its IP doesn't
-                    change, so local viewing and recording keep working.
-                    Trusting the camera removes the rule again. Only for
-                    cameras new to the network (first seen < 2 days ago)
-                    and never for trusted or ignored devices. Pro; without
-                    it this acts as notify.
-    notify          a notification only
+    block_internet  Add the "UB: <mac> no internet" traffic rule so the
+                    camera can't reach the internet. Its IP doesn't change,
+                    so local viewing and recording keep working. Trusting
+                    the camera removes the rule again. Only for cameras new
+                    to the network (first seen < 2 days ago), never for
+                    trusted or ignored devices. Opt-in: it changes the
+                    router. Pro; without it this acts as notify.
+    notify          default. A notification only
     off             nothing (the unifiblocker_new_camera event still fires)
 
 new_device_policy (options): notify (default) / off, for everything else.
@@ -26,7 +26,7 @@ _LOGGER = logging.getLogger(__name__)
 
 CAMERA_POLICIES = ("block_internet", "notify", "off")
 DEVICE_POLICIES = ("notify", "off")
-DEFAULT_CAMERA_POLICY = "block_internet"
+DEFAULT_CAMERA_POLICY = "notify"
 DEFAULT_DEVICE_POLICY = "notify"
 NEW_DEVICE_DAYS = 2
 

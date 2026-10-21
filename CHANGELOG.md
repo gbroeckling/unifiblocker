@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.61 (not released yet)
+## 0.3.62 (not released yet)
 
 New panel, and blocking that does what it says.
 
@@ -10,8 +10,6 @@ New panel, and blocking that does what it says.
 - Block the whole range (Network page): two gateway rules block a range such as 192.168.2.0/25 from the internet, time sync (NTP) still allowed. It only accepts ranges inside the local-only /24, warns about NAS and computers in the range, and refuses on controllers using the zone-based firewall. Off unless you turn it on.
 - New per-device rules are named "UB: <mac> no internet". Older "local-only" ones still count.
 - Whether a device is cut off now comes from the rules switched on in the controller, read every poll, not from UniFi Blocker's own records. A rule you disable or delete in UniFi shows as open.
-- The new-camera policy only blocks cameras that are new to the network (first seen in the last 2 days), and never trusted or ignored devices. Older devices that start to look like cameras get a notification instead.
-- UniFi's fingerprint no longer makes a camera out of Tasmota, ESPHome, WLED or Shelly devices (UniFi puts some Tasmota plugs in its camera group).
 - Trust only removes a block the new-camera policy made. A block you added with Block internet stays.
 - Local-only addresses follow the controller: if a reservation is changed in UniFi, the panel shows the new address. New local-only addresses skip every address already reserved on the controller, and a device that already has an address in the range keeps it.
 - Making a device local-only reports an error if the internet block fails, instead of saying it worked.
@@ -19,6 +17,15 @@ New panel, and blocking that does what it says.
 - Devices in the local-only range without a rule get one network-wide recommendation instead of one each.
 - Themes (Tools page): PadSpan's Night, Day, Graphite, Ocean, Dusk, High contrast and Light (inverted), or Home Assistant's own theme (the default). The choice is kept per browser.
 - UniFi Blocker Pro ($35 CAD/year, 30-day free trial): whole-range blocking, automatic blocking of new cameras, traffic insight (phone-home monitor, 24-hour traffic and spikes, the containment alert), the mining tracker and the Day/Graphite/Ocean/Dusk/High contrast themes. Everything else stays free. Keys are checked with the traks licence server once a day, with 14 days' grace; a lapsed licence undoes nothing. Licence card on the Tools page.
+## 0.3.61 — 2026-10-21
+
+Review fixes.
+
+- The services (trust, ignore, quarantine, block, unblock, reconnect, scan_device, run_quantify, onvif_discover) are admin-only, like the panel commands.
+- The new-camera policy defaults to `notify`. `block_internet` is opt-in, only acts on cameras new to the network (first seen in the last 2 days), and never on trusted or ignored devices.
+- UniFi's fingerprint no longer makes a camera out of Tasmota, ESPHome, WLED or Shelly devices (UniFi puts some Tasmota plugs in its camera group).
+- The panel escapes everything added since 0.3.50 that comes from the network: nearby Wi-Fi names, security log entries, traffic-flow destinations, ONVIF maker and model, firmware findings, learned rules and port details.
+- The README install section leads with searching for UniFi Blocker in HACS.
 
 ## 0.3.60 — 2026-10-19
 

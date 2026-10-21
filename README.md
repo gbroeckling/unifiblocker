@@ -128,12 +128,10 @@ There's a free 30-day trial in **Tools → UniFi Blocker Pro**. If Pro lapses no
 ### HACS (Recommended)
 
 1. Open **HACS** in Home Assistant
-2. Go to **Integrations** and click the three-dot menu
-3. Select **Custom repositories**
-4. Enter URL: `https://github.com/gbroeckling/unifiblocker`
-5. Category: **Integration**
-6. Click **Add**, then find and install **UniFi Blocker**
-7. **Restart Home Assistant**
+2. Search for **UniFi Blocker** and install it
+3. **Restart Home Assistant**
+
+If it doesn't show up in the search yet, add it as a custom repository first: HACS → three-dot menu → **Custom repositories** → `https://github.com/gbroeckling/unifiblocker`, category **Integration**.
 
 ### Manual
 
@@ -238,7 +236,7 @@ The device services take a single parameter, `mac` (e.g. `"aa:bb:cc:dd:ee:ff"`).
 
 Two options (Settings → Devices & services → UniFi Blocker → Configure) decide what happens when something shows up for the first time:
 
-- **When a new camera shows up**: `block_internet` (default) cuts it off from the internet straight away with a per-device traffic rule. Its IP doesn't change, so it keeps working on your network. You get a notification, and trusting the camera removes the block. Some cameras need the internet once to finish setting up in their app; trust it for that. `notify` only tells you, `off` does nothing.
+- **When a new camera shows up**: `notify` (default) tells you. `block_internet` cuts a camera that's new to the network off from the internet straight away with a per-device traffic rule; its IP doesn't change, so it keeps working on your network, and trusting it removes the block (some cameras need the internet once to finish setting up in their app). Devices that were already on the network, and trusted or ignored ones, are never blocked automatically. `off` does nothing.
 - **When any other new device shows up**: `notify` (default) sends one notification listing them, `off` does nothing.
 
 Devices already on the network when you install or update don't count as new. Every new device also fires `unifiblocker_new_device` (`mac`, `ip`, `name`, `vendor`, `category`, `is_camera`).

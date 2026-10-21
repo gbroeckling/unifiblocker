@@ -13,7 +13,7 @@ import "./views/network";
 import "./views/mining";
 import "./views/tools";
 
-export const VERSION = "0.3.61";
+export const VERSION = "0.3.62";
 
 type View = "overview" | "devices" | "cameras" | "home" | "security" | "network" | "mining" | "tools";
 const VIEWS: { id: View; label: string; icon: string }[] = [
